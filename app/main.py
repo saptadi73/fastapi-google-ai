@@ -5,13 +5,12 @@ from uuid import uuid4
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from redis.asyncio import Redis
-from sqlalchemy import text
 
+from app.api.health import router as health_router
 from app.api.v1.router import router
 from app.core.config import get_settings
 from app.core.database import engine
-from app.core.exceptions import AppError, install_handlers, success
+from app.core.exceptions import install_handlers
 
 settings = get_settings()
 structlog.configure(
@@ -63,35 +62,4 @@ async def request_context(request: Request, call_next):
 
 
 app.include_router(router, prefix=settings.api_v1_prefix)
-
-
-@app.get("/health/live", tags=["Health"])
-async def live():
-    return success({"alive": True})
-
-
-@app.get("/health/ready", tags=["Health"])
-async def ready():
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1 FROM platform.tenant LIMIT 1"))
-    except Exception:
-        raise AppError("DATABASE_UNAVAILABLE", "Database atau migration belum siap.", 503) from None
-    redis = Redis.from_url(
-        settings.redis_url.get_secret_value(), socket_connect_timeout=0.5, socket_timeout=0.5
-    )
-    try:
-        redis_ok = await redis.ping()
-    except Exception:
-        redis_ok = False
-    finally:
-        await redis.aclose()
-    if settings.redis_required and not redis_ok:
-        raise AppError("REDIS_UNAVAILABLE", "Redis belum siap.", 503)
-    return success(
-        {
-            "database": "ready",
-            "redis": "ready" if redis_ok else "unavailable",
-            "background_jobs": "celery" if redis_ok else "manual_worker_only",
-        }
-    )
+app.include_router(health_router)

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "INFO"
+    health_check_timeout_seconds: float = Field(3.0, ge=0.1, le=30)
     cors_origins: list[str] = ["http://localhost:5173"]
     database_url: SecretStr
     database_ddl_url: SecretStr = SecretStr("")

@@ -40,11 +40,50 @@ Jangan menimpa `.env` yang sudah terisi. `.env` dan folder `secrets/` tidak masu
 - Swagger: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
 - Liveness: http://127.0.0.1:8000/health/live
+- Koneksi PostgreSQL: http://127.0.0.1:8000/health/database
 - Readiness: http://127.0.0.1:8000/health/ready
 
 Host/port, CORS, JWT, Google/OpenAI, database, Redis, batas query dan storage dibaca dari `.env`.
 Migration dan bootstrap dijalankan eksplisit, bukan setiap startup API. Bootstrap idempotent dan tidak
 mengubah password akun yang sudah ada. Password admin lokal ada pada `BOOTSTRAP_PASSWORD` di `.env`.
+
+## Health check dan koneksi database
+
+Endpoint monitoring tersedia tanpa JWT dan menggunakan response envelope yang sama dengan API:
+
+| Endpoint | Pemeriksaan |
+|---|---|
+| `GET /health` | Aplikasi dapat merespons; alias `/health/live` |
+| `GET /health/live` | Liveness aplikasi, tetap HTTP 200 walaupun database sedang down |
+| `GET /health/database` | Membuka koneksi PostgreSQL dan menjalankan `SELECT current_database()` |
+| `GET /health/ready` | Koneksi PostgreSQL, ketersediaan tabel migration, dan status Redis |
+
+Contoh respons `/health/database` (latency berubah sesuai hasil pemeriksaan):
+
+```json
+{
+  "status": "success",
+  "data": {
+    "database": "postgresql",
+    "connected": true,
+    "name": "googleai",
+    "latency_ms": 12.5
+  },
+  "meta": {},
+  "errors": []
+}
+```
+
+Koneksi gagal atau timeout menghasilkan HTTP **503** dengan error code `DATABASE_UNAVAILABLE`.
+Atur batas waktu melalui `HEALTH_CHECK_TIMEOUT_SECONDS=3` pada `.env`. Redis yang tidak tersedia hanya
+membuat `/health/ready` gagal apabila `REDIS_REQUIRED=true`. Pemeriksaan database tidak bergantung pada
+Redis atau kredensial Google/OpenAI; koneksi database dapat sehat meskipun migration belum siap, sedangkan
+readiness memeriksa keduanya. Detail password, connection URL dan stack trace tidak dikembalikan.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/health/database
+```
 
 ## Login dan akun operasional
 
