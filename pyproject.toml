@@ -1,0 +1,24 @@
+[project]
+name = "google-sheet-ai-platform"
+version = "0.1.0"
+description = "Google Sheets ETL and operational data API"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = "requirements.txt"}
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: requires TEST_DATABASE_URL pointing to an empty disposable PostgreSQL database"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
