@@ -5,7 +5,7 @@ from app.models.configuration import Approval, Artifact, Configuration
 from app.models.constraints import install_tenant_constraints
 from app.models.etl import ETLRun, Job, QualityIssue, Snapshot, StagingRow
 from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
-from app.models.master import MasterDefinition, MasterSourceBinding
+from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.semantic import DataProduct, QueryRequest, SavedQuery
 from app.models.source import DataSource, ProfilingRun, SourceSheet
 
@@ -18,6 +18,7 @@ __all__ = [
     "ImportDecision",
     "MasterDefinition",
     "MasterSourceBinding",
+    "MasterColumnBinding",
     "AIUsage",
     "AuditEvent",
     "RefreshToken",

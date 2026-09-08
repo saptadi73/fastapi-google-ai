@@ -48,3 +48,24 @@ class MasterSourceBinding(TenantEntity, Base):
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
     approved_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MasterColumnBinding(TenantEntity, Base):
+    __tablename__ = "master_column_binding"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "source_sheet_id", "source_column", name="uq_master_column_binding"),
+        {"schema": "platform"},
+    )
+    source_sheet_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.source_sheet.id"))
+    source_column: Mapped[str] = mapped_column(String(200))
+    master_definition_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.master_definition.id"))
+    master_field: Mapped[str] = mapped_column(String(63))
+    master_version: Mapped[int] = mapped_column(Integer)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    normalization: Mapped[str] = mapped_column(String(40), default="TRIM_CASEFOLD")
+    cardinality: Mapped[str] = mapped_column(String(20), default="MANY_TO_ONE")
+    revision_no: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")
+    created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
+    approved_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

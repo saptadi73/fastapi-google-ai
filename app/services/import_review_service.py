@@ -1,9 +1,10 @@
+from difflib import SequenceMatcher
 import json
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
-from sqlalchemy import and_, select, text
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import get_settings
@@ -796,8 +797,15 @@ class ImportReviewService:
         candidates = (await self.session.execute(
             select(table).where(table.c._tenant_id == self.user.tenant_id, table.c[label].ilike(pattern, escape="\\")).limit(6)
         )).mappings().all()
-        status = "AMBIGUOUS" if len(candidates) > 1 else "NOT_FOUND" if not candidates else "CANDIDATE"
-        return {"status": status, "master_id": master.id, "candidates": [self.json_value(dict(row)) for row in candidates]}
+        candidate_items = []
+        for row in candidates:
+            item = self.json_value(dict(row))
+            label_value = str(item.get(label, ""))
+            item["match_score"] = round(SequenceMatcher(None, value.casefold(), label_value.casefold()).ratio(), 4)
+            candidate_items.append(item)
+        candidate_items.sort(key=lambda item: item["match_score"], reverse=True)
+        status = "AMBIGUOUS" if len(candidate_items) > 1 else "NOT_FOUND" if not candidate_items else "CANDIDATE"
+        return {"status": status, "master_id": master.id, "candidates": candidate_items}
 
     async def work(self, job):
         review = await self.locked(job.payload["import_review_id"])
