@@ -16,6 +16,20 @@ class ImportReviewAction(StrictModel):
     comment: str = Field(default="", max_length=2000)
 
 
+class ImportReviewPreviewRequest(StrictModel):
+    revision_no: int = Field(ge=1)
+
+
+class ImportReviewApproveRequest(StrictModel):
+    revision_no: int = Field(ge=1)
+    comment: str = Field(default="", max_length=2000)
+
+
+class ImportReviewApplyRequest(StrictModel):
+    revision_no: int = Field(ge=1)
+    preview_token: str
+
+
 class ImportQuestionDecision(StrictModel):
     revision_no: int = Field(ge=1)
     action: str = Field(

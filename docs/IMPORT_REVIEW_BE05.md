@@ -125,7 +125,7 @@ Berhenti polling otomatis saat NEEDS_INPUT, FAILED, STALE_REVIEW, atau CANCELLED
 5. Kegagalan teknis me-rollback tahap aktif; transaksi penanganan gagal menandai job/batch FAILED serta menyimpan kode error generik. Checkpoint tahap sebelumnya tetap ada.
 6. Worker yang terputus setelah claim dipulihkan oleh scheduler berdasarkan batas stale job. Lock job mencegah scheduler menandai job yang masih diproses dalam transaksi aktif. Recovery bukan retry otomatis.
 
-State machine mencakup READY_FOR_APPROVAL, APPROVED, APPLYING dan SUCCEEDED sebagai kontrak lanjutan, tetapi BE-05 belum menyediakan endpoint approval/apply atau worker pemuatan untuk batch. Gate sync MASTER lama tetap berlaku. Sync NON_MASTER lama belum dialihkan ke batch ini; integrasi wajib seluruh jalur mengikuti BE-11.
+State machine mencakup READY_FOR_APPROVAL, APPROVED, APPLYING dan SUCCEEDED. Endpoint preview/approve/apply BE-07 kini tersedia; preview menghasilkan token yang terikat snapshot dan revision, approval memerlukan reviewer terpisah sesuai kebijakan, dan apply melakukan UPSERT atomik ke storage trusted. Gate sync MASTER lama tetap berlaku. Sync NON_MASTER lama belum dialihkan ke batch ini; integrasi seluruh jalur mengikuti BE-11.
 
 `cancel` berlaku sebelum APPLYING/SUCCEEDED dan tidak menghapus snapshot/temuan. Job queued lama dapat diproses sekali menjadi skipped. Jika cancel bersaing dengan worker, row lock menserialisasi perubahan dan request dengan revisi lama mendapat 409.
 

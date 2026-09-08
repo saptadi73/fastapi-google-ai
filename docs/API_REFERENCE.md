@@ -343,9 +343,9 @@ AIConfigurationRequest:
 Setelah job AI_CONFIG sukses, `result` berisi `{configuration_id, status: "AI_DRAFT"}`; ambil konfigurasi lewat GET. AI memakai metadata/profile, belum memeriksa typo semua nilai sel atau membentuk referensi master.
 
 
-## Batch review import (BE-05)
+## Batch review import (BE-05–BE-07)
 
-Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan error: [Batch review import BE-05](IMPORT_REVIEW_BE05.md). E = editor, S = editor/reviewer. Batch memakai snapshot tersimpan; belum melakukan review AI atau apply data. Job SUCCEEDED tidak berarti batch import sudah selesai.
+Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan error: [Batch review import BE-05](IMPORT_REVIEW_BE05.md). E = editor, S = editor/reviewer, R = reviewer. Batch memakai snapshot tersimpan. Preview mengikat snapshot, revision, dan isi perubahan melalui `preview_token`; approval wajib reviewer terpisah bila kebijakan tersebut aktif.
 
 | Method | Path | Role | Payload / parameter | Status | Data |
 |---|---|---|---|---|---|
@@ -359,6 +359,11 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | GET | `/import-reviews/{review_id}/questions` | S | status, category, offset, limit | 200 | items[], has_more |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/answer` | E | ImportQuestionDecision | 200 | question, review; stale=true jika dependency berubah |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal` | R | ImportProposalResolution | 200 | question, review setelah master aktif-approved |
+| POST | `/import-reviews/{review_id}/preview` | E | ImportReviewPreviewRequest | 200 | target, changes[], summary, preview_hash, preview_token, can_approve |
+| POST | `/import-reviews/{review_id}/approve` | R | ImportReviewApproveRequest | 200 | review APPROVED |
+| POST | `/import-reviews/{review_id}/apply` | E | ImportReviewApplyRequest | 200 | review SUCCEEDED, rows_applied |
+
+Urutan untuk frontend: tunggu batch bebas dari `blocking_codes`, panggil `preview`, tampilkan before/after per baris, minta approval reviewer, kemudian kirim token preview yang sama ke `apply`. Jika revision, snapshot, konfigurasi, atau target berubah, backend mengembalikan `409 IMPORT_PREVIEW_STALE` dan frontend harus membuat preview baru. Apply memakai UPSERT berdasarkan business key dan seluruh baris diproses dalam transaksi request.
 
 ## Storage master kanonis (BE-04)
 

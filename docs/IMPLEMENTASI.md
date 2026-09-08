@@ -135,8 +135,8 @@ Model dan migrasi `5ab90e816eee`, tujuh endpoint batch/temuan, snapshot dan poli
 
 Verifikasi BE-05: **95 tes lulus**, Ruff lulus, Alembic check lulus dan **114 operasi API** terverifikasi. Pengujian memakai database test serta provider mock; bukan bukti integrasi Google/OpenAI production. Tahap berikutnya BE-06.
 
-## Pertanyaan batch BE-06
+## Pertanyaan batch BE-06 dan apply BE-07
 
 BE-06 menambah staging raw/transformed/corrected per batch, pertanyaan dan keputusan berversi, serta endpoint list/jawab/resolve proposal. Kontrak frontend ada di [Pertanyaan batch BE-06](IMPORT_QUESTIONS_BE06.md); API Reference memuat 117 operasi. Koreksi tidak menulis Google Sheet atau target trusted; proposal membuat draft registry dan hanya ditutup setelah master approved. Resolver kandidat otomatis/FK/apply belum tersedia. Migrasi `6d1305460956` hanya diterapkan pada database test di sesi ini.
 
-Verifikasi BE-06: **99 tes lulus**, Ruff, Alembic check, dan exporter API lulus. Tahap berikutnya BE-07: preview dan apply master.
+Verifikasi BE-06: **99 tes lulus**, Ruff, Alembic check, dan exporter API lulus. BE-07 menambah preview, approval reviewer terpisah, dan apply UPSERT atomik ke storage trusted menggunakan token preview yang terikat revision dan snapshot. Storage trusted harus sudah dideploy sebelum apply.

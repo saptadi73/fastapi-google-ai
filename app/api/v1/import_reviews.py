@@ -12,6 +12,9 @@ from app.schemas.import_review import (
     ImportQuestionDecision,
     ImportReviewAction,
     ImportReviewCreate,
+    ImportReviewPreviewRequest,
+    ImportReviewApproveRequest,
+    ImportReviewApplyRequest,
 )
 from app.services.import_review_service import ImportReviewService
 
@@ -117,3 +120,18 @@ async def revalidate_import(review_id: UUID, data: ImportReviewAction, session: 
 @router.post("/import-reviews/{review_id}/resume", dependencies=edit)
 async def resume_import(review_id: UUID, data: ImportReviewAction, session: Session, user: CurrentUser):
     return success(await ImportReviewService(session, user).action(review_id, data, ImportAction.RESUME))
+
+
+@router.post("/import-reviews/{review_id}/preview", dependencies=edit)
+async def preview_import(review_id: UUID, data: ImportReviewPreviewRequest, session: Session, user: CurrentUser):
+    return success(await ImportReviewService(session, user).preview(review_id, data))
+
+
+@router.post("/import-reviews/{review_id}/approve", dependencies=[Depends(require_roles(*REVIEW_ROLES))])
+async def approve_import(review_id: UUID, data: ImportReviewApproveRequest, session: Session, user: CurrentUser):
+    return success(await ImportReviewService(session, user).approve(review_id, data))
+
+
+@router.post("/import-reviews/{review_id}/apply", dependencies=edit)
+async def apply_import(review_id: UUID, data: ImportReviewApplyRequest, session: Session, user: CurrentUser):
+    return success(await ImportReviewService(session, user).apply(review_id, data))

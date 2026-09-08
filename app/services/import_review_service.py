@@ -1,9 +1,12 @@
 import json
 from decimal import Decimal
 from types import SimpleNamespace
+from uuid import uuid4
 
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.domain.import_workflow import ImportAction, ImportStatus, next_import_status
@@ -24,7 +27,9 @@ from app.services.audit_service import audit
 from app.services.etl_compiler_service import cast_value, transform_rows
 from app.services.job_service import enqueue
 from app.services.master_service import MasterService
+from app.services.master_storage_service import MasterStorageService, check_storage
 from app.services.profiling_service import digest
+from app.services.workbook_service import decode, token
 
 
 class ImportReviewService:
@@ -207,7 +212,7 @@ class ImportReviewService:
             master_version=deps.get("master_version"),
             policy=deps["policy"],
             finding_count=len(review.findings),
-            execution_ready=False,
+            execution_ready=review.status in ("APPROVED", "APPLYING"),
         )
         return data
 
@@ -630,6 +635,141 @@ class ImportReviewService:
             comment=data.comment,
         )
         return self.response(review)
+
+    async def _preview_context(self, review_id, revision_no):
+        self.role()
+        review = await self.locked(review_id)
+        if review.revision_no != revision_no:
+            raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
+        if review.status not in ("READY_FOR_APPROVAL", "APPROVED"):
+            raise AppError("IMPORT_STATE_CONFLICT", "Batch belum dapat dipreview.", 409)
+        if review.checkpoint.get("blocking_codes"):
+            raise AppError("IMPORT_INPUT_PENDING", "Selesaikan seluruh blocker sebelum preview.", 409)
+        if not await self.is_current(review):
+            self.move(review, ImportAction.INVALIDATE, worker=True)
+            raise AppError("IMPORT_STALE_REVIEW", "Snapshot atau konfigurasi berubah; jalankan validasi ulang.", 409)
+        config = ETLConfiguration.model_validate(review.configuration_json)
+        rows = (await self.session.scalars(
+            self.repo.query(ImportReviewRow)
+            .where(ImportReviewRow.import_review_id == review.id)
+            .order_by(ImportReviewRow.source_row)
+        )).all()
+        return review, config, rows
+
+    async def preview(self, review_id, data):
+        review, config, rows = await self._preview_context(review_id, data.revision_no)
+        target = None
+        definition = None
+        if review.dependencies["dataset_kind"] == "MASTER":
+            _, definition, target = await MasterStorageService(self.session, self.user).target(
+                review.dependencies["master_id"]
+            )
+        else:
+            from app.services.schema_compiler_service import compile_table
+
+            target = compile_table(config, review.source_sheet_id)
+        connection = await self.session.connection()
+        await connection.run_sync(lambda sync: check_storage(sync, target))
+        keys = (definition.business_key if definition else [
+            c.target_column for c in config.columns if c.is_business_key or c.is_primary_key
+        ])
+        existing = {}
+        if keys:
+            query = select(*[target.c[k] for k in keys], target.c._record_id if hasattr(target.c, "_record_id") else target.c._row_hash).where(
+                target.c._tenant_id == self.user.tenant_id
+            )
+            for row in (await self.session.execute(query)).mappings():
+                normalized = self.json_value(dict(row))
+                existing[tuple(normalized.get(k) for k in keys)] = normalized
+        changes = []
+        for row in rows:
+            after = {**row.transformed_data, **row.corrected_data}
+            key = tuple(after.get(k) for k in keys) if keys else None
+            before = existing.get(key) if key is not None else None
+            if before is None:
+                outcome = "INSERT"
+            else:
+                comparable = {k: before.get(k) for k in after}
+                outcome = "UNCHANGED" if comparable == after else "UPDATE"
+            changes.append({"source_row": row.source_row, "outcome": outcome, "before": before, "after": after})
+        preview_hash = digest({"review_id": str(review.id), "revision_no": review.revision_no, "changes": changes})
+        preview_token = token(
+            {"review_id": str(review.id), "tenant_id": str(review.tenant_id), "revision_no": review.revision_no, "preview_hash": preview_hash},
+            "import-review-preview",
+            30,
+        )
+        review.checkpoint = {**review.checkpoint, "preview_hash": preview_hash, "preview_revision": review.revision_no}
+        return {
+            "review": self.response(review),
+            "target": target.fullname,
+            "changes": changes,
+            "summary": {
+                "insert": sum(c["outcome"] == "INSERT" for c in changes),
+                "update": sum(c["outcome"] == "UPDATE" for c in changes),
+                "unchanged": sum(c["outcome"] == "UNCHANGED" for c in changes),
+            },
+            "preview_hash": preview_hash,
+            "preview_token": preview_token,
+            "can_approve": True,
+        }
+
+    async def approve(self, review_id, data):
+        self.role()
+        if self.user.role not in REVIEW_ROLES:
+            raise AppError("FORBIDDEN", "Reviewer diperlukan untuk menyetujui batch import.", 403)
+        review = await self.locked(review_id)
+        if review.revision_no != data.revision_no:
+            raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
+        if review.status != "READY_FOR_APPROVAL":
+            raise AppError("IMPORT_STATE_CONFLICT", "Batch belum siap disetujui.", 409)
+        if review.checkpoint.get("blocking_codes"):
+            raise AppError("IMPORT_INPUT_PENDING", "Selesaikan seluruh blocker sebelum approval.", 409)
+        if not review.checkpoint.get("preview_hash"):
+            raise AppError("IMPORT_PREVIEW_REQUIRED", "Buat preview batch terlebih dahulu.", 409)
+        if get_settings().require_separate_approver and review.created_by == self.user.id:
+            raise AppError("SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun reviewer lain.", 403)
+        self.move(review, ImportAction.APPROVE)
+        review.checkpoint = {**review.checkpoint, "approved_by": str(self.user.id), "approval_comment": data.comment}
+        audit(self.session, self.user, "import.approved", review.id, comment=data.comment)
+        return self.response(review)
+
+    async def apply(self, review_id, data):
+        self.role(edit=True)
+        review, config, rows = await self._preview_context(review_id, data.revision_no)
+        if review.status != "APPROVED":
+            raise AppError("IMPORT_APPROVAL_REQUIRED", "Batch harus approved sebelum apply.", 409)
+        claims = decode(data.preview_token, "import-review-preview")
+        if any(claims.get(k) != v for k, v in {"review_id": str(review.id), "tenant_id": str(review.tenant_id), "revision_no": review.checkpoint.get("preview_revision"), "preview_hash": review.checkpoint.get("preview_hash")}.items()):
+            raise AppError("IMPORT_PREVIEW_STALE", "Preview tidak sesuai dengan batch terbaru; jalankan preview ulang.", 409)
+        self.move(review, ImportAction.APPLY)
+        if review.dependencies["dataset_kind"] == "MASTER":
+            _, definition, table = await MasterStorageService(self.session, self.user).target(review.dependencies["master_id"])
+            keys = definition.business_key
+        else:
+            from app.services.schema_compiler_service import compile_table
+
+            table = compile_table(config, review.source_sheet_id)
+            keys = [c.target_column for c in config.columns if c.is_business_key or c.is_primary_key]
+        connection = await self.session.connection()
+        await connection.run_sync(lambda sync: check_storage(sync, table))
+        loaded = 0
+        for row in rows:
+            values = {**row.transformed_data, **row.corrected_data}
+            if not values:
+                continue
+            if review.dependencies["dataset_kind"] == "MASTER":
+                values = {**values, "_tenant_id": self.user.tenant_id, "_record_id": str(uuid4()), "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_source_snapshot_hash": review.dependencies["snapshot_hash"]}
+            else:
+                values = {**values, "_tenant_id": self.user.tenant_id, "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_etl_run_id": review.id, "_row_hash": digest(values)}
+            stmt = insert(table).values(**values)
+            if keys:
+                stmt = stmt.on_conflict_do_update(index_elements=["_tenant_id", *keys], set_={k: stmt.excluded[k] for k in values if k not in ("_tenant_id", *keys, "_record_id")})
+            await self.session.execute(stmt)
+            loaded += 1
+        self.move(review, ImportAction.COMPLETE, worker=True)
+        review.checkpoint = {**review.checkpoint, "rows_applied": loaded, "applied_by": str(self.user.id)}
+        audit(self.session, self.user, "import.applied", review.id, rows_applied=loaded)
+        return {"review": self.response(review), "rows_applied": loaded, "status": review.status}
 
     async def work(self, job):
         review = await self.locked(job.payload["import_review_id"])

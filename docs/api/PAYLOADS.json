@@ -561,5 +561,16 @@
   "ImportProposalResolution": {
     "revision_no": 2,
     "master_definition_id": "55555555-5555-4555-8555-555555555555"
+  },
+  "ImportReviewPreviewRequest": {
+    "revision_no": 3
+  },
+  "ImportReviewApproveRequest": {
+    "revision_no": 4,
+    "comment": "Preview diverifikasi oleh reviewer"
+  },
+  "ImportReviewApplyRequest": {
+    "revision_no": 5,
+    "preview_token": "TOKEN_DARI_IMPORT_REVIEW_PREVIEW"
   }
 }
