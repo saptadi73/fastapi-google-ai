@@ -25,6 +25,11 @@ edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
 
 
+@router.get("/master-definitions/dependency-plan")
+async def master_dependency_plan(session: Session, user: CurrentUser):
+    return success(await MasterService(session, user).dependency_plan())
+
+
 @router.get("/master-definitions/{master_id}/storage-plan")
 async def master_storage_plan(master_id: UUID, session: Session, user: CurrentUser):
     return success(await MasterStorageService(session, user).plan(master_id))

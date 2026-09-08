@@ -135,12 +135,13 @@ Prasyarat: BE-04 dan BE-08.
 
 - [ ] Hasilkan FK komposit tenant + UUID master dari registry relasi approved; gunakan ON DELETE RESTRICT sesuai kebijakan.
 - [ ] Validasi ownership/grant REFERENCES pada role DDL dan izin minimum role operasional/reader.
+- [x] Sediakan dependency plan dari binding approved untuk ditampilkan sebelum DDL.
 - [ ] Tentukan urutan master sebelum transaksi; deteksi siklus dependency dan tampilkan tindakan koreksi.
 - [ ] Validasi orphan/type sebelum memasang FK pada target yang sudah berisi data.
 - [ ] Tangani object DDL yang terlanjur dibuat ketika registry gagal commit; retry harus aman dan hasilnya terpantau.
 - [ ] Uji penolakan FK orphan/lintas tenant langsung di PostgreSQL, dependensi bertingkat, siklus, dan kegagalan DDL.
 
-Selesai jika relasi benar-benar ditegakkan database. FK fisik belum berarti query join NL2SQL diaktifkan.
+Status BE-09: dependency plan read-only tersedia; metadata target transaksi, deteksi siklus penuh, dan pemasangan FK fisik masih terbuka. FK fisik belum berarti query join NL2SQL diaktifkan.
 
 ### BE-10 — Review AI pada setiap snapshot baru
 

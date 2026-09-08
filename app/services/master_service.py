@@ -501,3 +501,28 @@ class MasterService:
         binding.revision_no += 1
         audit(self.session, self.user, "master.column_binding_decided", binding.id, status=binding.status)
         return record(binding)
+
+    async def dependency_plan(self):
+        self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
+        rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
+            MasterColumnBinding.status == "APPROVED"
+        ))).all()
+        masters = {row.master_definition_id for row in rows}
+        # Bindings are currently column-level edges; expose a stable plan for the
+        # FK compiler while keeping DDL disabled until target relation metadata exists.
+        return {
+            "nodes": sorted(masters),
+            "edges": [
+                {
+                    "source_sheet_id": row.source_sheet_id,
+                    "master_definition_id": row.master_definition_id,
+                    "master_field": row.master_field,
+                    "source_column": row.source_column,
+                    "master_version": row.master_version,
+                }
+                for row in rows
+            ],
+            "has_cycle": False,
+            "execution_ready": False,
+            "blocking_reason": "FK_TARGET_RELATION_METADATA_REQUIRED",
+        }
