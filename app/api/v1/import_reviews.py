@@ -15,6 +15,7 @@ from app.schemas.import_review import (
     ImportReviewPreviewRequest,
     ImportReviewApproveRequest,
     ImportReviewApplyRequest,
+    ImportReferenceResolveRequest,
 )
 from app.services.import_review_service import ImportReviewService
 
@@ -135,3 +136,10 @@ async def approve_import(review_id: UUID, data: ImportReviewApproveRequest, sess
 @router.post("/import-reviews/{review_id}/apply", dependencies=edit)
 async def apply_import(review_id: UUID, data: ImportReviewApplyRequest, session: Session, user: CurrentUser):
     return success(await ImportReviewService(session, user).apply(review_id, data))
+
+
+@router.post("/import-reviews/{review_id}/resolve-reference")
+async def resolve_import_reference(
+    review_id: UUID, data: ImportReferenceResolveRequest, session: Session, user: CurrentUser
+):
+    return success(await ImportReviewService(session, user).resolve_reference(review_id, data))

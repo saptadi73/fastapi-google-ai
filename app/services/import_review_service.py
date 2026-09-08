@@ -3,7 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import get_settings
@@ -770,6 +770,34 @@ class ImportReviewService:
         review.checkpoint = {**review.checkpoint, "rows_applied": loaded, "applied_by": str(self.user.id)}
         audit(self.session, self.user, "import.applied", review.id, rows_applied=loaded)
         return {"review": self.response(review), "rows_applied": loaded, "status": review.status}
+
+    async def resolve_reference(self, review_id, data):
+        self.role()
+        review = await self.repo.get(ImportReview, review_id)
+        if review.revision_no != data.revision_no:
+            raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
+        master, definition, table = await MasterStorageService(self.session, self.user).target(
+            data.master_definition_id
+        )
+        connection = await self.session.connection()
+        await connection.run_sync(lambda sync: check_storage(sync, table))
+        value = data.value.strip()
+        predicates = [table.c[key] == value for key in definition.business_key]
+        query = select(table).where(table.c._tenant_id == self.user.tenant_id)
+        if len(definition.business_key) == 1:
+            query = query.where(predicates[0])
+        else:
+            query = query.where(text(" AND ".join(f'"{key}" = :value' for key in definition.business_key))).params(value=value)
+        exact = (await self.session.execute(query.limit(2))).mappings().all()
+        if len(exact) == 1:
+            return {"status": "EXACT", "master_id": master.id, "record": self.json_value(dict(exact[0]))}
+        label = definition.label_field
+        pattern = "%" + value.replace("%", "\\%").replace("_", "\\_") + "%"
+        candidates = (await self.session.execute(
+            select(table).where(table.c._tenant_id == self.user.tenant_id, table.c[label].ilike(pattern, escape="\\")).limit(6)
+        )).mappings().all()
+        status = "AMBIGUOUS" if len(candidates) > 1 else "NOT_FOUND" if not candidates else "CANDIDATE"
+        return {"status": status, "master_id": master.id, "candidates": [self.json_value(dict(row)) for row in candidates]}
 
     async def work(self, job):
         review = await self.locked(job.payload["import_review_id"])

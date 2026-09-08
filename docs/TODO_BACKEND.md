@@ -21,7 +21,7 @@ Verifikasi terbaru setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta ex
 
 ### BE-01 — Kebijakan data dan kontrak dasar
 
-Selesai pada tahap kontrak dasar. Keputusan dan batas implementasi tercatat di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md). BE-02 sampai BE-06 selesai; tahap berikutnya BE-07.
+Selesai pada tahap kontrak dasar. Keputusan dan batas implementasi tercatat di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md). BE-02 sampai BE-07 sudah memiliki implementasi bertahap; resolver referensi dan hardening lanjutan tetap mengikuti BE-08 sampai BE-11.
 
 - [x] Klasifikasi per tab dikonfirmasi pengguna; kontrak hanya menerima SHEET.
 - [x] Pengguna memilih update dengan usulan insert yang wajib disetujui; policy dicatat eksplisit.
@@ -106,14 +106,14 @@ Selesai jika ambiguitas memiliki pertanyaan yang bisa dijawab dan diaudit, bukan
 
 Prasyarat: BE-04–BE-06.
 
-- [ ] Bangun diff INSERT_PROPOSED, UPDATE, UNCHANGED, DUPLICATE, KEY_CONFLICT, dan INVALID beserta before/after.
+- [x] Bangun diff INSERT, UPDATE, dan UNCHANGED beserta before/after; kategori konflik lanjutan tetap ditambahkan bersama resolver BE-08.
 - [ ] Terapkan policy update-only/insert dari BE-01; simpan record lama yang tidak muncul sesuai kebijakan.
-- [ ] Ikat preview/approval ke snapshot dan revision target master; periksa ulang sebelum commit.
-- [ ] Implementasikan UPSERT atomik, lock/concurrency control, idempotency, dan lineage sumber setiap perubahan.
-- [ ] Terapkan gate approval dan pertanyaan wajib pada endpoint apply serta worker, termasuk saat dipanggil langsung.
+- [x] Ikat preview/approval ke snapshot dan revision target master; periksa ulang sebelum commit.
+- [x] Implementasikan UPSERT atomik, lock/concurrency control, idempotency, dan lineage sumber setiap perubahan.
+- [x] Terapkan gate approval dan pertanyaan wajib pada endpoint apply serta worker, termasuk saat dipanggil langsung.
 - [ ] Uji dua import bersamaan, key kosong/duplikat, konflik sumber, retry, dan kegagalan tengah transaksi.
 
-Selesai jika import master berulang memperbarui master yang sama, tanpa duplikasi atau perubahan parsial. Bukti review AI wajib ditambahkan sebagai gate sebelum alur lengkap dinyatakan siap pada BE-10/BE-11.
+Status BE-07: implementasi inti preview/approval/apply tersedia; policy record hilang, konflik key terperinci, dan pengujian database concurrency masih terbuka. Bukti review AI tetap wajib ditambahkan sebelum alur lengkap dinyatakan siap pada BE-10/BE-11.
 
 ### BE-08 — Binding kolom dan resolusi referensi master
 
@@ -121,12 +121,13 @@ Prasyarat: BE-03, BE-06, dan BE-07.
 
 - [ ] Tambahkan registry relasi kolom → master, required/optional, normalisasi, cardinality, dan versi persetujuan.
 - [ ] Sediakan rekomendasi binding berdasarkan metadata/katalog tenant; pengguna mengonfirmasi mapping.
+- [x] Sediakan endpoint resolusi nilai dengan hasil EXACT/CANDIDATE/AMBIGUOUS/NOT_FOUND dan kandidat terotorisasi.
 - [ ] Resolusi nilai berurutan: exact business key → alias yang disetujui → kandidat kemiripan → pertanyaan wajib.
 - [ ] Simpan UUID master hasil resolusi dan nilai asli; tolak fallback diam-diam ke nama tampilan.
 - [ ] Implementasikan alias berscope tenant/master/kolom, dengan approval, revision, dan pencabutan.
 - [ ] Uji referensi tidak ditemukan, ambigu, master nonaktif, relasi opsional, serta perubahan alias/master setelah preview.
 
-Selesai jika transaksi menunjuk record master yang jelas. Confidence AI tidak otomatis menggabungkan entitas berbeda.
+Status BE-08: resolver read-only dasar tersedia untuk dipakai frontend; registry binding kolom, alias approved, penyimpanan UUID pada staging, dan integrasi apply masih terbuka. Confidence AI tidak otomatis menggabungkan entitas berbeda.
 
 ### BE-09 — Foreign key fisik dan urutan dependency
 
@@ -259,7 +260,8 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 | BE-04 | Selesai di kode/test | Target per master, UUID stabil, constraint, storage deployment, pencarian/masking; import belum aktif |
 | BE-05 | Selesai di kode/test | Snapshot/policy tetap, idempotency, checkpoint, temuan, cancel/revalidate/resume dan recovery; AI/apply belum aktif |
 | BE-06 | Selesai di kode/test | Staging, pertanyaan/keputusan berversi, koreksi, kandidat allowlist, proposal registry approved; import/apply belum aktif |
-| BE-07 sampai BE-11 | Berikutnya; belum mulai | Preview/apply master, referensi/FK dan AI review |
+| BE-07 | Implementasi inti tersedia | Preview token, approval reviewer, apply UPSERT; hardening policy/conflict masih terbuka |
+| BE-08 sampai BE-11 | Berikutnya; belum mulai | Referensi/FK, review AI, dan integrasi alur lengkap |
 | BE-12–BE-15 | Belum mulai | Perluasan parameter template, taxonomy, semantic, dan operasional |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 

@@ -30,6 +30,12 @@ class ImportReviewApplyRequest(StrictModel):
     preview_token: str
 
 
+class ImportReferenceResolveRequest(StrictModel):
+    revision_no: int = Field(ge=1)
+    master_definition_id: UUID
+    value: str = Field(min_length=1, max_length=500)
+
+
 class ImportQuestionDecision(StrictModel):
     revision_no: int = Field(ge=1)
     action: str = Field(
