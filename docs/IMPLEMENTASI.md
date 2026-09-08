@@ -105,7 +105,22 @@ model, biaya akun, akses Service Account, atau kuota eksternal sudah diuji live.
 
 ## Rencana master data dan validasi import
 
-Kebutuhan baru untuk klasifikasi master/non-master, master kanonis lintas Sheet, foreign key referensi, review AI per import, dan pertanyaan pengguna didokumentasikan di [Master data dan validasi import](MASTER_DATA_DAN_VALIDASI_IMPORT.md). Dokumen tersebut adalah spesifikasi lanjutan; fitur-fitur itu belum termasuk implementasi saat ini.
+Kebutuhan klasifikasi master/non-master, master kanonis lintas Sheet, foreign key referensi, review AI per import, dan pertanyaan pengguna didokumentasikan di [Master data dan validasi import](MASTER_DATA_DAN_VALIDASI_IMPORT.md). Pengerjaan mengikuti [TODO Backend](TODO_BACKEND.md).
+
+BE-01 selesai pada tingkat kontrak dasar:
+
+- Pengguna memilih klasifikasi per tab dan usulan insert kode master baru yang wajib disetujui.
+- [Schema policy](../app/schemas/data_policy.py) memvalidasi jenis dataset, aturan master, sumber otoritatif, masa berlaku, serta batas apply/review.
+- [Guard lifecycle](../app/domain/import_workflow.py) memvalidasi transisi status batch dan role; pemeriksaan tenant, evidence, approval terpisah, dan transaksi tetap harus ditambahkan pada service tahap berikutnya.
+- Pengujian terarah policy/lifecycle dan kontrak API: 11 tes lulus; Ruff serta pemeriksaan API Reference lulus.
+
+BE-01 tidak menambahkan endpoint atau migrasi database. BE-02 menyimpan klasifikasi tab dan menegakkan gate eksekusi; bukti review konfigurasi mengacu pada revision klasifikasi. BE-03 menyediakan registry definisi master, kandidat duplikat, lifecycle approval berversi, serta binding sumber approved dengan dry-run. BE-04 menyediakan storage kanonis bertipe dan pencarian record. Tab MASTER tetap tertahan sampai alur review/apply import tersedia pada BE-05–BE-11.
+
+Detail BE-03, 13 endpoint baru, dan migrasi `d83a5f12c906` ada di [Registry master dan binding sumber](REGISTRY_MASTER_BE03.md). BE-04 menambah tiga endpoint storage/record; kontraknya ada di [Storage master BE-04](STORAGE_MASTER_BE04.md). API Reference kini mencakup 107 operasi. Pengguna melaporkan migrasi sebelumnya sudah dijalankan; sesi BE-04 tidak memigrasikan database aplikasi. Frontend katalog/binding/storage belum ditambahkan.
+
+Verifikasi BE-04: 87 tes backend lulus pada database test, Ruff lulus, dan exporter API lulus. Tidak ada migrasi Alembic baru; tabel master dibuat melalui deploy-storage. Review/apply import dilanjutkan pada BE-05 dan seterusnya.
+
+Migrasi `b762af03e219` menetapkan tab lama ke CLASSIFICATION_REQUIRED tanpa menebak jenisnya atau menghapus konfigurasi aktif. Pengujian backend memakai database test terpisah; rollout tetap perlu konfirmasi klasifikasi melalui API/Swagger karena frontend klasifikasi belum ditambahkan. Detail payload, respons, error, dan kompatibilitas tersedia di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md).
 
 
 ## API Reference frontend

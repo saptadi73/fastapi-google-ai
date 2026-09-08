@@ -47,6 +47,22 @@ Body: [UserUpdate](#userupdate).
 |---|---|---|---|
 | `user_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/source-sheets/{sheet_id}/classification
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/source-sheets/{sheet_id}/classification
+
+Body: [SheetClassificationUpdate](#sheetclassificationupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/sources/google-sheets
 
 Body: [SourceCreate](#sourcecreate).
@@ -127,6 +143,137 @@ Body: —.
 ### GET /api/v1/source-sheets/{sheet_id}/configurations/active
 
 Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/master-definitions/{master_id}/storage-plan
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/master-definitions/{master_id}/deploy-storage
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/master-definitions/{master_id}/records
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+| `search` | query | Tidak | `string` {"default":""} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+| `active_only` | query | Tidak | `boolean` {"default":true} |
+| `record_id` | query | Tidak | `string (uuid) / null` {} |
+
+### GET /api/v1/master-definitions
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `search` | query | Tidak | `string` {"default":""} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### POST /api/v1/master-definitions
+
+Body: [MasterDefinitionCreate](#masterdefinitioncreate).
+
+### POST /api/v1/master-definitions/preview
+
+Body: [MasterDefinitionCreate](#masterdefinitioncreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `against` | query | Tidak | `string (uuid) / null` {} |
+
+### GET /api/v1/master-definitions/{master_id}
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### PATCH /api/v1/master-definitions/{master_id}
+
+Body: [MasterDefinitionPatch](#masterdefinitionpatch).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/master-definitions/{master_id}/submit-review
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/master-definitions/{master_id}/approve
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/master-definitions/{master_id}/reject
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/master-definitions/{master_id}/deactivate
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/source-sheets/{sheet_id}/master-binding
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/source-sheets/{sheet_id}/master-binding
+
+Body: [MasterBindingUpdate](#masterbindingupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/source-sheets/{sheet_id}/master-binding/approve
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/source-sheets/{sheet_id}/master-binding/reject
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
 
 | Parameter | Lokasi | Wajib | Tipe / batas |
 |---|---|---|---|
@@ -886,6 +1033,10 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `meta` | Tidak | `object` | {} | — |
 | `errors` | Tidak | `array<object>` | [] | — |
 
+### DatasetKind
+
+`enum ["MASTER","NON_MASTER"]`
+
 ### Decision
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -918,6 +1069,15 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `semantic` | Ya | `SemanticDefinition` | — | — |
 | `unresolved_questions` | Tidak | `array<string>` | [] | — |
 | `overall_confidence` | Tidak | `number` | 1 | {"maximum":1.0,"minimum":0.0} |
+
+### EffectiveDating
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `valid_from_column` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `valid_to_column` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `interval` | Tidak | `"START_INCLUSIVE_END_EXCLUSIVE"` | "START_INCLUSIVE_END_EXCLUSIVE" | — |
+| `overlap_policy` | Tidak | `"REJECT"` | "REJECT" | — |
 
 ### Envelope
 
@@ -989,6 +1149,195 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### MasterBindingUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":0.0} |
+| `master_definition_id` | Ya | `string (uuid)` | — | — |
+| `master_version` | Ya | `integer` | — | {"minimum":1.0} |
+| `classification_revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `columns` | Ya | `array<ColumnMapping>` | — | {"maxItems":100,"minItems":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 0,
+  "master_definition_id": "11111111-1111-4111-8111-111111111111",
+  "master_version": 1,
+  "classification_revision": 2,
+  "columns": [
+    {
+      "source_column": "Kode Produk",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "transformation_codes": [
+        "trim"
+      ]
+    },
+    {
+      "source_column": "Nama Produk",
+      "target_column": "product_name",
+      "target_type": "text",
+      "nullable": false,
+      "transformation_codes": [
+        "trim",
+        "normalize_whitespace"
+      ]
+    }
+  ]
+}
+```
+
+### MasterDefinitionCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `definition` | Ya | `MasterSchema` | — | — |
+| `reviewed_candidate_ids` | Tidak | `array<string (uuid)>` | [] | {"maxItems":100} |
+| `duplicate_review_reason` | Tidak | `string` | "" | {"maxLength":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "products",
+  "definition": {
+    "name": "Produk",
+    "description": "Identitas produk baku",
+    "aliases": [
+      "Barang"
+    ],
+    "fields": [
+      {
+        "name": "product_code",
+        "type": "text",
+        "nullable": false,
+        "pii_classification": "NONE"
+      },
+      {
+        "name": "product_name",
+        "type": "text",
+        "nullable": false,
+        "pii_classification": "NONE"
+      }
+    ],
+    "business_key": [
+      "product_code"
+    ],
+    "label_field": "product_name",
+    "policy": {
+      "new_record_policy": "PROPOSE_INSERT",
+      "source_conflict_policy": "REQUIRE_REVIEW"
+    }
+  },
+  "reviewed_candidate_ids": [],
+  "duplicate_review_reason": ""
+}
+```
+
+### MasterDefinitionPatch
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `definition` | Ya | `MasterSchema` | — | — |
+| `reviewed_candidate_ids` | Tidak | `array<string (uuid)>` | [] | {"maxItems":100} |
+| `duplicate_review_reason` | Tidak | `string` | "" | {"maxLength":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "definition": {
+    "name": "Produk",
+    "description": "Identitas produk baku",
+    "aliases": [
+      "Barang"
+    ],
+    "fields": [
+      {
+        "name": "product_code",
+        "type": "text",
+        "nullable": false,
+        "pii_classification": "NONE"
+      },
+      {
+        "name": "product_name",
+        "type": "text",
+        "nullable": false,
+        "pii_classification": "NONE"
+      }
+    ],
+    "business_key": [
+      "product_code"
+    ],
+    "label_field": "product_name",
+    "policy": {
+      "new_record_policy": "PROPOSE_INSERT",
+      "source_conflict_policy": "REQUIRE_REVIEW"
+    }
+  },
+  "reviewed_candidate_ids": [],
+  "duplicate_review_reason": ""
+}
+```
+
+### MasterField
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `name` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `type` | Ya | `enum ["text","varchar","integer","bigint","numeric","boolean","date","timestamp","timestamptz","uuid"]` | — | — |
+| `nullable` | Tidak | `boolean` | true | — |
+| `pii_classification` | Tidak | `string` | "NONE" | {"pattern":"^(NONE&#124;LOW&#124;MEDIUM&#124;HIGH)$"} |
+
+### MasterImportPolicy
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `new_record_policy` | Ya | `NewMasterRecordPolicy` | — | — |
+| `source_conflict_policy` | Ya | `SourceConflictPolicy` | — | — |
+| `authoritative_source_sheet_id` | Tidak | `string (uuid) / null` | — | — |
+| `missing_record_policy` | Tidak | `"KEEP"` | "KEEP" | — |
+| `deactivation_policy` | Tidak | `"EXPLICIT_REVIEW"` | "EXPLICIT_REVIEW" | — |
+| `business_key_change_policy` | Tidak | `"EXPLICIT_MIGRATION"` | "EXPLICIT_MIGRATION" | — |
+| `delete_referenced_policy` | Tidak | `"RESTRICT"` | "RESTRICT" | — |
+| `effective_dating` | Tidak | `EffectiveDating / null` | — | — |
+
+### MasterRevisionRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `comment` | Tidak | `string` | "" | {"maxLength":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 2,
+  "comment": "Definisi dan mapping sudah diperiksa."
+}
+```
+
+### MasterSchema
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `name` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `description` | Tidak | `string` | "" | {"maxLength":2000} |
+| `aliases` | Tidak | `array<string>` | [] | {"maxItems":30} |
+| `fields` | Ya | `array<MasterField>` | — | {"maxItems":100,"minItems":1} |
+| `business_key` | Ya | `array<string>` | — | {"maxItems":10,"minItems":1} |
+| `label_field` | Ya | `string` | — | — |
+| `policy` | Ya | `MasterImportPolicy` | — | — |
+
 ### MetricDefinition
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -997,6 +1346,10 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `column` | Ya | `string` | — | — |
 | `aggregation` | Ya | `enum ["sum","count","avg","min","max","count_distinct"]` | — | — |
 | `label` | Tidak | `string` | "" | — |
+
+### NewMasterRecordPolicy
+
+`enum ["UPDATE_ONLY","PROPOSE_INSERT"]`
 
 ### PasswordChange
 
@@ -1261,6 +1614,22 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `metrics` | Tidak | `array<MetricDefinition>` | [] | — |
 | `allowed_roles` | Tidak | `array<enum ["PLATFORM_ADMIN","DATA_STEWARD","SOURCE_OWNER","TECHNICAL_APPROVER","ANALYST","VIEWER"]>` | ["PLATFORM_ADMIN","DATA_STEWARD","ANALYST","VIEWER"] | — |
 
+### SheetClassificationUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `dataset_kind` | Ya | `DatasetKind` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "dataset_kind": "NON_MASTER"
+}
+```
+
 ### SheetUpdate
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -1287,6 +1656,10 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `field` | Ya | `string` | — | — |
 | `direction` | Tidak | `enum ["asc","desc"]` | "asc" | — |
+
+### SourceConflictPolicy
+
+`enum ["REQUIRE_REVIEW","AUTHORITATIVE_SOURCE"]`
 
 ### SourceCreate
 
@@ -1531,6 +1904,11 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `data_start_row` | `INTEGER` | Tidak |
 | `enabled` | `BOOLEAN` | Tidak |
 | `last_fingerprint` | `VARCHAR(64)` | Ya |
+| `dataset_kind` | `VARCHAR(20)` | Ya |
+| `classification_status` | `VARCHAR(32)` | Tidak |
+| `classification_revision` | `INTEGER` | Tidak |
+| `classification_confirmed_by` | `CHAR(32)` | Ya |
+| `classification_confirmed_at` | `DATETIME` | Ya |
 | `active_configuration_id` | `CHAR(32)` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
@@ -1567,6 +1945,47 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `ai_response_id` | `VARCHAR(200)` | Ya |
 | `ai_model` | `VARCHAR(100)` | Ya |
 | `prompt_version` | `VARCHAR(40)` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record MasterDefinition
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `code` | `VARCHAR(63)` | Tidak |
+| `name` | `VARCHAR(200)` | Tidak |
+| `aliases` | `JSONB` | Tidak |
+| `definition_json` | `JSONB` | Tidak |
+| `approved_definition_json` | `JSONB` | Ya |
+| `revision_no` | `INTEGER` | Tidak |
+| `approved_version` | `INTEGER` | Tidak |
+| `status` | `VARCHAR(32)` | Tidak |
+| `is_active` | `BOOLEAN` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `submitted_by` | `CHAR(32)` | Ya |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record MasterSourceBinding
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `source_sheet_id` | `CHAR(32)` | Tidak |
+| `master_definition_id` | `CHAR(32)` | Tidak |
+| `master_version` | `INTEGER` | Tidak |
+| `classification_revision` | `INTEGER` | Tidak |
+| `revision_no` | `INTEGER` | Tidak |
+| `status` | `VARCHAR(32)` | Tidak |
+| `columns_json` | `JSONB` | Tidak |
+| `fingerprint` | `VARCHAR(64)` | Tidak |
+| `snapshot_hash` | `VARCHAR(64)` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |

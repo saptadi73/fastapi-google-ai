@@ -1,6 +1,6 @@
 # Implementasi review konfigurasi ETL
 
-Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. AI menghasilkan draft; pengguna menyesuaikan konfigurasi, menjawab pertanyaan, memvalidasi, lalu mengajukan review. Approver berbeda menyetujui sebelum deployment. Registry master, taxonomy, koreksi typo semua sel, dan foreign key otomatis masih mengikuti [rancangan master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), belum menjadi perilaku runtime.
+Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. AI menghasilkan draft; pengguna menyesuaikan konfigurasi, menjawab pertanyaan, memvalidasi, lalu mengajukan review. Approver berbeda menyetujui sebelum deployment. Registry/binding metadata kini tersedia pada BE-03. Pemuatan record master, taxonomy, koreksi typo semua sel, dan foreign key otomatis masih mengikuti [rancangan master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), belum menjadi perilaku runtime.
 
 ## Menjalankan
 
@@ -13,7 +13,7 @@ Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runt
 2. Jalankan backend, Redis, dan worker sesuai [panduan implementasi](IMPLEMENTASI.md). Profiling, rekomendasi AI, deployment, dan sync berjalan sebagai job. Status QUEUED terus-menerus berarti worker perlu diperiksa. Validasi draft, export, dan import-preview dijalankan melalui API.
 3. Di `C:\projek\vue-googlesheet-ai`, gunakan `npm run dev`. Pastikan `VITE_API_ORIGIN`, `VITE_API_BASE_PATH`, dan CORS backend sesuai. Buka `/workspace` atau tombol **Buka workspace ETL** pada halaman utama.
 4. Login dengan tenant dan akun aplikasi. Token berada di memori; reload penuh memerlukan login ulang. Jika sesi kedaluwarsa, keluar/ganti akun lalu login kembali.
-5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan.
+5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Konfirmasi klasifikasi per tab melalui API BE-02 (form klasifikasi belum ditambahkan ke Vue). Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan. MASTER tersimpan sebagai klasifikasi tetapi belum dapat dimuat sebelum review/apply import tersedia (registry/binding dan storage sudah tersedia pada BE-03/BE-04); lihat [kontrak dan rollout BE-02](KLASIFIKASI_TAB_BE02.md).
 6. Periksa identitas, mapping kolom, cleansing berurutan, kualitas data, strategi pemuatan, dimensi, metrik, dan role akses. Simpan perubahan, periksa dry-run, isi checklist seluruh bagian/kolom, lalu **Ajukan review**.
 7. Gunakan akun `TECHNICAL_APPROVER` atau admin berbeda untuk membuka konfigurasi yang sama, memeriksa hasil, dan menyetujui. User dapat dibuat oleh admin melalui `POST /users`; frontend ini belum menyediakan administrasi user.
 8. **Deploy konfigurasi**, tunggu job SUCCEEDED, lalu jalankan sinkronisasi dengan akun editor. Approval dan deployment tidak langsung memuat data.
@@ -142,4 +142,4 @@ Status `Tidak` pada cleansing atau `Nonaktif` pada aturan kualitas/metrik berart
 - Regression suite ETL: approve/deploy, sync/idempotency, rollback, permission, query tetap diuji.
 - Frontend: `npm run build` menjalankan TypeScript dan build Vite. OpenAI dan Google pada integration test memakai mock; konfigurasi/integrasi akun nyata tetap harus diuji pada lingkungan tujuan.
 - Hasil verifikasi implementasi: 63 pengujian backend lulus. Smoke test Edge headless dengan API mock juga lulus untuk login, edit/simpan draft, checklist, submit, dan approval akun berbeda tanpa exception JavaScript. Pengujian browser ini tidak mengakses data aplikasi nyata.
-- `scripts/export_api_reference.py --check` memeriksa 89 operasi serta seluruh contoh payload terhadap schema runtime.
+- `scripts/export_api_reference.py --check` kini memeriksa 107 operasi setelah penambahan storage dan pencarian record BE-04, serta seluruh contoh payload terhadap schema runtime.

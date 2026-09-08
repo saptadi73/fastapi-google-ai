@@ -12,6 +12,11 @@ from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import REVIEW_SECTIONS, ETLConfiguration
 from app.services.artifact_service import ArtifactService
 from app.services.audit_service import audit
+from app.services.classification_service import (
+    ClassificationService,
+    classification_record,
+    require_classification,
+)
 from app.services.etl_compiler_service import transform_rows
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
@@ -31,6 +36,8 @@ class ConfigurationService:
             raise AppError("CONFIGURATION_CONFLICT", "Konfigurasi tidak dapat diajukan review.", 409)
         if config.revision_no != data.revision_no:
             raise AppError("CONFIGURATION_CONFLICT", "Revision berubah; muat ulang draft.", 409)
+        sheet = await ClassificationService(self.session, self.user).locked_sheet(config.source_sheet_id)
+        require_classification(sheet)
         validation = await self.validate(config)
         if not validation["valid"]:
             raise AppError(
@@ -54,6 +61,8 @@ class ConfigurationService:
             "reviewed_sections": data.reviewed_sections,
             "snapshot_hash": validation["snapshot_hash"],
             "snapshot_id": validation["snapshot_id"],
+            "classification_revision": sheet.classification_revision,
+            "dataset_kind": sheet.dataset_kind,
         }
         audit(self.session, self.user, "configuration.review_requested", config.id)
         return config
@@ -63,6 +72,8 @@ class ConfigurationService:
         expected = "SUPERSEDED" if rollback else "APPROVED"
         if config.status != expected:
             raise AppError("APPROVAL_REQUIRED", f"Konfigurasi harus berstatus {expected}.", 409)
+        sheet = await self.repo.get(SourceSheet, config.source_sheet_id)
+        self.require_classification_evidence(config, sheet)
         return await enqueue(
             self.session,
             self.user,
@@ -83,6 +94,20 @@ class ConfigurationService:
             for k, v in current.configuration_json.items()
             if v != previous.configuration_json.get(k)
         }
+
+    @staticmethod
+    def require_classification_evidence(config, sheet):
+        require_classification(sheet)
+        evidence = config.review_state or {}
+        if (
+            evidence.get("classification_revision") != sheet.classification_revision
+            or evidence.get("dataset_kind") != sheet.dataset_kind
+        ):
+            raise AppError(
+                "CLASSIFICATION_REVIEW_STALE",
+                "Klasifikasi berubah atau belum tercakup review; ajukan review baru. Clone jika konfigurasi sudah disetujui.",
+                409,
+            )
 
     async def create(self, sheet_id, configuration, status="NEEDS_REVIEW", **ai_metadata):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
@@ -149,6 +174,10 @@ class ConfigurationService:
             previews.append({"source_row": row_number, "before": before, "after": after})
         return {
             "valid": not parsed.unresolved_questions and not issues,
+            "classification": classification_record(sheet),
+            "ready_for_review": not parsed.unresolved_questions
+            and not issues
+            and classification_record(sheet)["execution_ready"],
             "sample_rows_valid": len(good),
             "sample_rows_invalid": len(issues),
             "warnings": warnings[:20],
@@ -211,6 +240,8 @@ class ConfigurationService:
                 raise AppError(
                     "SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun approver lain.", 403
                 )
+            sheet = await ClassificationService(self.session, self.user).locked_sheet(config.source_sheet_id)
+            self.require_classification_evidence(config, sheet)
             validation = await self.validate(config)
             evidence = config.review_state or {}
             if evidence.get("submitted_revision") != config.revision_no:
@@ -250,7 +281,8 @@ class ConfigurationService:
             raise AppError(
                 "APPROVAL_REQUIRED", "Konfigurasi belum disetujui atau tidak dapat diaktifkan.", 409
             )
-        sheet = await self.repo.get(SourceSheet, config.source_sheet_id, lock=True)
+        sheet = await ClassificationService(self.session, self.user).locked_sheet(config.source_sheet_id)
+        self.require_classification_evidence(config, sheet)
         source = await self.repo.get(DataSource, config.source_id)
         artifact = await self.session.scalar(
             self.repo.query(Artifact).where(

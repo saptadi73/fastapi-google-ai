@@ -14,6 +14,7 @@ from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import ETLConfiguration
 from app.services.artifact_service import ArtifactService
 from app.services.audit_service import audit
+from app.services.classification_service import ClassificationService, require_classification
 from app.services.etl_compiler_service import transform_rows
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
@@ -36,14 +37,15 @@ class ETLExecutionService:
             raise AppError("ETL_RUN_LOCKED", "ETL sumber ini masih berjalan.", 409)
         if source.paused:
             raise AppError("SOURCE_PAUSED", "Jadwal sumber sedang dijeda.", 409)
-        sheets = [s for s in await self.repo.sheets(source.id) if s.enabled]
-        if not sheets:
-            raise AppError("SOURCE_NOT_FOUND", "Tidak ada tab aktif.", 404)
+        sheets = await ClassificationService(self.session, self.user).require_source_ready(
+            source.id, lock=True
+        )
         batches = await self.google.read_sheets(source.spreadsheet_id, sheets)
         results = []
         for sheet, values in zip(sheets, batches):
             # Serializes with activation so a run cannot accidentally read two configuration versions.
             sheet = await self.repo.get(SourceSheet, sheet.id, lock=True)
+            require_classification(sheet)
             if not sheet.active_configuration_id:
                 raise AppError("APPROVAL_REQUIRED", "Tab belum memiliki konfigurasi aktif.", 409)
             config = await self.repo.get(Configuration, sheet.active_configuration_id)

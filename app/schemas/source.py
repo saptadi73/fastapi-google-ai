@@ -4,6 +4,7 @@ from celery.schedules import crontab
 from pydantic import Field, model_validator
 
 from app.schemas.common import StrictModel
+from app.schemas.data_policy import DatasetKind
 
 
 class SourceCreate(StrictModel):
@@ -35,6 +36,11 @@ class SheetUpdate(StrictModel):
     header_row: int | None = Field(default=None, ge=1, le=100)
     data_start_row: int | None = Field(default=None, ge=2, le=1000)
     enabled: bool | None = None
+
+
+class SheetClassificationUpdate(StrictModel):
+    revision_no: int = Field(ge=1)
+    dataset_kind: DatasetKind
 
 
 def spreadsheet_id(value: str) -> str:

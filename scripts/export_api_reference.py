@@ -30,12 +30,23 @@ def build_documents():
     from app.models.auth import User
     from app.models.configuration import Artifact, Configuration
     from app.models.etl import ETLRun, Job, QualityIssue
+    from app.models.master import MasterDefinition, MasterSourceBinding
     from app.models.semantic import DataProduct, QueryRequest, SavedQuery
     from app.models.source import DataSource, ProfilingRun, SourceSheet
 
     spec = app.openapi()
     models = {}
-    for name in ("auth", "source", "configuration", "semantic", "nl2sql", "monitoring", "health", "common"):
+    for name in (
+        "auth",
+        "source",
+        "configuration",
+        "master",
+        "semantic",
+        "nl2sql",
+        "monitoring",
+        "health",
+        "common",
+    ):
         module = importlib.import_module("app.schemas." + name)
         for cls in vars(module).values():
             if isinstance(cls, type) and issubclass(cls, BaseModel):
@@ -169,6 +180,8 @@ def build_documents():
         (SourceSheet, set()),
         (ProfilingRun, set()),
         (Configuration, set()),
+        (MasterDefinition, set()),
+        (MasterSourceBinding, set()),
         (Artifact, {"storage_uri"}),
         (Job, set()),
         (ETLRun, set()),

@@ -4,13 +4,15 @@ Backend modular untuk mengolah Google Sheets menjadi data PostgreSQL, dashboard 
 berbahasa natural melalui semantic catalog. Acuan: [dokumen baseline](docs/Dokumentasi_Backend_FastAPI_Google_Sheet_AI_ETL_NL2SQL.md).
 Lihat [cakupan implementasi dan batasannya](docs/IMPLEMENTASI.md).
 
+Urutan pekerjaan backend dan kriteria selesai setiap tahap tersedia di [TODO Backend](docs/TODO_BACKEND.md).
+
 Panduan konfigurasi production dan pergantian key tersedia di [Konfigurasi dan rotasi kredensial](docs/KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).
 
-Spesifikasi alur master/non-master, referensi, dan pertanyaan AI tersedia di [Master data dan validasi import](docs/MASTER_DATA_DAN_VALIDASI_IMPORT.md). Fitur ini masih berupa rancangan, belum diimplementasikan.
+Spesifikasi alur master/non-master, referensi, dan pertanyaan AI tersedia di [Master data dan validasi import](docs/MASTER_DATA_DAN_VALIDASI_IMPORT.md). [BE-01](docs/KEBIJAKAN_DATA_BE01.md) menetapkan kebijakan dasar, dan [BE-02](docs/KLASIFIKASI_TAB_BE02.md) sudah menyediakan API klasifikasi per tab serta gate backend. [BE-03](docs/REGISTRY_MASTER_BE03.md) menyediakan registry/binding metadata master. Penyimpanan record master dan review setiap import masih tahap lanjutan. Setelah migrasi, tab lama harus dikonfirmasi sebelum sync; tab MASTER menunggu implementasi master kanonis.
 
 Acuan integrasi frontend tersedia di [API Reference](docs/API_REFERENCE.md), dilengkapi payload, respons, hak akses, job polling, dan schema lengkap.
 
-Rancangan verifikasi draft AI melalui form dan Excel dijelaskan di [Review konfigurasi ETL](docs/REVIEW_KONFIGURASI_ETL.md), berdasarkan template parameter workbook.
+Verifikasi draft AI melalui form dan Excel sudah tersedia untuk subset parameter runtime. Lihat [panduan penggunaan](docs/PANDUAN_REVIEW_ETL.md) dan [cakupan template](docs/REVIEW_KONFIGURASI_ETL.md).
 
 ## Menjalankan di Windows / PowerShell
 
@@ -276,3 +278,7 @@ SQL AST guard, template intent, error envelope, serta adapter Responses API deng
  
 
 Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](docs/PANDUAN_REVIEW_ETL.md) memuat cara menjalankan migrasi, halaman Vue `/workspace`, payload preview/apply, dan mekanisme persetujuan.
+
+## Storage master BE-04
+
+Storage master kanonis, UUID record stabil, deployment schema dan pencarian record sudah tersedia. Lihat [panduan BE-04](docs/STORAGE_MASTER_BE04.md). Import master tetap menunggu alur review/apply BE-05 dan seterusnya.

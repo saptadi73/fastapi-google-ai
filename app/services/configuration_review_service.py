@@ -10,6 +10,7 @@ from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import REVIEW_SECTIONS, ConfigurationPatch
+from app.services.classification_service import classification_record
 from app.services.configuration_service import ConfigurationService
 from app.services.profiling_service import digest
 from app.services.workbook_service import decode, identities, parse_workbook, token
@@ -64,6 +65,7 @@ class ConfigurationReviewService(ConfigurationService):
             "configuration": record(config),
             "source": record(source),
             "sheet": record(sheet),
+            "classification": classification_record(sheet),
             "profile": profile.profile_json if profile else None,
             "validation": validation,
             "capabilities": CAPABILITIES,

@@ -1,6 +1,6 @@
 # Master data, referensi, dan validasi import
 
-Status: **spesifikasi perubahan, belum diimplementasikan**. Dokumen ini mencatat kebutuhan bisnis dari diskusi 8 September 2026 dan hasil pemeriksaan backend `fastapi-googlesheet-ai` serta frontend `vue-googlesheet-ai`. Endpoint dan model bertanda usulan di bawah belum tersedia.
+Status: **BE-01–BE-04 selesai untuk kebijakan, klasifikasi, registry, binding sumber, dan storage kanonis**. Dokumen ini mencatat kebutuhan bisnis dari diskusi 8 September 2026. Pemuatan record, pertanyaan per sel, dan batch review tetap tahap lanjutan. Status mengikuti [TODO Backend](TODO_BACKEND.md); implementasi aktif dijelaskan di [BE-03](REGISTRY_MASTER_BE03.md) dan [BE-04](STORAGE_MASTER_BE04.md).
 
 Tujuannya: menetapkan identitas master yang baku sebelum taxonomy/semantic layer, memperbarui master yang sama tanpa membuat duplikat, dan menahan data ambigu sampai pengguna menjawab pertanyaan sistem.
 
@@ -15,12 +15,11 @@ Tujuannya: menetapkan identitas master yang baku sebelum taxonomy/semantic layer
 7. Konfigurasi yang masih memiliki pertanyaan wajib atau referensi tidak valid tidak boleh diterapkan ke data trusted.
 8. Frontend Vue menjadi tempat memilih jenis data, memilih master, meninjau perubahan, dan menjawab pertanyaan.
 
-### Asumsi kerja yang masih perlu dikonfirmasi
+### Keputusan klasifikasi dan insert (BE-01)
 
-- Klasifikasi berlaku **per tab** karena satu spreadsheet mungkin memiliki tab master dan transaksi sekaligus. Form awal tetap menanyakan maksud sumber; setelah discovery, pengguna mengonfirmasi setiap tab yang dipilih.
-- Import master memakai UPSERT: kode yang cocok diperbarui, kode baru ditampilkan sebagai penambahan dalam preview untuk disetujui, dan kode lama yang tidak muncul di file tetap disimpan. Jika kebijakan bisnis hanya mengizinkan update, penambahan harus diblokir atau dipisahkan ke persetujuan tersendiri.
+Pengguna sudah mengonfirmasi klasifikasi **per tab** dan **usulan penambahan kode baru yang wajib disetujui**. Kode yang cocok diperbarui menurut preview; record yang tidak muncul tetap disimpan sesuai policy awal. Detail sumber otoritatif, perubahan key, masa berlaku, apply atomik, dan kontrak versi tersedia di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md).
 
-Kedua asumsi ini belum merupakan keputusan pengguna. Jangan menerapkan mutasi data production berdasarkan asumsi tersebut sebelum kebijakannya ditetapkan.
+Kontrak dasar sudah tersedia; registry master, binding, dan penerapan policy ke import masih mengikuti tahapan [TODO Backend](TODO_BACKEND.md). Pilihan tersebut bukan izin untuk menggabungkan atau memigrasikan data production secara otomatis.
 
 ## 2. Master dan non-master bukan pembagian tipe kolom
 
@@ -44,15 +43,15 @@ Jangan menimpa histori transaksi hanya karena harga atau nama master terbaru ber
 
 | Area | Kondisi kode sekarang | Perubahan yang diperlukan |
 |---|---|---|
-| Pendaftaran sumber | `SourceCreate` belum memiliki jenis data | Pertanyaan klasifikasi dan status belum diklasifikasi |
-| Tab | `SourceSheet` hanya menyimpan range/header dan konfigurasi aktif | Klasifikasi tab dan binding ke master |
+| Pendaftaran sumber | `SourceCreate` tetap menerima identitas sumber; tab baru meminta klasifikasi setelah discovery | Integrasi pertanyaan klasifikasi pada frontend |
+| Tab | `SourceSheet` menyimpan jenis, status/revision klasifikasi, actor/time; API GET/PUT tersedia | Binding ke registry master approved |
 | Target tabel | Nama tabel memakai suffix UUID tab | Target master bersama yang identitasnya tidak mengikuti file/tab |
 | UPSERT | Business key berlaku pada tabel tab itu sendiri | UPSERT ke master kanonis lintas import/sumber dalam tenant |
 | Relasi | Compiler belum membuat FK referensi master | Registry relasi yang ditinjau dan FK komposit tenant |
 | Profiling | Sampel sel disamarkan sebelum konteks AI | Jalur review nilai yang terkontrol; tidak mengklaim AI sudah mengecek ejaan sel |
-| Klarifikasi | `unresolved_questions` berupa daftar teks pada konfigurasi | Pertanyaan terstruktur, keputusan, revision, dan jejak audit per import |
+| Klarifikasi | Pertanyaan teks konfigurasi dan jawaban tersimpan pada `review_state` | Pertanyaan ber-ID per sel/batch, kandidat terkontrol, keputusan, dan evidence per import |
 | Sync | Transformasi dan aturan kualitas deterministik | Pemeriksaan referensi + review AI sebelum commit setiap snapshot baru |
-| Frontend | Halaman awal, kartu modul, chart contoh, health check | Login, wizard import, katalog master, preview perubahan, panel pertanyaan |
+| Frontend | Login, workspace sumber, wizard review konfigurasi, preview Excel, dan approval tersedia | Klasifikasi tab, katalog master, preview perubahan record master, dan pertanyaan per import |
 
 Backend sudah mempunyai fondasi yang dapat digunakan kembali: tenant scoping, snapshot, profiling, draft konfigurasi, approval terpisah, artifact versi, antrean job, dan staging/quarantine. Fondasi ini tetap dipakai.
 
@@ -87,6 +86,8 @@ Profiling boleh dilakukan untuk membantu klasifikasi. Deploy, approval final, da
 ## 5. Identitas master dan aturan update
 
 ### Registry master
+
+Registry metadata dan binding sudah diimplementasikan pada BE-03. Rincian di bawah tetap menjadi sasaran desain lengkap; target fisik record master dan migrasi key belum berjalan. Gunakan API Reference/BE-03 untuk nama field dan kontrak aktif, bukan menganggap seluruh field rancangan di sini sudah tersedia.
 
 Usulan `platform.master_definition`:
 
@@ -213,14 +214,15 @@ Untuk preview master, simpan versi target saat preview dibuat. Sebelum commit, u
 
 ## 9. Kontrak API yang diusulkan
 
-Endpoint berikut **belum tersedia**, dan harus ditambahkan dengan envelope respons proyek serta pemeriksaan role/tenant yang sama:
+Endpoint klasifikasi tersedia pada BE-02, dan list/create definisi master tersedia pada BE-03. Endpoint record master dan import-review di bawah **masih usulan**. Lifecycle definisi serta binding menggunakan endpoint aktif yang didokumentasikan lengkap di [BE-03](REGISTRY_MASTER_BE03.md).
 
 | Endpoint | Fungsi |
 |---|---|
-| `GET /master-definitions?search=...` | Cari master tenant, alias, dan metadata business key |
-| `POST /master-definitions` | Usulkan definisi master baru; deteksi kode duplikat |
+| `GET /master-definitions?search=...` | Aktif BE-03: cari master tenant, alias, dan metadata business key |
+| `POST /master-definitions` | Aktif BE-03: usulkan definisi master; cek kandidat dan kode duplikat |
 | `GET /master-definitions/{id}/records` | Cari record yang diizinkan untuk preview/resolusi |
-| `PUT /source-sheets/{id}/classification` | Konfirmasi master/non-master dan binding master dengan revision |
+| `GET /source-sheets/{id}/classification` | Aktif BE-02: jenis, status/revision, actor/time, dan blocker eksekusi |
+| `PUT /source-sheets/{id}/classification` | Aktif BE-02: konfirmasi master/non-master dengan revision; binding master belum diterima |
 | `POST /source-sheets/{id}/import-reviews` | Buat snapshot dan antrekan review baru |
 | `GET /import-reviews/{id}` | Status, coverage, versi evidence, dan ringkasan perubahan |
 | `GET /import-reviews/{id}/questions` | Pertanyaan terbuka dengan pagination |
@@ -231,13 +233,12 @@ Endpoint berikut **belum tersedia**, dan harus ditambahkan dengan envelope respo
 
 Path di atas relatif ke `/api/v1`. Lifecycle approval definisi master dan pengeditannya mengikuti pola draft/revision/approve konfigurasi yang sudah ada. Daftar record tidak boleh membuka data master sensitif kepada semua viewer.
 
-Contoh payload klasifikasi master:
+Payload klasifikasi master yang aktif pada BE-02 (binding tersedia melalui endpoint terpisah BE-03):
 
 ```json
 {
   "revision_no": 1,
-  "dataset_kind": "MASTER",
-  "master_definition_id": "UUID_MASTER_YANG_DIPILIH"
+  "dataset_kind": "MASTER"
 }
 ```
 
@@ -260,9 +261,9 @@ UUID contoh adalah placeholder. Server harus menolak pertanyaan, master, kandida
 
 ## 10. Integrasi frontend Vue
 
-Frontend ditemukan di `C:/projek/vue-googlesheet-ai`. Saat pemeriksaan, file `src/lib/api.ts` sudah memiliki Axios, envelope, error handling, dan bearer token dalam memori. `src/views/HomeView.vue` masih halaman awal dengan chart contoh dan health check; belum ada wizard import atau login lengkap.
+Frontend berada di `C:/projek/vue-googlesheet-ai`. Login, workspace sumber (`/workspace`), dan wizard review konfigurasi (`/configurations/:id/review`) sudah tersedia dengan API nyata. Review Excel, jawaban pertanyaan konfigurasi, submit, approval, deploy, dan sync menggunakan endpoint backend. Form klasifikasi dapat dihubungkan ke API BE-02 yang kini tersedia; katalog master dan review record per batch masih menunggu API tahap berikutnya.
 
-Rancangan layar:
+Perluasan layar untuk alur master/import:
 
 1. **Sumber data:** masukkan URL, pertanyaan master/non-master, discovery, dan pilihan tab.
 2. **Klasifikasi:** konfirmasi jenis tiap tab. Untuk master, pencarian master lama tampil sebelum tombol membuat master baru.
@@ -278,7 +279,7 @@ Konfigurasi frontend tetap hanya menunjuk API. OpenAI key, JSON Service Account,
 
 ## 11. Urutan implementasi dan migrasi
 
-1. Tetapkan kebijakan penambahan master dan klasifikasi per tab/file dari dua pertanyaan terbuka di bagian 1.
+1. Terapkan keputusan BE-01: klasifikasi per tab dan usulan insert wajib disetujui, sesuai kontrak policy versi 1.0.
 2. Tambahkan registry master, binding sumber, klasifikasi, serta tabel import review/question/decision dan migration yang tenant-safe.
 3. Bangun API katalog, klasifikasi, review, dan keputusan dengan optimistic concurrency, audit, dan role yang sesuai.
 4. Ubah compiler agar master memakai target kanonis, serta buat FK terverifikasi untuk referensi. Uji grant role DDL dan role operasional.

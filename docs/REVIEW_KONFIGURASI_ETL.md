@@ -17,7 +17,7 @@ Hubungkan Sheet → klasifikasi master/non-master → profiling
 → deploy → sync data → pantau hasil
 ```
 
-Klasifikasi master/non-master dan registry master masih rancangan; lihat [Master data dan validasi import](MASTER_DATA_DAN_VALIDASI_IMPORT.md). Konfigurasi manual/AI, validate, approval, deploy, dan job polling untuk dataset mandiri sudah tersedia sebagian besar pada backend.
+BE-01 menetapkan klasifikasi per tab dan usulan kode master baru yang wajib disetujui. [BE-02](KLASIFIKASI_TAB_BE02.md) sudah menyediakan penyimpanan/API klasifikasi dan gate backend; registry/binding metadata tersedia pada [BE-03](REGISTRY_MASTER_BE03.md), storage tersedia pada [BE-04](STORAGE_MASTER_BE04.md), sedangkan runtime import master masih tahap lanjutan. Konfigurasi manual/AI, validate, approval, deploy, dan job polling untuk dataset mandiri tersedia. Form klasifikasi frontend belum ditambahkan; gunakan API/Swagger sementara.
 
 ## 2. Wizard yang disarankan
 
@@ -87,7 +87,7 @@ Catat field yang tidak didukung sebagai error/pekerjaan lanjutan. Jangan membuan
 
 **Deploy dan sync:** deploy membangun struktur/konfigurasi aktif; sync memuat data. Approval tidak boleh langsung dianggap data selesai dimuat. Kedua pekerjaan dipantau dengan job ID.
 
-Untuk rancangan lengkap, bukti review harus terikat snapshot hash, revision konfigurasi, serta versi master/aturan yang dirujuk. Data atau master yang berubah memerlukan revalidasi. Saat ini backend memiliki revision, fingerprint schema, artifact hash, dan pemeriksaan ulang sumber saat deploy, tetapi belum mempunyai review record per sel dan binding approval ke seluruh versi master/snapshot sebagaimana rancangan ini.
+Review konfigurasi saat ini terikat revision konfigurasi, snapshot hash, serta revision/jenis klasifikasi melalui `review_state`. Perubahan draft membatalkan submission; perubahan klasifikasi membuat bukti review tidak sesuai lagi. Deployment memeriksa ulang isi sumber. Rancangan review setiap import memperluas evidence ke versi master, alias, dan policy. Pertanyaan per sel, coverage AI per snapshot baru, serta binding ke versi master belum diimplementasikan.
 
 Tampilan akhir yang disarankan:
 

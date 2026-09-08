@@ -1,6 +1,9 @@
+from uuid import UUID
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -35,6 +38,51 @@ TYPE_MAP = {
     "timestamptz": lambda: DateTime(timezone=True),
     "uuid": lambda: Uuid(as_uuid=False),
 }
+
+
+def compile_master_table(definition, master_id, tenant_id, load_strategy="UPSERT"):
+    """Canonical identity belongs to the master, never to a source tab."""
+    if load_strategy != "UPSERT":
+        raise AppError("MASTER_LOAD_STRATEGY_INVALID", "Master hanya mendukung UPSERT.")
+    master_id, tenant_id = str(UUID(str(master_id))), str(UUID(str(tenant_id)))
+    return Table(
+        "master_" + UUID(master_id).hex,
+        MetaData(),
+        Column("_tenant_id", Uuid(as_uuid=False), nullable=False),
+        Column("_record_id", Uuid(as_uuid=False), nullable=False),
+        Column("_is_active", Boolean, nullable=False, server_default=text("true")),
+        Column("_revision_no", Integer, nullable=False, server_default=text("1")),
+        Column("_created_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+        Column("_updated_at", DateTime(timezone=True), nullable=False, server_default=text("now()")),
+        Column("_source_sheet_id", Uuid(as_uuid=False), nullable=False),
+        Column("_source_row", Integer, nullable=False),
+        Column("_source_snapshot_hash", String(64), nullable=False),
+        *(Column(f.name, TYPE_MAP[f.type](), nullable=f.nullable) for f in definition.fields),
+        UniqueConstraint("_tenant_id", "_record_id"),
+        UniqueConstraint("_tenant_id", *definition.business_key),
+        CheckConstraint(f"_tenant_id = '{tenant_id}'::uuid", name="master_tenant_scope"),
+        CheckConstraint("_revision_no > 0 AND _source_row > 0", name="master_positive_metadata"),
+        schema="trusted",
+    )
+
+
+def validate_master_evolution(previous, proposed):
+    """Only metadata edits and new nullable attributes are compatible in BE-04."""
+    old = {f.name: f for f in previous.fields}
+    new = {f.name: f for f in proposed.fields}
+    if (
+        previous.business_key != proposed.business_key
+        or any(
+            name not in new or (f.type, f.nullable) != (new[name].type, new[name].nullable)
+            for name, f in old.items()
+        )
+        or any(not f.nullable for name, f in new.items() if name not in old)
+    ):
+        raise AppError(
+            "MASTER_SCHEMA_MIGRATION_REQUIRED",
+            "Perubahan key, tipe, nullability, penghapusan field, atau field wajib baru memerlukan migrasi khusus.",
+            409,
+        )
 
 
 def physical_name(config, sheet_id):

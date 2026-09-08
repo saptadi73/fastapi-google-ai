@@ -11,12 +11,25 @@ from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import AIConfigurationRequest
-from app.schemas.source import SheetUpdate, SourceCreate
+from app.schemas.source import SheetClassificationUpdate, SheetUpdate, SourceCreate
+from app.services.classification_service import ClassificationService
 from app.services.job_service import enqueue
 from app.services.source_service import SourceService
 
 router = APIRouter(tags=["Sources"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
+
+
+@router.get("/source-sheets/{sheet_id}/classification")
+async def get_classification(sheet_id: UUID, session: Session, user: CurrentUser):
+    return success(await ClassificationService(session, user).get(sheet_id))
+
+
+@router.put("/source-sheets/{sheet_id}/classification", dependencies=edit)
+async def classify_sheet(
+    sheet_id: UUID, data: SheetClassificationUpdate, session: Session, user: CurrentUser
+):
+    return success(await ClassificationService(session, user).update(sheet_id, data))
 
 
 @router.post("/sources/google-sheets", status_code=202, dependencies=edit)
@@ -67,6 +80,7 @@ async def profile(source_id: UUID, session: Session, user: CurrentUser):
 
 @router.post("/sources/{source_id}/sync", status_code=202, dependencies=edit)
 async def sync(source_id: UUID, session: Session, user: CurrentUser):
+    await ClassificationService(session, user).require_source_ready(source_id)
     return success(await enqueue(session, user, "ETL", str(source_id)))
 
 

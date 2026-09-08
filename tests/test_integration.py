@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from app.main import app
 from app.models import Base
 from app.models.auth import Tenant, User
 from app.models.configuration import Artifact, Configuration
+from app.models.master import MasterDefinition
 from app.models.source import SourceSheet
 from app.services.google_sheets_service import GoogleSheetsService
 from app.workers.runner import run_pending
@@ -111,6 +113,15 @@ async def context(monkeypatch, tmp_path, sheet_values):
                     ).all()
                 )
                 quote = session.bind.dialect.identifier_preparer.quote
+                master_ids = (
+                    await session.scalars(
+                        select(MasterDefinition.id).where(MasterDefinition.tenant_id.in_(tenant_ids))
+                    )
+                ).all()
+                for master_id in master_ids:
+                    await session.execute(
+                        text(f"DROP TABLE IF EXISTS trusted.{quote('master_' + master_id.replace('-', ''))}")
+                    )
                 for sheet in sheets:
                     await session.execute(
                         text(f"DROP VIEW IF EXISTS semantic.{quote('v_' + sheet.id.replace('-', ''))}")
@@ -140,7 +151,7 @@ async def request(ctx, method, path, *, who="admin", expected=200, data=None):
     return response.json()
 
 
-async def onboard(ctx, config_data):
+async def onboard(ctx, config_data, *, classify=True):
     data = await request(
         ctx,
         "POST",
@@ -154,6 +165,13 @@ async def onboard(ctx, config_data):
     assert job["data"]["status"] == "SUCCEEDED", job
     sheets = await request(ctx, "GET", f"/sources/{source_id}/sheets")
     sheet_id = sheets["data"][0]["id"]
+    if classify:
+        await request(
+            ctx,
+            "PUT",
+            f"/source-sheets/{sheet_id}/classification",
+            data={"revision_no": 1, "dataset_kind": "NON_MASTER"},
+        )
     config = await request(
         ctx,
         "POST",
@@ -444,3 +462,154 @@ async def test_database_rejects_cross_tenant_foreign_key(context):
         with pytest.raises(IntegrityError):
             await session.flush()
         await session.rollback()
+
+
+async def test_classification_required_and_master_gate(context, config_data):
+    ctx = context
+    source_id, sheet_id, config = await onboard(ctx, config_data, classify=False)
+    path = f"/source-sheets/{sheet_id}/classification"
+    current = (await request(ctx, "GET", path))["data"]
+    assert current["status"] == "CLASSIFICATION_REQUIRED"
+    assert current["dataset_kind"] is None and current["confirmed_by"] is None
+    assert current["revision_no"] == 1 and current["execution_ready"] is False
+    await request(ctx, "GET", path, who="outsider", expected=404)
+    await request(ctx, "GET", path, who="viewer", expected=403)
+    body = {"revision_no": 1, "dataset_kind": "MASTER"}
+    await request(ctx, "PUT", path, who="approver", expected=403, data=body)
+    await request(ctx, "PUT", path, who="outsider", expected=404, data=body)
+    await request(ctx, "PUT", path, expected=422, data={**body, "master_definition_id": str(uuid4())})
+    # Profiling and draft dry-run remain available before classification.
+    validation = (await request(ctx, "POST", f"/configurations/{config['id']}/validate"))["data"]
+    assert validation["valid"] and not validation["ready_for_review"]
+    submission = {
+        "revision_no": 1,
+        "snapshot_hash": validation["snapshot_hash"],
+        "reviewed_columns": [c["target_column"] for c in config["configuration_json"]["columns"]],
+        "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+    }
+    for suffix, data, who in [
+        ("submit-review", submission, "admin"),
+        ("approve", {"revision_no": 1}, "approver"),
+    ]:
+        error = await request(
+            ctx, "POST", f"/configurations/{config['id']}/{suffix}", data=data, who=who, expected=409
+        )
+        assert error["errors"][0]["code"] == "CLASSIFICATION_REQUIRED"
+    error = await request(ctx, "POST", f"/sources/{source_id}/sync", expected=409)
+    assert error["errors"][0]["code"] == "CLASSIFICATION_REQUIRED"
+    current = (await request(ctx, "PUT", path, data=body))["data"]
+    assert current["status"] == "CONFIRMED" and current["revision_no"] == 2
+    assert current["confirmed_by"] and current["confirmed_at"]
+    assert current["blocking_reason"]["code"] == "MASTER_RUNTIME_PENDING"
+    error = await request(
+        ctx, "POST", f"/configurations/{config['id']}/submit-review", data=submission, expected=409
+    )
+    assert error["errors"][0]["code"] == "MASTER_RUNTIME_PENDING"
+    await request(ctx, "PUT", path, expected=409, data={"revision_no": 1, "dataset_kind": "NON_MASTER"})
+    same = (await request(ctx, "PUT", path, data={"revision_no": 2, "dataset_kind": "MASTER"}))["data"]
+    assert same == current  # No duplicate revision/audit when there is no change.
+    current = (await request(ctx, "PUT", path, data={"revision_no": 2, "dataset_kind": "NON_MASTER"}))["data"]
+    assert current["execution_ready"] and current["revision_no"] == 3
+    await activate(ctx, config)
+    await request(ctx, "PUT", path, data={"revision_no": 3, "dataset_kind": "MASTER"}, expected=409)
+    assert (await sync(ctx, source_id))["status"] == "SUCCEEDED"
+
+
+async def test_classification_changes_invalidate_submission_and_deployment(context, config_data):
+    ctx = context
+    source_id, sheet_id, config = await onboard(ctx, config_data)
+    path = f"/configurations/{config['id']}"
+    validation = (await request(ctx, "POST", path + "/validate"))["data"]
+    body = {
+        "revision_no": 1,
+        "snapshot_hash": validation["snapshot_hash"],
+        "reviewed_columns": [c["target_column"] for c in config["configuration_json"]["columns"]],
+        "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+    }
+    submitted = (await request(ctx, "POST", path + "/submit-review", data=body))["data"]
+    assert submitted["review_state"]["classification_revision"] == 2
+    classification_path = f"/source-sheets/{sheet_id}/classification"
+    for rev, kind in [(2, "MASTER"), (3, "NON_MASTER")]:
+        await request(ctx, "PUT", classification_path, data={"revision_no": rev, "dataset_kind": kind})
+    error = await request(
+        ctx, "POST", path + "/approve", who="approver", expected=409, data={"revision_no": 2}
+    )
+    assert error["errors"][0]["code"] == "CLASSIFICATION_REVIEW_STALE"
+    await request(ctx, "POST", path + "/submit-review", data={**body, "revision_no": 2})
+    await request(ctx, "POST", path + "/approve", who="approver", data={"revision_no": 3})
+    queued = (await request(ctx, "POST", path + "/deploy", who="approver", expected=202))["data"]
+    await request(ctx, "PUT", classification_path, data={"revision_no": 4, "dataset_kind": "MASTER"})
+    await run_pending(ctx.tenant_id)
+    failed = (await request(ctx, "GET", "/jobs/" + queued["job_id"]))["data"]
+    assert failed["status"] == "FAILED" and failed["error_code"] == "MASTER_RUNTIME_PENDING"
+    await request(ctx, "PUT", classification_path, data={"revision_no": 5, "dataset_kind": "NON_MASTER"})
+    error = await request(ctx, "POST", path + "/deploy", who="approver", expected=409)
+    assert error["errors"][0]["code"] == "CLASSIFICATION_REVIEW_STALE"
+
+
+async def test_mixed_tabs_and_worker_gate(context, config_data, monkeypatch):
+    ctx = context
+    source_id, first_id, config = await onboard(ctx, config_data)
+
+    async def metadata(self, spreadsheet_id):
+        return {
+            "sheets": [
+                {"properties": {"sheetId": 1, "title": "Sales"}},
+                {"properties": {"sheetId": 2, "title": "Products"}},
+            ]
+        }
+
+    monkeypatch.setattr(GoogleSheetsService, "metadata", metadata)
+    await request(ctx, "POST", f"/sources/{source_id}/discover", expected=202)
+    await run_pending(ctx.tenant_id)
+    sheets = (await request(ctx, "GET", f"/sources/{source_id}/sheets"))["data"]
+    first = next(s for s in sheets if s["id"] == first_id)
+    second = next(s for s in sheets if s["id"] != first_id)
+    assert first["dataset_kind"] == "NON_MASTER" and first["classification_revision"] == 2
+    assert second["dataset_kind"] is None
+    await request(
+        ctx,
+        "PUT",
+        f"/source-sheets/{second['id']}/classification",
+        data={"revision_no": 1, "dataset_kind": "MASTER"},
+    )
+    # Simulate a scheduler/job retry which does not enter through POST /sync.
+    from app.core.security import decode_token
+    from app.services.job_service import enqueue
+
+    async with SessionFactory() as session, session.begin():
+        user = await session.get(User, decode_token(ctx.tokens["admin"]["access_token"])["sub"])
+        queued = await enqueue(session, user, "ETL", source_id)
+    await run_pending(ctx.tenant_id)
+    failed = (await request(ctx, "GET", "/jobs/" + queued["job_id"]))["data"]
+    assert failed["status"] == "FAILED" and failed["error_code"] == "MASTER_RUNTIME_PENDING"
+    await request(ctx, "PATCH", f"/source-sheets/{second['id']}", data={"enabled": False})
+    await activate(ctx, config)
+    assert (await sync(ctx, source_id))["status"] == "SUCCEEDED"
+
+
+async def test_classification_optimistic_concurrency_and_database_constraints(context, config_data):
+    ctx = context
+    _, sheet_id, _ = await onboard(ctx, config_data, classify=False)
+    path = f"/api/v1/source-sheets/{sheet_id}/classification"
+    responses = await asyncio.gather(
+        *[
+            ctx.client.put(path, headers=ctx.headers["admin"], json={"revision_no": 1, "dataset_kind": kind})
+            for kind in ("MASTER", "NON_MASTER")
+        ]
+    )
+    assert sorted(r.status_code for r in responses) == [200, 409]
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.security import decode_token
+
+    outsider = decode_token(ctx.tokens["outsider"]["access_token"])["sub"]
+    for values in (
+        {"classification_confirmed_by": outsider},
+        {"dataset_kind": None},
+        {"classification_revision": 0},
+    ):
+        async with SessionFactory() as session:
+            with pytest.raises(IntegrityError):
+                await session.execute(update(SourceSheet).where(SourceSheet.id == sheet_id).values(**values))
+            await session.rollback()
