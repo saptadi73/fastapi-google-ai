@@ -8,6 +8,7 @@ from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.base import now
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
+from app.models.configuration import Configuration
 from app.models.source import SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.repositories.source_repository import SourceRepository
@@ -508,8 +509,47 @@ class MasterService:
             MasterColumnBinding.status == "APPROVED"
         ))).all()
         masters = {row.master_definition_id for row in rows}
+        graph = {master_id: set() for master_id in masters}
         # Bindings are currently column-level edges; expose a stable plan for the
         # FK compiler while keeping DDL disabled until target relation metadata exists.
+        targets = {}
+        for row in rows:
+            sheet = await self.repo.get(SourceSheet, row.source_sheet_id)
+            source_binding = await self.session.scalar(self.repo.query(MasterSourceBinding).where(
+                MasterSourceBinding.source_sheet_id == str(sheet.id),
+                MasterSourceBinding.status == "APPROVED",
+            ))
+            if source_binding:
+                masters.add(source_binding.master_definition_id)
+                graph.setdefault(source_binding.master_definition_id, set()).add(row.master_definition_id)
+            config = None
+            if sheet.active_configuration_id:
+                config = await self.repo.get(Configuration, sheet.active_configuration_id)
+            target_column = row.source_column
+            if config:
+                for column in config.configuration_json.get("columns", []):
+                    if column.get("source_column") == row.source_column:
+                        target_column = column["target_column"]
+                        break
+            targets[str(row.id)] = {
+                "target_table": f"trusted.{config.configuration_json['target_table']}_{str(sheet.id).replace('-', '')}" if config else None,
+                "target_column": target_column,
+            }
+        visiting, visited = set(), set()
+
+        def cycle(node):
+            if node in visiting:
+                return True
+            if node in visited:
+                return False
+            visiting.add(node)
+            if any(cycle(child) for child in graph.get(node, ())):
+                return True
+            visiting.remove(node)
+            visited.add(node)
+            return False
+
+        has_cycle = any(cycle(node) for node in graph)
         return {
             "nodes": sorted(masters),
             "edges": [
@@ -519,10 +559,54 @@ class MasterService:
                     "master_field": row.master_field,
                     "source_column": row.source_column,
                     "master_version": row.master_version,
+                    **targets[str(row.id)],
                 }
                 for row in rows
             ],
-            "has_cycle": False,
+            "has_cycle": has_cycle,
             "execution_ready": False,
             "blocking_reason": "FK_TARGET_RELATION_METADATA_REQUIRED",
         }
+
+    async def validate_reference_orphans(self):
+        self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
+        rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
+            MasterColumnBinding.status == "APPROVED"
+        ))).all()
+        results = []
+        for binding in rows:
+            sheet = await self.repo.get(SourceSheet, binding.source_sheet_id)
+            config = await self.repo.get(Configuration, sheet.active_configuration_id) if sheet.active_configuration_id else None
+            master = await self.repo.get(MasterDefinition, binding.master_definition_id)
+            if not config or master.status != "APPROVED":
+                results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "TARGET_OR_MASTER_NOT_READY"})
+                continue
+            definition = MasterSchema.model_validate(master.approved_definition_json)
+            if len(definition.business_key) != 1:
+                results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "COMPOSITE_KEY_REQUIRES_EXPLICIT_MAPPING"})
+                continue
+            from app.services.schema_compiler_service import compile_master_table, compile_table
+
+            target = compile_table(ETLConfiguration.model_validate(config.configuration_json), sheet.id)
+            master_table = compile_master_table(definition, master.id, self.user.tenant_id)
+            target_column = next((c["target_column"] for c in config.configuration_json["columns"] if c["source_column"] == binding.source_column), None)
+            if not target_column or target_column not in target.c:
+                results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "TARGET_COLUMN_NOT_FOUND"})
+                continue
+            target_type = target.c[target_column].type.__class__.__name__.lower()
+            master_type = master_table.c[definition.business_key[0]].type.__class__.__name__.lower()
+            if target_type != master_type:
+                results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "REFERENCE_TYPE_MISMATCH", "target_type": target_type, "master_type": master_type})
+                continue
+            connection = await self.session.connection()
+            await connection.run_sync(lambda sync: check_storage(sync, target))
+            await connection.run_sync(lambda sync: check_storage(sync, master_table))
+            values = (await self.session.execute(select(target.c[target_column]).where(
+                target.c._tenant_id == self.user.tenant_id, target.c[target_column].is_not(None)
+            ).distinct())).scalars().all()
+            known = set((await self.session.execute(select(master_table.c[definition.business_key[0]]).where(
+                master_table.c._tenant_id == self.user.tenant_id, master_table.c._is_active.is_(True)
+            ))).scalars().all())
+            orphan_values = [value for value in values if value not in known]
+            results.append({"binding_id": binding.id, "status": "ORPHANS_FOUND" if orphan_values else "VALID", "orphan_count": len(orphan_values), "orphan_values": [str(value) for value in orphan_values[:100]]})
+        return {"items": results, "execution_ready": bool(results) and all(item["status"] == "VALID" for item in results)}
