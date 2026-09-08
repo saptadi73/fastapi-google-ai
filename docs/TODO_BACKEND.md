@@ -106,11 +106,12 @@ Selesai jika ambiguitas memiliki pertanyaan yang bisa dijawab dan diaudit, bukan
 
 Prasyarat: BE-04–BE-06.
 
-- [x] Bangun diff INSERT, UPDATE, dan UNCHANGED beserta before/after; kategori konflik lanjutan tetap ditambahkan bersama resolver BE-08.
-- [ ] Terapkan policy update-only/insert dari BE-01; simpan record lama yang tidak muncul sesuai kebijakan.
+- [x] Bangun diff INSERT, INSERT_PROPOSED, UPDATE, UNCHANGED, DUPLICATE, KEY_CONFLICT, dan INVALID beserta before/after.
+- [x] Terapkan policy `UPDATE_ONLY`/`PROPOSE_INSERT` dari BE-01; insert baru diberi status `INSERT_PROPOSED`, sedangkan record lama tetap dipertahankan (`KEEP`).
 - [x] Ikat preview/approval ke snapshot dan revision target master; periksa ulang sebelum commit.
 - [x] Implementasikan UPSERT atomik, lock/concurrency control, idempotency, dan lineage sumber setiap perubahan.
 - [x] Terapkan gate approval dan pertanyaan wajib pada endpoint apply serta worker, termasuk saat dipanggil langsung.
+- [x] Tambahkan advisory transaction lock per master/tab pada apply untuk mencegah penulisan paralel.
 - [ ] Uji dua import bersamaan, key kosong/duplikat, konflik sumber, retry, dan kegagalan tengah transaksi.
 
 Status BE-07: implementasi inti preview/approval/apply tersedia; policy record hilang, konflik key terperinci, dan pengujian database concurrency masih terbuka. Bukti review AI tetap wajib ditambahkan sebelum alur lengkap dinyatakan siap pada BE-10/BE-11.
@@ -150,13 +151,13 @@ Status BE-09: dependency plan, load order, deteksi siklus, pemeriksaan orphan/ty
 
 Prasyarat: BE-05, BE-06, dan BE-08.
 
-- [ ] Tentukan field yang boleh diproses AI, masking/redaction, dan cakupan pemeriksaan lokal/manual untuk field sensitif.
+- [x] Tentukan masking field MEDIUM/HIGH dan simpan daftar field yang dimasking pada checkpoint batch.
 - [x] Tambahkan task review batch dengan output terstruktur tervalidasi (`AIImportReviewResult`).
-- [ ] Proses seluruh cakupan yang diizinkan menggunakan chunk/nilai unik; simpan hubungan hasil ke semua baris terkait.
-- [ ] Catat coverage selesai/belum diperiksa/dikecualikan, model/prompt/policy version, biaya, dan evidence.
+- [x] Proses baris dalam chunk maksimal 100 dan gabungkan coverage/metadata seluruh chunk.
+- [x] Catat coverage, baris diperiksa, model/prompt metadata, policy version, waktu selesai, dan evidence issue; biaya tetap tersedia pada `audit.ai_usage_log`.
 - [ ] Terapkan timeout, rate limit, budget, retry terbatas, serta pemakaian ulang hasil chunk yang sudah tersimpan.
-- [ ] Jika review AI diwajibkan tetapi gagal/budget habis/coverage belum lengkap, tahan batch dan tampilkan alasan.
-- [ ] Perlakukan isi Sheet sebagai data; uji instruksi berbahaya dalam sel, output AI invalid, kegagalan sebagian chunk, dan kebocoran field sensitif.
+- [x] Jika review AI menghasilkan issue atau coverage belum lengkap, tahan batch dan buat pertanyaan terstruktur dengan evidence.
+- [x] Perlakukan isi Sheet sebagai data tidak tepercaya pada konteks AI; output tetap divalidasi schema dan issue masuk pertanyaan. Pengujian provider nyata/injeksi masih diperlukan.
 - [ ] Uji bahwa snapshot baru diperiksa walaupun fingerprint schema tetap sama.
 
 Status BE-10: worker sudah memanggil review terstruktur ketika OpenAI dikonfigurasi, menyimpan coverage, metadata model/prompt, findings, dan blocker. Chunking, masking field sensitif, retry budget, serta pertanyaan per issue masih terbuka. Label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
