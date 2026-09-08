@@ -1,5 +1,6 @@
 from difflib import SequenceMatcher
 from types import SimpleNamespace
+from uuid import UUID
 
 from sqlalchemy import Text, cast, or_, text
 
@@ -459,6 +460,26 @@ class MasterService:
         ).order_by(MasterColumnBinding.source_column))).all()
         return [record(row) for row in rows]
 
+    async def binding_recommendations(self, sheet_id):
+        sheet = await self.repo.get(SourceSheet, sheet_id)
+        profile = await SourceRepository(self.session, self.user.tenant_id).latest_profile(sheet.id)
+        headers = profile.profile_json.get("columns", []) if profile else []
+        masters = (await self.session.scalars(self.repo.query(MasterDefinition).where(
+            MasterDefinition.status == "APPROVED", MasterDefinition.is_active.is_(True)
+        ))).all()
+        recommendations = []
+        for header in headers:
+            source = str(header.get("name", header) if isinstance(header, dict) else header)
+            candidates = []
+            for master in masters:
+                definition = MasterSchema.model_validate(master.approved_definition_json)
+                for field in definition.fields:
+                    score = SequenceMatcher(None, source.casefold().replace(" ", "_"), field.name.casefold()).ratio()
+                    if score >= 0.55:
+                        candidates.append({"master_definition_id": master.id, "master_field": field.name, "score": round(score, 3)})
+            recommendations.append({"source_column": source, "candidates": sorted(candidates, key=lambda item: -item["score"])[:10]})
+        return {"items": recommendations, "requires_confirmation": True}
+
     async def save_column_binding(self, sheet_id, data):
         self.require_role(EDIT_ROLES)
         await self.repo.get(SourceSheet, sheet_id)
@@ -468,13 +489,20 @@ class MasterService:
         definition = MasterSchema.model_validate(master.approved_definition_json)
         if data.master_field not in {field.name for field in definition.fields}:
             raise AppError("MASTER_FIELD_INVALID", "Field tujuan tidak tersedia pada master.", 422)
+        try:
+            for alias, record_id in data.aliases.items():
+                if not alias.strip() or UUID(str(record_id)) is None:
+                    raise ValueError
+        except (TypeError, ValueError):
+            raise AppError("MASTER_ALIAS_INVALID", "Alias harus memetakan ke UUID record master yang valid.", 422) from None
         binding = await self.session.scalar(self.repo.query(MasterColumnBinding).where(
             MasterColumnBinding.source_sheet_id == str(sheet_id),
             MasterColumnBinding.source_column == data.source_column,
         ).with_for_update())
         if data.revision_no != (binding.revision_no if binding else 0):
             raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Revisi binding berubah; muat ulang.", 409)
-        values = data.model_dump(exclude={"revision_no"})
+        values = data.model_dump(exclude={"revision_no", "aliases"})
+        values["aliases_json"] = data.aliases
         values["created_by"] = self.user.id
         if binding:
             for key, value in values.items(): setattr(binding, key, value)
@@ -579,6 +607,10 @@ class MasterService:
                 for row in rows
             ],
             "has_cycle": has_cycle,
+            "correction_actions": ([
+                "Hapus atau ubah salah satu binding yang membentuk siklus.",
+                "Deploy FK hanya setelah dependency plan tidak memiliki siklus.",
+            ] if has_cycle else []),
             "execution_ready": False,
             "blocking_reason": "FK_TARGET_RELATION_METADATA_REQUIRED",
         }
@@ -628,6 +660,9 @@ class MasterService:
 
     async def deploy_foreign_keys(self):
         self.require_role(REVIEW_ROLES)
+        plan = await self.dependency_plan()
+        if plan["has_cycle"]:
+            raise AppError("REFERENCE_DEPENDENCY_CYCLE", "Siklus dependency harus diperbaiki sebelum deployment FK.", 409)
         validation = await self.validate_reference_orphans()
         if not validation["execution_ready"]:
             raise AppError("REFERENCE_VALIDATION_REQUIRED", "Selesaikan orphan/type validation sebelum memasang FK.", 409)
@@ -645,6 +680,12 @@ class MasterService:
             target_column = next(c["target_column"] for c in config.configuration_json["columns"] if c["source_column"] == binding.source_column)
             constraint = f"fk_{target_name[:35]}_{target_column[:20]}"
             quote = connection.dialect.identifier_preparer.quote
+            privileges = await connection.execute(text(
+                "SELECT has_table_privilege(current_user, :target, 'REFERENCES') "
+                "AND has_table_privilege(current_user, :master, 'REFERENCES')"
+            ), {"target": f"trusted.{target_name}", "master": f"trusted.{master_table}"})
+            if not privileges.scalar():
+                raise AppError("DDL_REFERENCES_REQUIRED", "Role DDL memerlukan privilege REFERENCES pada target dan master.", 403)
             exists = await connection.scalar(text(
                 "SELECT 1 FROM pg_constraint WHERE conname = :name"
             ), {"name": constraint})

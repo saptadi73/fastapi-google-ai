@@ -63,6 +63,7 @@ class MasterColumnBinding(TenantEntity, Base):
     master_version: Mapped[int] = mapped_column(Integer)
     required: Mapped[bool] = mapped_column(Boolean, default=False)
     normalization: Mapped[str] = mapped_column(String(40), default="TRIM_CASEFOLD")
+    aliases_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     cardinality: Mapped[str] = mapped_column(String(20), default="MANY_TO_ONE")
     revision_no: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")

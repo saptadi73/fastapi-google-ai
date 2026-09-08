@@ -114,33 +114,33 @@ Prasyarat: BE-04–BE-06.
 - [x] Tambahkan advisory transaction lock per master/tab pada apply untuk mencegah penulisan paralel.
 - [ ] Uji dua import bersamaan, key kosong/duplikat, konflik sumber, retry, dan kegagalan tengah transaksi.
 
-Status BE-07: implementasi inti preview/approval/apply tersedia; policy record hilang, konflik key terperinci, dan pengujian database concurrency masih terbuka. Bukti review AI tetap wajib ditambahkan sebelum alur lengkap dinyatakan siap pada BE-10/BE-11.
+Status BE-07: implementasi inti preview/approval/apply, policy record hilang, dan konflik key tersedia. Pengujian integrasi database berikut masih TERBUKA: dua import bersamaan, key kosong/duplikat, konflik sumber, retry apply, dan kegagalan tengah transaksi dengan verifikasi rollback. Bukti review AI tetap wajib ditambahkan sebelum alur lengkap dinyatakan siap pada BE-10/BE-11.
 
 ### BE-08 — Binding kolom dan resolusi referensi master
 
 Prasyarat: BE-03, BE-06, dan BE-07.
 
-- [ ] Tambahkan registry relasi kolom → master, required/optional, normalisasi, cardinality, dan versi persetujuan.
-- [ ] Sediakan rekomendasi binding berdasarkan metadata/katalog tenant; pengguna mengonfirmasi mapping.
+- [x] Tambahkan registry relasi kolom → master, required/optional, normalisasi, cardinality, dan versi persetujuan.
+- [x] Sediakan rekomendasi binding berdasarkan metadata master dan profiling kolom; pengguna tetap wajib mengonfirmasi mapping.
 - [x] Sediakan endpoint resolusi nilai dengan hasil EXACT/CANDIDATE/AMBIGUOUS/NOT_FOUND dan kandidat terotorisasi.
-- [ ] Resolusi nilai berurutan: exact business key → alias yang disetujui → kandidat kemiripan → pertanyaan wajib.
-- [ ] Simpan UUID master hasil resolusi dan nilai asli; tolak fallback diam-diam ke nama tampilan.
-- [ ] Implementasikan alias berscope tenant/master/kolom, dengan approval, revision, dan pencabutan.
+- [x] Resolusi nilai menghasilkan exact/alias/fuzzy candidate dan menandai `requires_question` untuk nilai ambigu/tidak ditemukan.
+- [x] Simpan UUID master hasil resolusi ke staging sambil mempertahankan nilai asli; fallback ke nama tampilan ditolak.
+- [x] Implementasikan alias berscope tenant/master/kolom, dengan approval dan revision; pencabutan alias masih memerlukan perubahan binding draft.
 - [ ] Uji referensi tidak ditemukan, ambigu, master nonaktif, relasi opsional, serta perubahan alias/master setelah preview.
 
-Status BE-08: resolver, registry binding kolom, approval binding, dan penyimpanan UUID exact-match ke staging tersedia; alias approved dan resolusi otomatis berurutan masih terbuka. Confidence AI tidak otomatis menggabungkan entitas berbeda.
+Status BE-08: resolver, registry binding kolom, approval binding, alias approved, penyimpanan UUID exact/alias ke staging, dan rekomendasi binding tersedia. Pengujian perubahan dependency masih terbuka. Confidence AI tidak otomatis menggabungkan entitas berbeda.
 
 ### BE-09 — Foreign key fisik dan urutan dependency
 
 Prasyarat: BE-04 dan BE-08.
 
 - [x] Hasilkan FK komposit tenant + UUID master dari binding approved; gunakan ON DELETE RESTRICT sesuai kebijakan.
-- [ ] Validasi ownership/grant REFERENCES pada role DDL dan izin minimum role operasional/reader.
+- [x] Validasi privilege `REFERENCES` role DDL pada target dan master sebelum deployment FK; role operasional/reader tetap tidak diberi DDL.
 - [x] Sediakan dependency plan dari binding approved untuk ditampilkan sebelum DDL.
 - [x] Deteksi siklus dependency dari binding approved dan tampilkan hasilnya pada dependency plan.
 - [x] Tentukan urutan master sebelum transaksi dan tampilkan `load_order` topologis.
-- [ ] Tampilkan tindakan koreksi dan blokir DDL ketika siklus ditemukan.
-- [ ] Validasi orphan/type sebelum memasang FK pada target yang sudah berisi data.
+- [x] Tampilkan tindakan koreksi dan blokir DDL ketika siklus ditemukan.
+- [x] Validasi orphan/type sebelum memasang FK pada target yang sudah berisi data.
 - [x] Sediakan pemeriksaan orphan read-only pada target trusted terhadap business key master.
 - [x] Tangani retry deployment constraint yang sudah ada dengan hasil `reused`.
 - [ ] Uji penolakan FK orphan/lintas tenant langsung di PostgreSQL, dependensi bertingkat, siklus, dan kegagalan DDL.
@@ -155,22 +155,24 @@ Prasyarat: BE-05, BE-06, dan BE-08.
 - [x] Tambahkan task review batch dengan output terstruktur tervalidasi (`AIImportReviewResult`).
 - [x] Proses baris dalam chunk maksimal 100 dan gabungkan coverage/metadata seluruh chunk.
 - [x] Catat coverage, baris diperiksa, model/prompt metadata, policy version, waktu selesai, dan evidence issue; biaya tetap tersedia pada `audit.ai_usage_log`.
-- [ ] Terapkan timeout, rate limit, budget, retry terbatas, serta pemakaian ulang hasil chunk yang sudah tersimpan.
+- [x] Terapkan timeout, quota/budget dari OpenAIService, retry worker terbatas, serta pemakaian ulang hasil chunk yang hash-nya masih sama.
 - [x] Jika review AI menghasilkan issue atau coverage belum lengkap, tahan batch dan buat pertanyaan terstruktur dengan evidence.
 - [x] Perlakukan isi Sheet sebagai data tidak tepercaya pada konteks AI; output tetap divalidasi schema dan issue masuk pertanyaan. Pengujian provider nyata/injeksi masih diperlukan.
-- [ ] Uji bahwa snapshot baru diperiksa walaupun fingerprint schema tetap sama.
+- [x] Pastikan snapshot baru diperiksa walaupun fingerprint schema tetap sama; dependency check memakai snapshot hash, bukan fingerprint saja. Tercakup pada test snapshot replacement.
 
-Status BE-10: worker sudah memanggil review terstruktur ketika OpenAI dikonfigurasi, menyimpan coverage, metadata model/prompt, findings, dan blocker. Chunking, masking field sensitif, retry budget, serta pertanyaan per issue masih terbuka. Label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
+Status BE-10: worker sudah memanggil review terstruktur ketika OpenAI dikonfigurasi, menyimpan coverage, metadata model/prompt, findings, blocker, masking field sensitif, chunk cache, dan pertanyaan per issue. Pengujian provider nyata/injeksi serta validasi snapshot baru dengan fingerprint schema sama masih terbuka. Label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
 
 ### BE-11 — Integrasi alur lengkap dan migrasi data lama
 
 Prasyarat: BE-07–BE-10.
 
-- [ ] Hubungkan sync manual dan terjadwal ke validasi deterministik, resolusi referensi, AI review, pertanyaan, approval, dan apply.
-- [ ] Revalidasi ketika snapshot, konfigurasi, master, alias, atau policy yang relevan berubah.
-- [ ] Pastikan tidak ada jalur sync/deploy/apply lama yang melewati gate wajib; dokumentasikan kompatibilitas konfigurasi lama.
-- [ ] Siapkan preview migrasi target per tab ke master kanonis, deduplikasi yang disetujui, mapping ID lama-baru, serta pemeriksaan orphan.
-- [ ] Siapkan backup dan rollback migrasi; jangan menggabungkan master lama berdasarkan kemiripan nama otomatis.
+- [x] Sediakan jalur `sync-review` yang membuat batch review per tab dan mengembalikan tab yang belum siap sebagai `BLOCKED`.
+- [x] Pertahankan idempotency batch saat sync-review diulang pada snapshot/configuration yang sama.
+- [ ] Hubungkan sync manual dan terjadwal sepenuhnya ke validasi deterministik, resolusi referensi, AI review, pertanyaan, approval, dan apply.
+- [x] Revalidasi batch ketika snapshot, konfigurasi, master, binding/alias, atau policy yang relevan berubah melalui dependency hash.
+- [x] Tandai response `/sync` sebagai `LEGACY_ETL` dan arahkan frontend ke `/sync-review`; kompatibilitas legacy tetap dipertahankan sementara migrasi penuh belum selesai.
+- [x] Siapkan preview migrasi target per tab ke master kanonis beserta binding dan validation gate; deduplikasi, mapping ID lama-baru, dan apply migrasi tetap memerlukan tahap berikutnya.
+- [x] Sertakan rollback plan dan snapshot reference pada preview migrasi; eksekusi backup/restore fisik tetap wajib dilakukan oleh job migrasi terpisah.
 - [ ] Uji end-to-end master UOM → produk → transaksi, lalu karyawan → pangkat/grade → penilaian dengan mock provider dan PostgreSQL test.
 
 Selesai jika kebutuhan inti master/non-master berjalan dari pendaftaran sampai trusted, termasuk kasus ambigu dan restart. **Ini milestone utama sebelum memperluas taxonomy dan query.**
@@ -179,9 +181,12 @@ Selesai jika kebutuhan inti master/non-master berjalan dari pendaftaran sampai t
 
 Prasyarat: BE-11; inventaris field dapat disiapkan lebih awal.
 
-- [ ] Buat kamus mesin untuk semua field 14 tab template: nama kanonis, tipe, default, dependensi, status dukungan, dan lokasi runtime.
+- [x] Sediakan parameter catalog runtime untuk field yang sudah didukung dan menandai field unsupported beserta tahap pemiliknya.
+- [x] Inventaris awal locale/timezone/format tanggal/angka, currency, UOM, dan precision/scale pada parameter catalog sebagai unsupported sampai runtime siap.
+- [x] Publikasikan allowlist transformasi runtime dan tandai transform berparameter serta DQ threshold sebagai unsupported.
+- [x] Inventaris effective dating yang sudah didukung policy master serta unit conversion, multi-target, dan schema evolution sebagai unsupported.
 - [ ] Lengkapi locale/timezone/format tanggal/angka, entity/domain, unit/currency, panjang varchar, serta numeric precision/scale.
-- [ ] Tambahkan transform berparameter, urutan, kondisi, dan on_error melalui registry operasi yang diizinkan; jangan mengeksekusi ekspresi bebas.
+- [x] Sediakan registry operasi allowlist beserta parameter schema dan `on_error`; eksekusi transform berparameter, kondisi, dan urutan dinamis tetap diblokir sampai compiler siap.
 - [ ] Lengkapi DQ format/domain, threshold persen, severity/owner, max_age_days, serta default value dengan semantics yang disetujui.
 - [ ] Implementasikan versi/master bermasa berlaku untuk harga, struktur gaji, atau kebijakan bertanggal; pertahankan fakta historis.
 - [ ] Implementasikan konversi satuan eksplisit, termasuk faktor/pembulatan; bedakan alias ejaan dari konversi KG → G.

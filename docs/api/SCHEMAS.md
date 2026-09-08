@@ -124,6 +124,22 @@ Body: —.
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/sources/{source_id}/sync-review
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/sources/{source_id}/master-migration-preview
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/sources/{source_id}/ai-configurations
 
 Body: [AIConfigurationRequest](#aiconfigurationrequest).
@@ -147,6 +163,18 @@ Body: —.
 | Parameter | Lokasi | Wajib | Tipe / batas |
 |---|---|---|---|
 | `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/master-definitions/dependency-plan
+
+Body: —.
+
+### GET /api/v1/master-definitions/reference-orphans
+
+Body: —.
+
+### POST /api/v1/master-definitions/deploy-foreign-keys
+
+Body: —.
 
 ### GET /api/v1/master-definitions/{master_id}/storage-plan
 
@@ -279,6 +307,46 @@ Body: [MasterRevisionRequest](#masterrevisionrequest).
 |---|---|---|---|
 | `sheet_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/source-sheets/{sheet_id}/column-bindings
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/source-sheets/{sheet_id}/column-bindings
+
+Body: [MasterColumnBindingCreate](#mastercolumnbindingcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/source-sheets/{sheet_id}/column-bindings/recommendations
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/column-bindings/{binding_id}/approve
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `binding_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/column-bindings/{binding_id}/reject
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `binding_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/import-reviews
 
 Body: [ImportReviewCreate](#importreviewcreate).
@@ -366,6 +434,38 @@ Body: [ImportReviewAction](#importreviewaction).
 |---|---|---|---|
 | `review_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/import-reviews/{review_id}/preview
+
+Body: [ImportReviewPreviewRequest](#importreviewpreviewrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/import-reviews/{review_id}/approve
+
+Body: [ImportReviewApproveRequest](#importreviewapproverequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/import-reviews/{review_id}/apply
+
+Body: [ImportReviewApplyRequest](#importreviewapplyrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/import-reviews/{review_id}/resolve-reference
+
+Body: [ImportReferenceResolveRequest](#importreferenceresolverequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/sources/{source_id}/profiling-runs
 
 Body: —.
@@ -382,6 +482,10 @@ Body: —.
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 | `run_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/configurations/parameter-catalog
+
+Body: —.
 
 ### GET /api/v1/configurations/{config_id}/review
 
@@ -1241,6 +1345,29 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### ImportReferenceResolveRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `master_definition_id` | Ya | `string (uuid)` | — | — |
+| `value` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
+| `source_column` | Tidak | `string / null` | — | — |
+| `staging_row_id` | Tidak | `string (uuid) / null` | — | — |
+| `target_column` | Tidak | `string / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 5,
+  "master_definition_id": "55555555-5555-4555-8555-555555555555",
+  "value": "SKU-001",
+  "staging_row_id": "66666666-6666-4666-8666-666666666666",
+  "target_column": "product_id"
+}
+```
+
 ### ImportReviewAction
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -1257,6 +1384,38 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### ImportReviewApplyRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `preview_token` | Ya | `string` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 5,
+  "preview_token": "TOKEN_DARI_IMPORT_REVIEW_PREVIEW"
+}
+```
+
+### ImportReviewApproveRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `comment` | Tidak | `string` | "" | {"maxLength":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 4,
+  "comment": "Preview diverifikasi oleh reviewer"
+}
+```
+
 ### ImportReviewCreate
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -1270,6 +1429,20 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 {
   "source_sheet_id": "33333333-3333-4333-8333-333333333333",
   "configuration_id": "44444444-4444-4444-8444-444444444444"
+}
+```
+
+### ImportReviewPreviewRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 3
 }
 ```
 
@@ -1350,6 +1523,35 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
       ]
     }
   ]
+}
+```
+
+### MasterColumnBindingCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":0.0} |
+| `source_column` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `master_definition_id` | Ya | `string (uuid)` | — | — |
+| `master_field` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `master_version` | Ya | `integer` | — | {"minimum":1.0} |
+| `required` | Tidak | `boolean` | false | — |
+| `normalization` | Tidak | `string` | "TRIM_CASEFOLD" | {"pattern":"^[A-Z_]{3,40}$"} |
+| `cardinality` | Tidak | `string` | "MANY_TO_ONE" | {"pattern":"^(MANY_TO_ONE&#124;ONE_TO_ONE)$"} |
+| `aliases` | Tidak | `map<string, string>` | {} | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 0,
+  "source_column": "Kode Produk",
+  "master_definition_id": "55555555-5555-4555-8555-555555555555",
+  "master_field": "product_code",
+  "master_version": 1,
+  "required": true,
+  "normalization": "TRIM_CASEFOLD",
+  "cardinality": "MANY_TO_ONE"
 }
 ```
 

@@ -160,6 +160,11 @@ async def get_column_bindings(sheet_id: UUID, session: Session, user: CurrentUse
     return success(await MasterService(session, user).column_bindings(sheet_id))
 
 
+@router.get("/source-sheets/{sheet_id}/column-bindings/recommendations")
+async def recommend_column_bindings(sheet_id: UUID, session: Session, user: CurrentUser):
+    return success(await MasterService(session, user).binding_recommendations(sheet_id))
+
+
 @router.put("/source-sheets/{sheet_id}/column-bindings", dependencies=edit)
 async def put_column_binding(
     sheet_id: UUID, data: MasterColumnBindingCreate, session: Session, user: CurrentUser

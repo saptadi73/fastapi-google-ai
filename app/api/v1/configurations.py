@@ -18,7 +18,7 @@ from app.schemas.configuration import (
     WorkbookApplyRequest,
     WorkbookPreviewRequest,
 )
-from app.services.configuration_review_service import ConfigurationReviewService
+from app.services.configuration_review_service import CAPABILITIES, ConfigurationReviewService
 from app.services.configuration_service import ConfigurationService
 
 router = APIRouter(
@@ -28,6 +28,44 @@ router = APIRouter(
 )
 edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
+
+
+@router.get("/parameter-catalog")
+async def parameter_catalog(session: Session, user: CurrentUser):
+    return success({
+        "schema_version": "1.0",
+        "parameters": [
+            {"name": "dataset_business_name", "type": "string", "default": "", "supported": True},
+            {"name": "target_table", "type": "identifier", "default": "", "supported": True},
+            {"name": "load_strategy", "type": "enum", "default": "UPSERT", "supported": True},
+            {"name": "columns", "type": "array", "default": [], "supported": True},
+            {"name": "data_quality_rules", "type": "array", "default": [], "supported": True},
+            {"name": "locale", "type": "string", "default": "id-ID", "supported": False, "reason": "BE-12 runtime locale"},
+            {"name": "timezone", "type": "string", "default": "Asia/Jakarta", "supported": False, "reason": "BE-12 runtime timezone"},
+            {"name": "date_format", "type": "string", "default": "ISO-8601", "supported": False, "reason": "BE-12 parameterized transforms"},
+            {"name": "number_format", "type": "string", "default": "decimal-dot", "supported": False, "reason": "BE-12 parameterized transforms"},
+            {"name": "currency", "type": "string", "default": "IDR", "supported": False, "reason": "BE-12 domain dictionary"},
+            {"name": "uom", "type": "string", "default": "", "supported": False, "reason": "BE-12 unit conversion"},
+            {"name": "numeric_precision_scale", "type": "object", "default": {}, "supported": False, "reason": "BE-12 schema compiler"},
+            {"name": "transformation_codes", "type": "enum[]", "default": [], "supported": True, "allowed": ["trim", "normalize_whitespace", "parse_date_id", "parse_decimal_id", "uppercase", "lowercase", "null_if_empty"]},
+            {"name": "transform_parameters", "type": "object[]", "default": [], "supported": False, "reason": "BE-12 parameterized transform registry"},
+            {"name": "dq_threshold_percent", "type": "number", "default": None, "supported": False, "reason": "BE-12 DQ threshold semantics"},
+            {"name": "effective_dating", "type": "object", "default": None, "supported": True, "scope": "MASTER policy"},
+            {"name": "unit_conversion", "type": "object[]", "default": [], "supported": False, "reason": "BE-12 conversion registry"},
+            {"name": "multi_target", "type": "object[]", "default": [], "supported": False, "reason": "BE-12 split grain compiler"},
+            {"name": "schema_evolution", "type": "object", "default": {}, "supported": False, "reason": "BE-12 migration compiler"},
+            {"name": "taxonomy_mapping", "type": "array", "default": [], "supported": False, "reason": "BE-13"},
+            {"name": "join_relationships", "type": "array", "default": [], "supported": False, "reason": "BE-14"},
+        ],
+        "operations": [
+            {"code": "trim", "parameters": {}, "on_error": "REJECT_ROW", "supported": True},
+            {"code": "normalize_whitespace", "parameters": {}, "on_error": "REJECT_ROW", "supported": True},
+            {"code": "parse_date_id", "parameters": {}, "on_error": "REJECT_ROW", "supported": True},
+            {"code": "parse_decimal_id", "parameters": {}, "on_error": "REJECT_ROW", "supported": True},
+            {"code": "convert_unit", "parameters": {"from": "string", "to": "string", "factor": "number"}, "on_error": "REJECT_ROW", "supported": False, "reason": "BE-12"},
+        ],
+        "capabilities": CAPABILITIES,
+    })
 
 
 @router.get("/{config_id}/review")

@@ -97,3 +97,4 @@ class MasterColumnBindingCreate(StrictModel):
     required: bool = False
     normalization: str = Field(default="TRIM_CASEFOLD", pattern=r"^[A-Z_]{3,40}$")
     cardinality: str = Field(default="MANY_TO_ONE", pattern=r"^(MANY_TO_ONE|ONE_TO_ONE)$")
+    aliases: dict[str, str] = Field(default_factory=dict, max_length=200)

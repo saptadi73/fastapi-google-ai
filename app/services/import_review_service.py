@@ -15,7 +15,7 @@ from app.domain.import_workflow import ImportAction, ImportStatus, next_import_s
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
 from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
-from app.models.master import MasterDefinition, MasterSourceBinding
+from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.source import DataSource, SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.schemas.configuration import ETLConfiguration
@@ -812,6 +812,30 @@ class ImportReviewService:
         connection = await self.session.connection()
         await connection.run_sync(lambda sync: check_storage(sync, table))
         value = data.value.strip()
+        if data.source_column:
+            binding = await self.session.scalar(self.repo.query(MasterColumnBinding).where(
+                MasterColumnBinding.source_column == data.source_column,
+                MasterColumnBinding.master_definition_id == master.id,
+                MasterColumnBinding.status == "APPROVED",
+            ))
+            if binding:
+                record_id = next((rid for alias, rid in binding.aliases_json.items() if alias.casefold() == value.casefold()), None)
+                if record_id:
+                    aliased = (await self.session.execute(select(table).where(
+                        table.c._tenant_id == self.user.tenant_id, table.c._record_id == record_id
+                    ).limit(1))).mappings().first()
+                    if aliased:
+                        staging_updated = False
+                        if data.staging_row_id and data.target_column:
+                            staging = await self.session.scalar(self.repo.query(ImportReviewRow).where(
+                                ImportReviewRow.id == str(data.staging_row_id), ImportReviewRow.import_review_id == review.id
+                            ).with_for_update())
+                            if staging is None:
+                                raise AppError("IMPORT_STAGING_MISSING", "Staging batch tidak tersedia.", 409)
+                            staging.corrected_data = {**staging.corrected_data, data.target_column: str(record_id)}
+                            staging_updated = True
+                            audit(self.session, self.user, "import.reference_resolved", staging.id, master_id=master.id, target_column=data.target_column, resolution="ALIAS")
+                        return {"status": "ALIAS", "master_id": master.id, "record": self.json_value(dict(aliased)), "staging_updated": staging_updated}
         predicates = [table.c[key] == value for key in definition.business_key]
         query = select(table).where(table.c._tenant_id == self.user.tenant_id)
         if len(definition.business_key) == 1:
@@ -843,7 +867,7 @@ class ImportReviewService:
             candidate_items.append(item)
         candidate_items.sort(key=lambda item: item["match_score"], reverse=True)
         status = "AMBIGUOUS" if len(candidate_items) > 1 else "NOT_FOUND" if not candidate_items else "CANDIDATE"
-        return {"status": status, "master_id": master.id, "candidates": candidate_items}
+        return {"status": status, "master_id": master.id, "candidates": candidate_items, "requires_question": status in ("AMBIGUOUS", "NOT_FOUND")}
 
     async def work(self, job):
         review = await self.locked(job.payload["import_review_id"])
@@ -1004,12 +1028,22 @@ class ImportReviewService:
                 rows = (await self.session.scalars(self.repo.query(ImportReviewRow).where(ImportReviewRow.import_review_id == review.id).order_by(ImportReviewRow.source_row))).all()
                 sensitive = {c.target_column for c in ETLConfiguration.model_validate(review.configuration_json).columns if c.pii_classification in ("MEDIUM", "HIGH")}
                 issues, reviewed_rows, metadata = [], [], []
+                cached_chunks = review.checkpoint.get("ai_chunks", {})
+                new_chunks = {}
                 for chunk_start in range(0, len(rows), 100):
                     chunk = rows[chunk_start : chunk_start + 100]
                     payload = []
                     for row in chunk:
                         data = {key: ("[REDACTED]" if key in sensitive else value) for key, value in row.transformed_data.items()}
                         payload.append({"source_row": row.source_row, "data": data})
+                    chunk_hash = digest(payload)
+                    cached = cached_chunks.get(chunk_hash)
+                    if cached:
+                        issues.extend(cached.get("issues", []))
+                        reviewed_rows.extend(cached.get("reviewed_rows", []))
+                        metadata.append(cached.get("metadata", {}))
+                        new_chunks[chunk_hash] = cached
+                        continue
                     result, chunk_metadata = await OpenAIService().generate(
                         self.user,
                         "ETL_CONFIG",
@@ -1026,6 +1060,7 @@ class ImportReviewService:
                     issues.extend(result.issues)
                     reviewed_rows.extend(result.reviewed_rows)
                     metadata.append(chunk_metadata)
+                    new_chunks[chunk_hash] = {"issues": result.issues, "reviewed_rows": result.reviewed_rows, "metadata": chunk_metadata}
                 coverage = "COMPLETE" if len(reviewed_rows) >= len(rows) else "PARTIAL"
                 review.findings = [*review.findings, *issues]
                 staging_by_row = {row.source_row: row for row in rows}
@@ -1047,7 +1082,7 @@ class ImportReviewService:
                         allowed_actions=["APPLY_CORRECTION", "CORRECT_SOURCE"],
                         evidence={"source": "AI", "issue": issue},
                     )
-                review.checkpoint = {**review.checkpoint, "ai_coverage": coverage, "ai_reviewed_rows": reviewed_rows, "ai_metadata": metadata, "ai_policy_version": "BE10-v1", "ai_completed_at": datetime.now(timezone.utc).isoformat(), "ai_masked_fields": sorted(sensitive), "blocking_codes": ["AI_REVIEW_ISSUES"] if issues or coverage != "COMPLETE" else []}
+                review.checkpoint = {**review.checkpoint, "ai_coverage": coverage, "ai_reviewed_rows": reviewed_rows, "ai_metadata": metadata, "ai_chunks": new_chunks, "ai_policy_version": "BE10-v1", "ai_completed_at": datetime.now(timezone.utc).isoformat(), "ai_masked_fields": sorted(sensitive), "blocking_codes": ["AI_REVIEW_ISSUES"] if issues or coverage != "COMPLETE" else []}
                 if issues or coverage != "COMPLETE":
                     self.move(review, ImportAction.REQUEST_INPUT, worker=True)
                 else:

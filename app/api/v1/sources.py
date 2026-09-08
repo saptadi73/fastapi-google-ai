@@ -12,9 +12,11 @@ from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import AIConfigurationRequest
 from app.schemas.source import SheetClassificationUpdate, SheetUpdate, SourceCreate
+from app.schemas.import_review import ImportReviewCreate
 from app.services.classification_service import ClassificationService
 from app.services.job_service import enqueue
 from app.services.source_service import SourceService
+from app.services.import_review_service import ImportReviewService
 
 router = APIRouter(tags=["Sources"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
@@ -81,7 +83,56 @@ async def profile(source_id: UUID, session: Session, user: CurrentUser):
 @router.post("/sources/{source_id}/sync", status_code=202, dependencies=edit)
 async def sync(source_id: UUID, session: Session, user: CurrentUser):
     await ClassificationService(session, user).require_source_ready(source_id)
-    return success(await enqueue(session, user, "ETL", str(source_id)))
+    job = await enqueue(session, user, "ETL", str(source_id))
+    return success({**job, "pipeline": "LEGACY_ETL", "review_required": True, "recommended_endpoint": f"/sources/{source_id}/sync-review"})
+
+
+@router.post("/sources/{source_id}/sync-review", status_code=202, dependencies=edit)
+async def sync_review(source_id: UUID, session: Session, user: CurrentUser):
+    repo = SourceRepository(session, user.tenant_id)
+    sheets = await repo.sheets(source_id)
+    reviews = []
+    seen = set()
+    for sheet in sheets:
+        config_id = sheet.active_configuration_id if sheet.dataset_kind != "MASTER" else None
+        try:
+            result = await ImportReviewService(session, user).create(
+                ImportReviewCreate(source_sheet_id=sheet.id, configuration_id=config_id)
+            )
+            key = result.get("review", {}).get("id") if isinstance(result, dict) else None
+            if key and key in seen:
+                continue
+            if key:
+                seen.add(key)
+            reviews.append(result)
+        except AppError as exc:
+            reviews.append({"source_sheet_id": sheet.id, "status": "BLOCKED", "code": exc.code})
+    return success({"source_id": str(source_id), "reviews": reviews})
+
+
+@router.get("/sources/{source_id}/master-migration-preview")
+async def master_migration_preview(source_id: UUID, session: Session, user: CurrentUser):
+    repo = SourceRepository(session, user.tenant_id)
+    sheets = await repo.sheets(source_id)
+    result = []
+    from app.services.master_service import MasterService
+
+    masters = MasterService(session, user)
+    for sheet in sheets:
+        if sheet.dataset_kind != "MASTER":
+            continue
+        binding = await masters.binding_detail(sheet.id)
+        result.append({"source_sheet_id": sheet.id, "sheet_name": sheet.sheet_name, "binding": binding, "migration_ready": bool(binding.get("metadata_ready") and binding.get("validation", {}).get("valid"))})
+    return success({
+        "source_id": str(source_id),
+        "tabs": result,
+        "destructive_apply": False,
+        "rollback_plan": {
+            "required_before_apply": True,
+            "backup_snapshot_ids": [tab["binding"].get("binding", {}).get("snapshot_hash") for tab in result if tab["binding"].get("binding")],
+            "strategy": "RETAIN_SOURCE_AND_RESTORE_TARGET_FROM_BACKUP",
+        },
+    })
 
 
 @router.post("/sources/{source_id}/ai-configurations", status_code=202, dependencies=edit)
