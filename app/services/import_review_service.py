@@ -23,6 +23,7 @@ from app.schemas.import_review import (
     ImportProposalResolution,
     ImportQuestionDecision,
     ImportReviewCreate,
+    AIImportReviewResult,
 )
 from app.services.audit_service import audit
 from app.services.etl_compiler_service import cast_value, transform_rows
@@ -31,6 +32,7 @@ from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService, check_storage
 from app.services.profiling_service import digest
 from app.services.workbook_service import decode, token
+from app.services.openai_service import OpenAIService
 
 
 class ImportReviewService:
@@ -980,9 +982,20 @@ class ImportReviewService:
                 self.move(review, ImportAction.START_AI, worker=True)
                 await self.queue(review)
         else:
-            # BE-10 will replace this capability blocker with resumable AI evidence.
-            review.checkpoint = {**review.checkpoint, "blocking_codes": ["AI_REVIEW_NOT_IMPLEMENTED"]}
-            self.move(review, ImportAction.REQUEST_INPUT, worker=True)
+            settings = get_settings()
+            if not settings.openai_api_key.get_secret_value() or not settings.openai_model_etl_config:
+                review.checkpoint = {**review.checkpoint, "blocking_codes": ["AI_REVIEW_NOT_IMPLEMENTED"], "ai_coverage": "NOT_STARTED"}
+                self.move(review, ImportAction.REQUEST_INPUT, worker=True)
+            else:
+                rows = (await self.session.scalars(self.repo.query(ImportReviewRow).where(ImportReviewRow.import_review_id == review.id).order_by(ImportReviewRow.source_row))).all()
+                context = json.dumps({"rows": [{"source_row": row.source_row, "data": row.transformed_data} for row in rows]}, ensure_ascii=False)
+                result, metadata = await OpenAIService().generate(self.user, "ETL_CONFIG", context, AIImportReviewResult)
+                review.findings = [*review.findings, *result.issues]
+                review.checkpoint = {**review.checkpoint, "ai_coverage": result.coverage, "ai_reviewed_rows": result.reviewed_rows, "ai_metadata": metadata, "blocking_codes": ["AI_REVIEW_ISSUES"] if result.issues else []}
+                if result.issues:
+                    self.move(review, ImportAction.REQUEST_INPUT, worker=True)
+                else:
+                    self.move(review, ImportAction.FINISH_REVIEW, worker=True)
         return {"import_review_id": review.id, "status": review.status, "execution_ready": False}
 
 

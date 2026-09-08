@@ -38,6 +38,12 @@ class ImportReferenceResolveRequest(StrictModel):
     target_column: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,62}$")
 
 
+class AIImportReviewResult(StrictModel):
+    issues: list[dict] = Field(default_factory=list, max_length=500)
+    reviewed_rows: list[int] = Field(default_factory=list, max_length=10000)
+    coverage: str = Field(pattern=r"^(COMPLETE|PARTIAL)$")
+
+
 class ImportQuestionDecision(StrictModel):
     revision_no: int = Field(ge=1)
     action: str = Field(

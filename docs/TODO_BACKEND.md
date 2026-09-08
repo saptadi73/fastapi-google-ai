@@ -151,7 +151,7 @@ Status BE-09: dependency plan, load order, deteksi siklus, pemeriksaan orphan/ty
 Prasyarat: BE-05, BE-06, dan BE-08.
 
 - [ ] Tentukan field yang boleh diproses AI, masking/redaction, dan cakupan pemeriksaan lokal/manual untuk field sensitif.
-- [ ] Tambahkan task review ejaan, penulisan, kandidat duplikat, dan makna nilai dengan output terstruktur tervalidasi.
+- [x] Tambahkan task review batch dengan output terstruktur tervalidasi (`AIImportReviewResult`).
 - [ ] Proses seluruh cakupan yang diizinkan menggunakan chunk/nilai unik; simpan hubungan hasil ke semua baris terkait.
 - [ ] Catat coverage selesai/belum diperiksa/dikecualikan, model/prompt/policy version, biaya, dan evidence.
 - [ ] Terapkan timeout, rate limit, budget, retry terbatas, serta pemakaian ulang hasil chunk yang sudah tersimpan.
@@ -159,7 +159,7 @@ Prasyarat: BE-05, BE-06, dan BE-08.
 - [ ] Perlakukan isi Sheet sebagai data; uji instruksi berbahaya dalam sel, output AI invalid, kegagalan sebagian chunk, dan kebocoran field sensitif.
 - [ ] Uji bahwa snapshot baru diperiksa walaupun fingerprint schema tetap sama.
 
-Selesai jika setiap import memiliki bukti cakupan review yang benar; label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
+Status BE-10: worker sudah memanggil review terstruktur ketika OpenAI dikonfigurasi, menyimpan coverage, metadata model/prompt, findings, dan blocker. Chunking, masking field sensitif, retry budget, serta pertanyaan per issue masih terbuka. Label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
 
 ### BE-11 — Integrasi alur lengkap dan migrasi data lama
 
