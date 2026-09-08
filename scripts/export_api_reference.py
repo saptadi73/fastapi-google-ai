@@ -41,6 +41,7 @@ def build_documents():
         "source",
         "configuration",
         "master",
+        "import_review",
         "semantic",
         "nl2sql",
         "monitoring",

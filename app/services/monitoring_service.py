@@ -16,6 +16,12 @@ class MonitoringService:
 
     async def retry(self, job_id):
         job = await self.repo.get(Job, job_id)
+        if job.kind == "IMPORT_REVIEW":
+            raise AppError(
+                "IMPORT_REVALIDATE_REQUIRED",
+                "Gunakan revalidate batch dengan revision_no; retry job tidak boleh melewati checkpoint.",
+                409,
+            )
         if job.status != "FAILED":
             raise AppError("JOB_CONFLICT", "Hanya job gagal yang dapat dicoba ulang.", 409)
         return await enqueue(self.session, self.user, job.kind, job.source_id, **job.payload)

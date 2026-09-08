@@ -279,6 +279,63 @@ Body: [MasterRevisionRequest](#masterrevisionrequest).
 |---|---|---|---|
 | `sheet_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/import-reviews
+
+Body: [ImportReviewCreate](#importreviewcreate).
+
+### GET /api/v1/import-reviews
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `status` | query | Tidak | `ImportStatus / null` {} |
+| `source_sheet_id` | query | Tidak | `string (uuid) / null` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### GET /api/v1/import-reviews/{review_id}
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/import-reviews/{review_id}/findings
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### POST /api/v1/import-reviews/{review_id}/cancel
+
+Body: [ImportReviewAction](#importreviewaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/import-reviews/{review_id}/revalidate
+
+Body: [ImportReviewAction](#importreviewaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/import-reviews/{review_id}/resume
+
+Body: [ImportReviewAction](#importreviewaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/sources/{source_id}/profiling-runs
 
 Body: —.
@@ -1115,6 +1172,42 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "feedback": "Hasil sesuai laporan cabang."
 }
 ```
+
+### ImportReviewAction
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `comment` | Tidak | `string` | "" | {"maxLength":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "comment": "Tinjau ulang batch setelah kegagalan teknis"
+}
+```
+
+### ImportReviewCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `source_sheet_id` | Ya | `string (uuid)` | — | — |
+| `configuration_id` | Tidak | `string (uuid) / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "source_sheet_id": "33333333-3333-4333-8333-333333333333",
+  "configuration_id": "44444444-4444-4444-8444-444444444444"
+}
+```
+
+### ImportStatus
+
+`enum ["CLASSIFICATION_REQUIRED","MAPPING_REQUIRED","VALIDATING","AI_REVIEWING","NEEDS_INPUT","READY_FOR_APPROVAL","APPROVED","APPLYING","SUCCEEDED","FAILED","CANCELLED","STALE_REVIEW"]`
 
 ### Liveness
 

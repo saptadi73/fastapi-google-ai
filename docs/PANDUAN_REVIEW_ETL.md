@@ -142,4 +142,6 @@ Status `Tidak` pada cleansing atau `Nonaktif` pada aturan kualitas/metrik berart
 - Regression suite ETL: approve/deploy, sync/idempotency, rollback, permission, query tetap diuji.
 - Frontend: `npm run build` menjalankan TypeScript dan build Vite. OpenAI dan Google pada integration test memakai mock; konfigurasi/integrasi akun nyata tetap harus diuji pada lingkungan tujuan.
 - Hasil verifikasi implementasi: 63 pengujian backend lulus. Smoke test Edge headless dengan API mock juga lulus untuk login, edit/simpan draft, checklist, submit, dan approval akun berbeda tanpa exception JavaScript. Pengujian browser ini tidak mengakses data aplikasi nyata.
-- `scripts/export_api_reference.py --check` kini memeriksa 107 operasi setelah penambahan storage dan pencarian record BE-04, serta seluruh contoh payload terhadap schema runtime.
+- `scripts/export_api_reference.py --check` kini memeriksa 114 operasi setelah penambahan batch review BE-05, serta seluruh contoh payload terhadap schema runtime.
+
+Batch data persisten terpisah dari review konfigurasi kini tersedia di [BE-05](IMPORT_REVIEW_BE05.md). Frontend dapat membuat batch setelah konfigurasi/binding approved dan memantau checkpoint; NEEDS_INPUT tidak boleh diatasi dengan retry otomatis. Pertanyaan/jawaban, review AI dan apply data belum tersedia.

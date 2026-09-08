@@ -543,5 +543,13 @@
         ]
       }
     ]
+  },
+  "ImportReviewCreate": {
+    "source_sheet_id": "33333333-3333-4333-8333-333333333333",
+    "configuration_id": "44444444-4444-4444-8444-444444444444"
+  },
+  "ImportReviewAction": {
+    "revision_no": 1,
+    "comment": "Tinjau ulang batch setelah kegagalan teknis"
   }
 }

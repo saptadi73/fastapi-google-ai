@@ -2,7 +2,7 @@
 
 Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **8 September 2026**.
 
-Dokumen ini menjelaskan **107 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **114 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -343,6 +343,20 @@ AIConfigurationRequest:
 Setelah job AI_CONFIG sukses, `result` berisi `{configuration_id, status: "AI_DRAFT"}`; ambil konfigurasi lewat GET. AI memakai metadata/profile, belum memeriksa typo semua nilai sel atau membentuk referensi master.
 
 
+## Batch review import (BE-05)
+
+Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan error: [Batch review import BE-05](IMPORT_REVIEW_BE05.md). E = editor, S = editor/reviewer. Batch memakai snapshot tersimpan; belum melakukan review AI atau apply data. Job SUCCEEDED tidak berarti batch import sudah selesai.
+
+| Method | Path | Role | Payload / parameter | Status | Data |
+|---|---|---|---|---|---|
+| POST | `/import-reviews` | E | ImportReviewCreate | 202 | review, reused |
+| GET | `/import-reviews` | S | status, source_sheet_id, offset, limit | 200 | items[], has_more |
+| GET | `/import-reviews/{review_id}` | S | UUID batch | 200 | batch, dependencies_current, execution_ready=false |
+| GET | `/import-reviews/{review_id}/findings` | S | offset, limit | 200 | items[], has_more |
+| POST | `/import-reviews/{review_id}/cancel` | E | ImportReviewAction | 200 | batch CANCELLED |
+| POST | `/import-reviews/{review_id}/revalidate` | E | ImportReviewAction | 200 | batch VALIDATING atau STALE_REVIEW |
+| POST | `/import-reviews/{review_id}/resume` | E | ImportReviewAction | 200 | batch VALIDATING jika blocker sudah diselesaikan |
+
 ## Storage master kanonis (BE-04)
 
 Kontrak lengkap dan mekanisme deployment: [Storage master BE-04](STORAGE_MASTER_BE04.md). S = editor/reviewer, R = reviewer. Seluruh endpoint berikut mengembalikan 200 dengan envelope standar. Tidak ada endpoint publik untuk menulis record atau melewati review import.
@@ -377,7 +391,7 @@ Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-bind
 
 ## 4. Konfigurasi ETL dan approval
 
-**Status BE-02:** klasifikasi per tab sudah aktif melalui GET/PUT `/source-sheets/{sheet_id}/classification`. Body PUT adalah `{"revision_no":1,"dataset_kind":"NON_MASTER"}` atau `MASTER`. Payload policy lengkap BE-01 belum menjadi body API; SourceCreate/ETLConfiguration tetap tidak menerima dataset_kind. Registry/binding master tersedia pada BE-03; MASTER tetap tertahan sebelum review/apply import tersedia. Kontrak respons, error, serta dampak rollout dijelaskan di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md). BE-04 menambah storage dan pencarian record sehingga jumlah operasi aktif menjadi 107.
+**Status BE-02:** klasifikasi per tab sudah aktif melalui GET/PUT `/source-sheets/{sheet_id}/classification`. Body PUT adalah `{"revision_no":1,"dataset_kind":"NON_MASTER"}` atau `MASTER`. Payload policy lengkap BE-01 belum menjadi body API; SourceCreate/ETLConfiguration tetap tidak menerima dataset_kind. Registry/binding master tersedia pada BE-03; MASTER tetap tertahan sebelum review/apply import tersedia. Kontrak respons, error, serta dampak rollout dijelaskan di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md). BE-04 menambah storage/pencarian record dan BE-05 menambah batch review sehingga jumlah operasi aktif menjadi 114.
 
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|

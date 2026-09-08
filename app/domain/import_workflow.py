@@ -1,4 +1,4 @@
-"""Explicit lifecycle contract. Persistence, evidence checks and jobs follow in BE-05."""
+"""Import lifecycle used by durable BE-05 batches; approval/apply gates follow later."""
 
 from enum import Enum
 
@@ -68,7 +68,7 @@ TRANSITIONS = {
 }
 for state in (S.VALIDATING, S.AI_REVIEWING, S.APPLYING):
     TRANSITIONS[state, A.FAIL] = S.FAILED
-for state in (S.VALIDATING, S.AI_REVIEWING, S.NEEDS_INPUT, S.READY_FOR_APPROVAL, S.APPROVED):
+for state in (S.VALIDATING, S.AI_REVIEWING, S.NEEDS_INPUT, S.READY_FOR_APPROVAL, S.APPROVED, S.FAILED):
     TRANSITIONS[state, A.INVALIDATE] = S.STALE_REVIEW
 for state in S:
     if state not in (S.APPLYING, S.SUCCEEDED, S.CANCELLED):

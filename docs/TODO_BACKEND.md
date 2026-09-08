@@ -15,13 +15,13 @@ Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres.
 - [x] Semantic product dan structured query satu produk, termasuk saved query dasar.
 - [x] API Reference, contoh payload, dan exporter schema/OpenAPI.
 
-Verifikasi terbaru setelah BE-04: **87 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **107 operasi API**. BE-04 tidak menambah migrasi Alembic; DDL dinamis diuji di database test terpisah. Integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master tersedia, sedangkan pemuatan record, pertanyaan per sel, dan resume batch masih pekerjaan di bawah.
+Verifikasi terbaru setelah BE-05: **95 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **114 operasi API**. Migrasi BE-05 `5ab90e816eee` dan checkpoint/recovery diuji pada database test; Alembic check lulus. Integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master dan batch/checkpoint/resume tersedia, sedangkan pemuatan record serta pertanyaan/jawaban per sel masih pekerjaan di bawah.
 
 ## Urutan implementasi
 
 ### BE-01 — Kebijakan data dan kontrak dasar
 
-Selesai pada tahap kontrak dasar. Keputusan dan batas implementasi tercatat di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md). BE-02 sampai BE-04 juga sudah selesai; tahap berikutnya BE-05.
+Selesai pada tahap kontrak dasar. Keputusan dan batas implementasi tercatat di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md). BE-02 sampai BE-05 selesai; tahap berikutnya BE-06.
 
 - [x] Klasifikasi per tab dikonfirmasi pengguna; kontrak hanya menerima SHEET.
 - [x] Pengguna memilih update dengan usulan insert yang wajib disetujui; policy dicatat eksplisit.
@@ -73,15 +73,17 @@ Selesai jika master memiliki identitas fisik stabil lintas file dan perubahan la
 
 ### BE-05 — Batch review import dan worker yang dapat dilanjutkan
 
+Selesai di kode/test; kontrak implementasi ada di [Batch review BE-05](IMPORT_REVIEW_BE05.md). Pertanyaan/jawaban terstruktur mengikuti BE-06, review AI BE-10, dan apply BE-07.
+
 Prasyarat: BE-02–BE-04.
 
-- [ ] Tambahkan `import_review`/batch dengan snapshot, revision konfigurasi, status, dan versi kebijakan.
-- [ ] Implementasikan state machine VALIDATING, AI_REVIEWING, NEEDS_INPUT, READY_FOR_APPROVAL, APPROVED, APPLYING, SUCCEEDED, FAILED, CANCELLED, dan STALE_REVIEW.
-- [ ] Simpan checkpoint, temuan, dan pertanyaan sebelum worker berhenti menunggu input; hindari hilang akibat rollback.
-- [ ] Tambahkan create/get/list/cancel/revalidate/resume batch dan penghubung job; list memakai pagination/filter status.
-- [ ] Bedakan NEEDS_INPUT dari kegagalan teknis yang boleh retry; cegah polling/retry worker tanpa akhir.
-- [ ] Definisikan kunci idempotency yang mencakup tenant, tab, snapshot, konfigurasi, serta versi dependency yang relevan.
-- [ ] Uji restart worker, job ganda, cancel, retry, dan batch lama yang menjadi stale.
+- [x] Tambahkan `import_review`/batch dengan snapshot, revision konfigurasi, status, dan versi kebijakan.
+- [x] Implementasikan state machine VALIDATING, AI_REVIEWING, NEEDS_INPUT, READY_FOR_APPROVAL, APPROVED, APPLYING, SUCCEEDED, FAILED, CANCELLED, dan STALE_REVIEW.
+- [x] Simpan checkpoint, temuan, dan blocker sebelum worker berhenti menunggu input; pertanyaan konfigurasi tetap tersimpan dalam konfigurasi batch. Pertanyaan/jawaban per sel mengikuti BE-06.
+- [x] Tambahkan create/get/list/cancel/revalidate/resume batch dan penghubung job; list memakai pagination/filter status.
+- [x] Bedakan NEEDS_INPUT dari kegagalan teknis yang boleh retry; cegah polling/retry worker tanpa akhir.
+- [x] Definisikan kunci idempotency yang mencakup tenant, tab, snapshot, konfigurasi, serta versi dependency yang relevan.
+- [x] Uji restart worker, job ganda, cancel, retry, dan batch lama yang menjadi stale.
 
 Selesai jika batch yang menunggu pengguna dapat dilanjutkan tanpa membaca sumber berbeda atau menggandakan pekerjaan.
 
@@ -253,7 +255,8 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 | BE-02 | Selesai di kode/test | Migrasi, GET/PUT klasifikasi, gate runtime dan worker; migrasi dilaporkan selesai oleh pengguna |
 | BE-03 | Selesai di kode/test | Registry berversi, candidate review, binding/dry-run/approval; belum memuat record master |
 | BE-04 | Selesai di kode/test | Target per master, UUID stabil, constraint, storage deployment, pencarian/masking; import belum aktif |
-| BE-05–BE-11 | Berikutnya; belum mulai | Review/apply master, referensi/FK, dan review setiap import |
+| BE-05 | Selesai di kode/test | Snapshot/policy tetap, idempotency, checkpoint, temuan, cancel/revalidate/resume dan recovery; AI/apply belum aktif |
+| BE-06 sampai BE-11 | Berikutnya; belum mulai | Pertanyaan/jawaban, review/apply master, referensi/FK dan AI review |
 | BE-12–BE-15 | Belum mulai | Perluasan parameter template, taxonomy, semantic, dan operasional |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 

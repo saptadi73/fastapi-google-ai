@@ -128,3 +128,9 @@ Migrasi `b762af03e219` menetapkan tab lama ke CLASSIFICATION_REQUIRED tanpa mene
 Endpoint yang sudah tersedia beserta payload, respons, role, error, dan mekanisme frontend dijelaskan di [API Reference](API_REFERENCE.md). Snapshot OpenAPI dan schema dapat diperbarui dengan `scripts/export_api_reference.py`; contoh payload diverifikasi terhadap schema backend.
 
 Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](PANDUAN_REVIEW_ETL.md) memuat cara menjalankan migrasi, halaman Vue `/workspace`, payload preview/apply, dan mekanisme persetujuan.
+
+## Batch review import BE-05
+
+Model dan migrasi `5ab90e816eee`, tujuh endpoint batch/temuan, snapshot dan policy tetap, idempotency, checkpoint antar-job, cancel/revalidate/resume, serta recovery worker tersedia. Kontrak frontend ada di [Batch review BE-05](IMPORT_REVIEW_BE05.md); API Reference memuat 114 operasi. Temuan deterministik tidak mengekspos raw values. Batch berhenti pada NEEDS_INPUT untuk masalah data atau AI_REVIEW_NOT_IMPLEMENTED; belum ada review AI, pertanyaan/jawaban terstruktur, approval/apply batch, atau pengalihan sync NON_MASTER lama. Migrasi BE-05 hanya diterapkan di database test pada sesi implementasi ini.
+
+Verifikasi BE-05: **95 tes lulus**, Ruff lulus, Alembic check lulus dan **114 operasi API** terverifikasi. Pengujian memakai database test serta provider mock; bukan bukti integrasi Google/OpenAI production. Tahap berikutnya BE-06.

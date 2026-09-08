@@ -282,3 +282,7 @@ Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](docs/PANDUA
 ## Storage master BE-04
 
 Storage master kanonis, UUID record stabil, deployment schema dan pencarian record sudah tersedia. Lihat [panduan BE-04](docs/STORAGE_MASTER_BE04.md). Import master tetap menunggu alur review/apply BE-05 dan seterusnya.
+
+## Batch review import BE-05
+
+Batch persisten, checkpoint worker, idempotency, temuan deterministik dan recovery tersedia. Lihat [panduan BE-05](docs/IMPORT_REVIEW_BE05.md). Migrasi baru: `5ab90e816eee`. Pertanyaan/jawaban dan review AI/apply masih tahap berikutnya.

@@ -15,6 +15,7 @@ from app.schemas.source import cron_schedule
 from app.services.ai_configuration_service import AIConfigurationService
 from app.services.configuration_service import ConfigurationService
 from app.services.etl_execution_service import ETLExecutionService
+from app.services.import_review_service import ImportReviewService, fail_import_job
 from app.services.source_service import SourceService
 
 
@@ -37,6 +38,8 @@ async def execute_job(session, job):
         )
     if job.kind == "ETL":
         return await ETLExecutionService(session, user).run(job.source_id)
+    if job.kind == "IMPORT_REVIEW":
+        return await ImportReviewService(session, user).work(job)
     raise AppError("JOB_INVALID", "Jenis job tidak dikenal.")
 
 
@@ -57,7 +60,9 @@ async def run_pending(tenant_id=None):
         job_id = job.id
     try:
         async with SessionFactory() as session, session.begin():
-            job = await session.get(Job, job_id)
+            job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+            if job.status != "RUNNING":
+                return {"processed": 0, "job_id": job_id}
             timeout = max(30, (get_settings().job_stale_minutes - 1) * 60)
             result = await asyncio.wait_for(execute_job(session, job), timeout=timeout)
             job.status, job.result, job.finished_at = "SUCCEEDED", result, now()
@@ -71,6 +76,7 @@ async def run_pending(tenant_id=None):
                 if isinstance(exc, AppError)
                 else "Job gagal. Periksa konfigurasi dan koneksi layanan."
             )
+            await fail_import_job(session, job, job.error_code)
             if job.source_id and job.kind in ("DISCOVER", "PROFILE", "AI_CONFIG"):
                 source = await session.get(DataSource, job.source_id)
                 if source:
@@ -97,6 +103,7 @@ async def schedule_sources():
                 "Worker terputus atau melewati batas durasi; retry job secara eksplisit.",
                 now(),
             )
+            await fail_import_job(session, job, job.error_code)
         sources = await session.scalars(
             select(DataSource)
             .where(
