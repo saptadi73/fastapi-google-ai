@@ -551,5 +551,15 @@
   "ImportReviewAction": {
     "revision_no": 1,
     "comment": "Tinjau ulang batch setelah kegagalan teknis"
+  },
+  "ImportQuestionDecision": {
+    "revision_no": 1,
+    "action": "APPLY_CORRECTION",
+    "corrected_value": 321,
+    "reason": "Nilai sudah dikonfirmasi dari dokumen sumber"
+  },
+  "ImportProposalResolution": {
+    "revision_no": 2,
+    "master_definition_id": "55555555-5555-4555-8555-555555555555"
   }
 }

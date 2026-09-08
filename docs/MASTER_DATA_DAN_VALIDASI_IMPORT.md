@@ -1,6 +1,6 @@
 # Master data, referensi, dan validasi import
 
-Status: **BE-01–BE-05 menyediakan kebijakan, klasifikasi, registry, binding, storage kanonis, dan batch review persisten**. Dokumen ini mencatat kebutuhan bisnis dari diskusi 8 September 2026. Pemuatan record, pertanyaan/jawaban per sel, dan review AI masih tahap lanjutan. Status mengikuti [TODO Backend](TODO_BACKEND.md); implementasi aktif dijelaskan di [BE-03](REGISTRY_MASTER_BE03.md), [BE-04](STORAGE_MASTER_BE04.md), dan [BE-05](IMPORT_REVIEW_BE05.md).
+Status: **BE-01–BE-06 menyediakan kebijakan, klasifikasi, registry, binding, storage kanonis, batch review, serta pertanyaan/keputusan staging**. Dokumen ini mencatat kebutuhan bisnis dari diskusi 8 September 2026. Pemuatan record, resolver relasi/FK, approval proposal master, dan review AI masih tahap lanjutan. Status mengikuti [TODO Backend](TODO_BACKEND.md); implementasi aktif dijelaskan di [BE-03](REGISTRY_MASTER_BE03.md), [BE-04](STORAGE_MASTER_BE04.md), [BE-05](IMPORT_REVIEW_BE05.md), dan [BE-06](IMPORT_QUESTIONS_BE06.md).
 
 Tujuannya: menetapkan identitas master yang baku sebelum taxonomy/semantic layer, memperbarui master yang sama tanpa membuat duplikat, dan menahan data ambigu sampai pengguna menjawab pertanyaan sistem.
 

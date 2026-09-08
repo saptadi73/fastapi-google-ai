@@ -30,6 +30,7 @@ def build_documents():
     from app.models.auth import User
     from app.models.configuration import Artifact, Configuration
     from app.models.etl import ETLRun, Job, QualityIssue
+    from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
     from app.models.master import MasterDefinition, MasterSourceBinding
     from app.models.semantic import DataProduct, QueryRequest, SavedQuery
     from app.models.source import DataSource, ProfilingRun, SourceSheet
@@ -183,6 +184,10 @@ def build_documents():
         (Configuration, set()),
         (MasterDefinition, set()),
         (MasterSourceBinding, set()),
+        (ImportReview, {"configuration_json", "dependencies", "findings"}),
+        (ImportReviewRow, {"raw_data", "transformed_data", "corrected_data"}),
+        (ImportQuestion, {"evidence"}),
+        (ImportDecision, {"before_data", "after_data", "evidence"}),
         (Artifact, {"storage_uri"}),
         (Job, set()),
         (ETLRun, set()),

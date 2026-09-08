@@ -1,22 +1,29 @@
+import json
+from decimal import Decimal
 from types import SimpleNamespace
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.domain.import_workflow import ImportAction, ImportStatus, next_import_status
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
-from app.models.import_review import ImportReview
+from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
 from app.models.master import MasterDefinition, MasterSourceBinding
 from app.models.source import DataSource, SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.schemas.configuration import ETLConfiguration
 from app.schemas.data_policy import DatasetPolicy
-from app.schemas.import_review import ImportReviewCreate
+from app.schemas.import_review import (
+    ImportProposalResolution,
+    ImportQuestionDecision,
+    ImportReviewCreate,
+)
 from app.services.audit_service import audit
-from app.services.etl_compiler_service import transform_rows
+from app.services.etl_compiler_service import cast_value, transform_rows
 from app.services.job_service import enqueue
+from app.services.master_service import MasterService
 from app.services.profiling_service import digest
 
 
@@ -274,6 +281,306 @@ class ImportReviewService:
             "has_more": len(review.findings) > offset + limit,
         }
 
+    @staticmethod
+    def json_value(value):
+        def encode(item):
+            if isinstance(item, Decimal):
+                return int(item) if item == item.to_integral_value() else float(item)
+            return str(item)
+
+        return json.loads(json.dumps(value, default=encode))
+
+    @staticmethod
+    def question_response(question, decisions=()):
+        data = record(question, exclude=("evidence",))
+        data["candidate_count"] = len(question.candidates)
+        data["decisions"] = [
+            record(decision, exclude=("before_data", "after_data", "evidence")) for decision in decisions
+        ]
+        return data
+
+    async def questions(self, review_id, status=None, category=None, offset=0, limit=50):
+        self.role()
+        await self.repo.get(ImportReview, review_id)
+        query = self.repo.query(ImportQuestion).where(ImportQuestion.import_review_id == str(review_id))
+        if status:
+            query = query.where(ImportQuestion.status == status)
+        if category:
+            query = query.where(ImportQuestion.category == category)
+        rows = (
+            await self.session.scalars(
+                query.order_by(ImportQuestion.source_row, ImportQuestion.created_at, ImportQuestion.id)
+                .offset(offset)
+                .limit(limit + 1)
+            )
+        ).all()
+        question_ids = [q.id for q in rows[:limit]]
+        decisions = {}
+        if question_ids:
+            for decision in (
+                await self.session.scalars(
+                    self.repo.query(ImportDecision)
+                    .where(ImportDecision.import_question_id.in_(question_ids))
+                    .order_by(ImportDecision.created_at)
+                )
+            ).all():
+                decisions.setdefault(decision.import_question_id, []).append(decision)
+        return {
+            "items": [self.question_response(q, decisions.get(q.id, ())) for q in rows[:limit]],
+            "has_more": len(rows) > limit,
+        }
+
+    async def answer_question(self, review_id, question_id, data: ImportQuestionDecision):
+        self.role(edit=True)
+        review = await self.locked(review_id)
+        if review.status not in ("NEEDS_INPUT", "FAILED"):
+            raise AppError("IMPORT_STATE_CONFLICT", "Batch belum menunggu keputusan pengguna.", 409)
+        if not await self.is_current(review):
+            if review.status != "STALE_REVIEW":
+                self.move(review, ImportAction.INVALIDATE, worker=True)
+            audit(
+                self.session,
+                self.user,
+                "import.question_stale",
+                review.id,
+                question_id=str(question_id),
+            )
+            return {"question": None, "review": self.response(review), "stale": True}
+        question = await self.session.scalar(
+            self.repo.query(ImportQuestion)
+            .where(ImportQuestion.id == str(question_id), ImportQuestion.import_review_id == review.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if question is None:
+            raise AppError("RESOURCE_NOT_FOUND", "Pertanyaan tidak ditemukan.", 404)
+        if question.revision_no != data.revision_no:
+            raise AppError("IMPORT_QUESTION_REVISION_CONFLICT", "Revisi pertanyaan berubah; muat ulang.", 409)
+        if question.status != "OPEN":
+            raise AppError("IMPORT_QUESTION_ALREADY_ANSWERED", "Pertanyaan sudah memiliki keputusan.", 409)
+        if data.action not in question.allowed_actions:
+            raise AppError(
+                "IMPORT_DECISION_ACTION_INVALID", "Aksi tidak diizinkan untuk pertanyaan ini.", 422
+            )
+        candidates = {str(c["id"]): c for c in question.candidates if c.get("id")}
+        if data.action == "SELECT_RECORD":
+            if data.selected_candidate_id is None or str(data.selected_candidate_id) not in candidates:
+                raise AppError(
+                    "IMPORT_DECISION_CANDIDATE_INVALID",
+                    "Pilih kandidat yang tersedia pada pertanyaan ini.",
+                    422,
+                )
+        elif data.selected_candidate_id is not None:
+            raise AppError(
+                "IMPORT_DECISION_CANDIDATE_INVALID", "Aksi ini tidak menerima kandidat record.", 422
+            )
+        if data.action == "KEEP_ORIGINAL" and question.mandatory:
+            raise AppError(
+                "IMPORT_DECISION_ACTION_INVALID",
+                "Nilai asli tidak dapat dipertahankan untuk masalah wajib.",
+                422,
+            )
+        if data.action in ("CORRECT_SOURCE", "PROPOSE_MASTER") and not data.reason.strip():
+            raise AppError("IMPORT_DECISION_REASON_REQUIRED", "Alasan wajib diisi untuk tindakan ini.", 422)
+        if data.action == "APPLY_CORRECTION" and data.corrected_value is None:
+            raise AppError("IMPORT_DECISION_VALUE_REQUIRED", "Nilai koreksi wajib diisi.", 422)
+        if data.action != "APPLY_CORRECTION" and data.corrected_value is not None:
+            raise AppError(
+                "IMPORT_DECISION_VALUE_INVALID", "Nilai koreksi hanya berlaku untuk APPLY_CORRECTION.", 422
+            )
+        if data.action == "PROPOSE_MASTER" and data.master_proposal is None:
+            raise AppError(
+                "IMPORT_MASTER_PROPOSAL_REQUIRED",
+                "Usulan master lengkap wajib diisi untuk PROPOSE_MASTER.",
+                422,
+            )
+        if data.action != "PROPOSE_MASTER" and data.master_proposal is not None:
+            raise AppError(
+                "IMPORT_MASTER_PROPOSAL_INVALID",
+                "Usulan master hanya berlaku untuk PROPOSE_MASTER.",
+                422,
+            )
+        after = {}
+        if data.action == "APPLY_CORRECTION":
+            column = next(
+                (
+                    c
+                    for c in review.configuration_json["columns"]
+                    if c["target_column"] == question.target_column
+                ),
+                None,
+            )
+            if column is None:
+                raise AppError(
+                    "IMPORT_DECISION_TARGET_INVALID",
+                    "Target pertanyaan tidak tersedia pada konfigurasi batch.",
+                    409,
+                )
+            try:
+                after[question.target_column] = self.json_value(
+                    cast_value(data.corrected_value, column["target_type"])
+                )
+            except (TypeError, ValueError):
+                raise AppError(
+                    "IMPORT_DECISION_VALUE_INVALID", "Nilai koreksi tidak cocok dengan tipe target.", 422
+                ) from None
+        elif data.action == "SELECT_RECORD":
+            after[question.target_column] = str(data.selected_candidate_id)
+        proposal = None
+        if data.action == "PROPOSE_MASTER":
+            proposal = await MasterService(self.session, self.user).create(data.master_proposal)
+        if question.staging_row_id and after:
+            row = await self.session.scalar(
+                self.repo.query(ImportReviewRow)
+                .where(ImportReviewRow.id == question.staging_row_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if row is None:
+                raise AppError("IMPORT_STAGING_MISSING", "Staging batch tidak tersedia.", 409)
+            row.corrected_data = {**row.corrected_data, **after}
+        before = {question.target_column: "[REDACTED]"} if question.target_column else {}
+        decision = await self.repo.add(
+            ImportDecision,
+            import_review_id=review.id,
+            import_question_id=question.id,
+            decided_by=self.user.id,
+            revision_no=question.revision_no,
+            action=data.action,
+            selected_candidate_id=str(data.selected_candidate_id) if data.selected_candidate_id else None,
+            proposed_master_definition_id=proposal.id if proposal else None,
+            reason=data.reason,
+            before_data=before,
+            after_data=after,
+            evidence={
+                "scope": "ROW",
+                "source_row": question.source_row,
+                "question_key": question.question_key,
+            },
+        )
+        question.status = "PENDING_APPROVAL" if data.action == "PROPOSE_MASTER" else "ANSWERED"
+        question.revision_no += 1
+        open_mandatory = await self.session.scalar(
+            select(ImportQuestion.id)
+            .where(
+                ImportQuestion.tenant_id == self.user.tenant_id,
+                ImportQuestion.import_review_id == review.id,
+                ImportQuestion.status == "OPEN",
+                ImportQuestion.mandatory.is_(True),
+            )
+            .limit(1)
+        )
+        blockers = list(review.checkpoint.get("blocking_codes", []))
+        if not open_mandatory:
+            blockers = [code for code in blockers if code != "DATA_QUALITY_ISSUES"]
+        pending_proposal = await self.session.scalar(
+            select(ImportQuestion.id)
+            .where(
+                ImportQuestion.tenant_id == self.user.tenant_id,
+                ImportQuestion.import_review_id == review.id,
+                ImportQuestion.status == "PENDING_APPROVAL",
+            )
+            .limit(1)
+        )
+        blockers = [code for code in blockers if code != "MASTER_PROPOSAL_PENDING"]
+        if pending_proposal:
+            blockers.append("MASTER_PROPOSAL_PENDING")
+        review.checkpoint = {**review.checkpoint, "blocking_codes": blockers}
+        # Count explicitly to keep SQLAlchemy portable and avoid exposing raw staging data.
+        open_count = len(
+            (
+                await self.session.scalars(
+                    self.repo.query(ImportQuestion).where(
+                        ImportQuestion.import_review_id == review.id, ImportQuestion.status == "OPEN"
+                    )
+                )
+            ).all()
+        )
+        review.checkpoint["open_question_count"] = open_count
+        review.revision_no += 1
+        audit(
+            self.session,
+            self.user,
+            "import.question_answered",
+            question.id,
+            import_review_id=review.id,
+            action=data.action,
+            source_row=question.source_row,
+            source_column=question.source_column,
+            decision_id=decision.id,
+        )
+        return {"question": self.question_response(question, [decision]), "review": self.response(review)}
+
+    async def resolve_master_proposal(self, review_id, question_id, data: ImportProposalResolution):
+        self.role(edit=False)
+        if self.user.role not in REVIEW_ROLES:
+            raise AppError("FORBIDDEN", "Reviewer diperlukan untuk menyelesaikan proposal master.", 403)
+        review = await self.locked(review_id)
+        if review.status not in ("NEEDS_INPUT", "FAILED"):
+            raise AppError("IMPORT_STATE_CONFLICT", "Batch belum menunggu keputusan pengguna.", 409)
+        if not await self.is_current(review):
+            if review.status != "STALE_REVIEW":
+                self.move(review, ImportAction.INVALIDATE, worker=True)
+            return {"question": None, "review": self.response(review), "stale": True}
+        question = await self.session.scalar(
+            self.repo.query(ImportQuestion)
+            .where(ImportQuestion.id == str(question_id), ImportQuestion.import_review_id == review.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if question is None:
+            raise AppError("RESOURCE_NOT_FOUND", "Pertanyaan tidak ditemukan.", 404)
+        if question.revision_no != data.revision_no:
+            raise AppError("IMPORT_QUESTION_REVISION_CONFLICT", "Revisi pertanyaan berubah; muat ulang.", 409)
+        if question.status != "PENDING_APPROVAL":
+            raise AppError(
+                "IMPORT_PROPOSAL_STATE_CONFLICT", "Pertanyaan tidak menunggu approval proposal master.", 409
+            )
+        decision = await self.session.scalar(
+            self.repo.query(ImportDecision)
+            .where(
+                ImportDecision.import_question_id == question.id,
+                ImportDecision.action == "PROPOSE_MASTER",
+                ImportDecision.proposed_master_definition_id == str(data.master_definition_id),
+            )
+            .with_for_update()
+        )
+        if decision is None:
+            raise AppError(
+                "IMPORT_MASTER_PROPOSAL_INVALID", "Proposal tidak terkait dengan pertanyaan ini.", 422
+            )
+        master = await self.repo.get(MasterDefinition, data.master_definition_id)
+        if not master.is_active or master.status != "APPROVED" or not master.approved_definition_json:
+            raise AppError("IMPORT_MASTER_PROPOSAL_PENDING", "Master usulan belum approved dan aktif.", 409)
+        question.status = "ANSWERED"
+        question.revision_no += 1
+        pending = await self.session.scalar(
+            select(ImportQuestion.id)
+            .where(
+                ImportQuestion.tenant_id == self.user.tenant_id,
+                ImportQuestion.import_review_id == review.id,
+                ImportQuestion.status == "PENDING_APPROVAL",
+            )
+            .limit(1)
+        )
+        blockers = [
+            code for code in review.checkpoint.get("blocking_codes", []) if code != "MASTER_PROPOSAL_PENDING"
+        ]
+        if pending:
+            blockers.append("MASTER_PROPOSAL_PENDING")
+        review.checkpoint = {**review.checkpoint, "blocking_codes": blockers}
+        review.revision_no += 1
+        audit(
+            self.session,
+            self.user,
+            "import.master_proposal_resolved",
+            question.id,
+            import_review_id=review.id,
+            master_definition_id=master.id,
+            decision_id=decision.id,
+        )
+        return {"question": self.question_response(question, [decision]), "review": self.response(review)}
+
     async def action(self, review_id, data, action):
         self.role(edit=True)
         review = await self.locked(review_id)
@@ -348,9 +655,104 @@ class ImportReviewService:
                 good, issues, warnings = transform_rows(
                     snapshot.values, SimpleNamespace(**review.dependencies["sheet"]), config
                 )
+                headers = [
+                    str(value).strip()
+                    for value in snapshot.values[review.dependencies["sheet"]["header_row"] - 1]
+                ]
+                target_for_source = {column.target_column: column.source_column for column in config.columns}
+                outputs = {row_number: output for row_number, output in good}
+                staging = {}
+                for row_number, raw in enumerate(
+                    snapshot.values[review.dependencies["sheet"]["data_start_row"] - 1 :],
+                    review.dependencies["sheet"]["data_start_row"],
+                ):
+                    if not any(value is not None and value != "" for value in raw):
+                        continue
+                    row = await self.repo.add(
+                        ImportReviewRow,
+                        import_review_id=review.id,
+                        source_row=row_number,
+                        raw_data={
+                            headers[i]: self.json_value(value)
+                            for i, value in enumerate(raw)
+                            if i < len(headers)
+                        },
+                        transformed_data=self.json_value(outputs.get(row_number, {})),
+                    )
+                    staging[row_number] = row
                 findings = [{"source_row": i["source_row"], "errors": i["errors"]} for i in issues]
                 findings.extend({"severity": "WARN", **warning} for warning in warnings)
-                blockers = ["DATA_QUALITY_ISSUES"] if issues else []
+                mandatory_questions = 0
+                for issue in issues:
+                    for error in issue["errors"]:
+                        target = error["column"].split(",", 1)[0] if error.get("column") else None
+                        source = target_for_source.get(target)
+                        key = digest({"row": issue["source_row"], "target": target, "code": error["code"]})
+                        await self.repo.add(
+                            ImportQuestion,
+                            import_review_id=review.id,
+                            staging_row_id=staging[issue["source_row"]].id,
+                            source_row=issue["source_row"],
+                            source_column=source,
+                            target_column=target,
+                            question_key=key,
+                            category="DUPLICATE_KEY"
+                            if error["code"] == "DUPLICATE_BUSINESS_KEY"
+                            else "DATA_QUALITY",
+                            prompt="Nilai pada baris/kolom ini tidak dapat digunakan tanpa keputusan pengguna.",
+                            mandatory=True,
+                            allowed_actions=["APPLY_CORRECTION", "CORRECT_SOURCE", "PROPOSE_MASTER"],
+                            evidence={
+                                "error_code": error["code"],
+                                "source_row": issue["source_row"],
+                                "source_column": source,
+                                "target_column": target,
+                            },
+                        )
+                        mandatory_questions += 1
+                for warning in warnings:
+                    target = warning.get("column")
+                    source = target_for_source.get(target)
+                    row_number = warning.get("source_row")
+                    await self.repo.add(
+                        ImportQuestion,
+                        import_review_id=review.id,
+                        staging_row_id=staging.get(row_number).id if staging.get(row_number) else None,
+                        source_row=row_number,
+                        source_column=source,
+                        target_column=target,
+                        question_key=digest(
+                            {
+                                "row": row_number,
+                                "target": target,
+                                "code": warning.get("code"),
+                                "warning": True,
+                            }
+                        ),
+                        category="DATA_QUALITY_WARNING",
+                        prompt="Periksa peringatan nilai ini; nilai asli dapat dipertahankan bila sah.",
+                        mandatory=False,
+                        allowed_actions=["KEEP_ORIGINAL", "APPLY_CORRECTION", "CORRECT_SOURCE"],
+                        evidence={
+                            "error_code": warning.get("code"),
+                            "source_row": row_number,
+                            "source_column": source,
+                            "target_column": target,
+                        },
+                    )
+                for prompt in config.unresolved_questions:
+                    await self.repo.add(
+                        ImportQuestion,
+                        import_review_id=review.id,
+                        question_key=digest({"configuration_question": prompt}),
+                        category="CONFIGURATION",
+                        prompt=prompt,
+                        mandatory=True,
+                        allowed_actions=["CORRECT_SOURCE"],
+                        evidence={"scope": "CONFIGURATION"},
+                    )
+                    mandatory_questions += 1
+                blockers = ["DATA_QUALITY_ISSUES"] if mandatory_questions else []
                 if config.unresolved_questions:
                     blockers.append("CONFIGURATION_QUESTIONS_PENDING")
                 checkpoint = {
@@ -359,6 +761,7 @@ class ImportReviewService:
                     "rows_invalid": len(issues),
                     "warning_count": len(warnings),
                     "blocking_codes": blockers,
+                    "open_question_count": mandatory_questions + len(warnings),
                     "ai_coverage": "NOT_STARTED",
                 }
             except AppError as exc:

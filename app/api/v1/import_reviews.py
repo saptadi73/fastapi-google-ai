@@ -7,7 +7,12 @@ from app.core.exceptions import success
 from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.domain.import_workflow import ImportAction, ImportStatus
-from app.schemas.import_review import ImportReviewAction, ImportReviewCreate
+from app.schemas.import_review import (
+    ImportProposalResolution,
+    ImportQuestionDecision,
+    ImportReviewAction,
+    ImportReviewCreate,
+)
 from app.services.import_review_service import ImportReviewService
 
 router = APIRouter(tags=["Import reviews"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))])
@@ -52,6 +57,50 @@ async def import_findings(
         await ImportReviewService(session, user).findings(review_id, offset, limit),
         offset=offset,
         limit=limit,
+    )
+
+
+@router.get("/import-reviews/{review_id}/questions")
+async def import_questions(
+    review_id: UUID,
+    session: Session,
+    user: CurrentUser,
+    status: str | None = Query(None, pattern=r"^(OPEN|ANSWERED|PENDING_APPROVAL|CANCELLED)$"),
+    category: str | None = Query(None, max_length=40),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    return success(
+        await ImportReviewService(session, user).questions(review_id, status, category, offset, limit),
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.post("/import-reviews/{review_id}/questions/{question_id}/answer", dependencies=edit)
+async def answer_import_question(
+    review_id: UUID,
+    question_id: UUID,
+    data: ImportQuestionDecision,
+    session: Session,
+    user: CurrentUser,
+):
+    return success(await ImportReviewService(session, user).answer_question(review_id, question_id, data))
+
+
+@router.post(
+    "/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal",
+    dependencies=[Depends(require_roles(*REVIEW_ROLES))],
+)
+async def resolve_master_proposal(
+    review_id: UUID,
+    question_id: UUID,
+    data: ImportProposalResolution,
+    session: Session,
+    user: CurrentUser,
+):
+    return success(
+        await ImportReviewService(session, user).resolve_master_proposal(review_id, question_id, data)
     )
 
 

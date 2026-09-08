@@ -2,7 +2,7 @@
 
 Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **8 September 2026**.
 
-Dokumen ini menjelaskan **114 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **117 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -356,6 +356,9 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | POST | `/import-reviews/{review_id}/cancel` | E | ImportReviewAction | 200 | batch CANCELLED |
 | POST | `/import-reviews/{review_id}/revalidate` | E | ImportReviewAction | 200 | batch VALIDATING atau STALE_REVIEW |
 | POST | `/import-reviews/{review_id}/resume` | E | ImportReviewAction | 200 | batch VALIDATING jika blocker sudah diselesaikan |
+| GET | `/import-reviews/{review_id}/questions` | S | status, category, offset, limit | 200 | items[], has_more |
+| POST | `/import-reviews/{review_id}/questions/{question_id}/answer` | E | ImportQuestionDecision | 200 | question, review; stale=true jika dependency berubah |
+| POST | `/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal` | R | ImportProposalResolution | 200 | question, review setelah master aktif-approved |
 
 ## Storage master kanonis (BE-04)
 
@@ -391,7 +394,7 @@ Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-bind
 
 ## 4. Konfigurasi ETL dan approval
 
-**Status BE-02:** klasifikasi per tab sudah aktif melalui GET/PUT `/source-sheets/{sheet_id}/classification`. Body PUT adalah `{"revision_no":1,"dataset_kind":"NON_MASTER"}` atau `MASTER`. Payload policy lengkap BE-01 belum menjadi body API; SourceCreate/ETLConfiguration tetap tidak menerima dataset_kind. Registry/binding master tersedia pada BE-03; MASTER tetap tertahan sebelum review/apply import tersedia. Kontrak respons, error, serta dampak rollout dijelaskan di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md). BE-04 menambah storage/pencarian record dan BE-05 menambah batch review sehingga jumlah operasi aktif menjadi 114.
+**Status BE-02:** klasifikasi per tab sudah aktif melalui GET/PUT `/source-sheets/{sheet_id}/classification`. Body PUT adalah `{"revision_no":1,"dataset_kind":"NON_MASTER"}` atau `MASTER`. Payload policy lengkap BE-01 belum menjadi body API; SourceCreate/ETLConfiguration tetap tidak menerima dataset_kind. Registry/binding master tersedia pada BE-03; MASTER tetap tertahan sebelum review/apply import tersedia. Kontrak respons, error, serta dampak rollout dijelaskan di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md). BE-04 menambah storage/pencarian record, BE-05 batch review, dan BE-06 pertanyaan/keputusan sehingga jumlah operasi aktif menjadi 117.
 
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|

@@ -268,15 +268,26 @@ async def test_import_migration_roundtrip_in_rolled_back_transaction():
     spec = importlib.util.spec_from_file_location("import_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    question_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/6d1305460956_structured_import_questions_and_.py"
+    )
+    question_spec = importlib.util.spec_from_file_location("import_question_migration", question_path)
+    question_migration = importlib.util.module_from_spec(question_spec)
+    question_spec.loader.exec_module(question_migration)
     async with SessionFactory() as session:
         try:
             connection = await session.connection()
 
             def verify(sync):
-                migration.op = Operations(MigrationContext.configure(sync))
+                operations = Operations(MigrationContext.configure(sync))
+                migration.op = operations
+                question_migration.op = operations
+                question_migration.downgrade()
                 migration.downgrade()
                 assert not inspect(sync).has_table("import_review", schema="platform")
                 migration.upgrade()
+                question_migration.upgrade()
                 inspector = inspect(sync)
                 unique = {
                     tuple(u["column_names"])
@@ -289,6 +300,12 @@ async def test_import_migration_roundtrip_in_rolled_back_transaction():
                 }
                 assert ("tenant_id", "created_by") in foreign
                 assert ("tenant_id", "snapshot_id") in foreign
+                assert inspect(sync).has_table("import_question", schema="platform")
+                decision_foreign = {
+                    tuple(f["constrained_columns"])
+                    for f in inspector.get_foreign_keys("import_decision", schema="platform")
+                }
+                assert ("tenant_id", "proposed_master_definition_id") in decision_foreign
 
             await connection.run_sync(verify)
         finally:

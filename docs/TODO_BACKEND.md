@@ -15,13 +15,13 @@ Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres.
 - [x] Semantic product dan structured query satu produk, termasuk saved query dasar.
 - [x] API Reference, contoh payload, dan exporter schema/OpenAPI.
 
-Verifikasi terbaru setelah BE-05: **95 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **114 operasi API**. Migrasi BE-05 `5ab90e816eee` dan checkpoint/recovery diuji pada database test; Alembic check lulus. Integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master dan batch/checkpoint/resume tersedia, sedangkan pemuatan record serta pertanyaan/jawaban per sel masih pekerjaan di bawah.
+Verifikasi terbaru setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **117 operasi API**. Migrasi BE-06 `6d1305460956`, staging pertanyaan/keputusan, dan Alembic check diuji pada database test; integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master, batch/checkpoint, dan pertanyaan/keputusan staging tersedia, sedangkan pemuatan record masih pekerjaan di bawah.
 
 ## Urutan implementasi
 
 ### BE-01 — Kebijakan data dan kontrak dasar
 
-Selesai pada tahap kontrak dasar. Keputusan dan batas implementasi tercatat di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md). BE-02 sampai BE-05 selesai; tahap berikutnya BE-06.
+Selesai pada tahap kontrak dasar. Keputusan dan batas implementasi tercatat di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md). BE-02 sampai BE-06 selesai; tahap berikutnya BE-07.
 
 - [x] Klasifikasi per tab dikonfirmasi pengguna; kontrak hanya menerima SHEET.
 - [x] Pengguna memilih update dengan usulan insert yang wajib disetujui; policy dicatat eksplisit.
@@ -89,14 +89,16 @@ Selesai jika batch yang menunggu pengguna dapat dilanjutkan tanpa membaca sumber
 
 ### BE-06 — Pertanyaan dan keputusan terstruktur per import
 
+Selesai di kode/test; kontrak implementasi ada di [Pertanyaan batch BE-06](IMPORT_QUESTIONS_BE06.md). Proposal master membuat draft registry dan hanya ditutup setelah approval lifecycle master; tidak ada write-back ke Google Sheet.
+
 Prasyarat: BE-05.
 
-- [ ] Buat `import_question` dan `import_decision` dengan ID, baris/kolom, kategori masalah, kandidat, alasan, dan evidence.
-- [ ] Tambahkan API pertanyaan dengan pagination/filter dan API jawaban yang memeriksa revision serta kandidat yang diizinkan.
-- [ ] Dukung pilih record, pertahankan nilai asli untuk temuan yang sah, perbaiki sumber, dan usulan master baru melalui approval.
-- [ ] Terapkan koreksi di staging sambil mempertahankan nilai mentah; jangan menulis balik Google Sheet secara implisit.
-- [ ] Simpan pengguna, waktu, before/after, serta scope keputusan; jawaban per baris bukan alias global otomatis.
-- [ ] Uji jawaban stale, pertanyaan batch/tenant lain, kandidat palsu, jawaban ulang, dan FK wajib yang belum terselesaikan.
+- [x] Buat `import_question` dan `import_decision` dengan ID, baris/kolom, kategori masalah, kandidat, alasan, dan evidence.
+- [x] Tambahkan API pertanyaan dengan pagination/filter dan API jawaban yang memeriksa revision serta kandidat yang diizinkan.
+- [x] Dukung pilih record, pertahankan nilai asli untuk temuan yang sah, perbaiki sumber, dan usulan master baru melalui approval.
+- [x] Terapkan koreksi di staging sambil mempertahankan nilai mentah; jangan menulis balik Google Sheet secara implisit.
+- [x] Simpan pengguna, waktu, before/after, serta scope keputusan; jawaban per baris bukan alias global otomatis.
+- [x] Uji jawaban stale, pertanyaan batch/tenant lain, kandidat palsu, jawaban ulang, dan FK wajib yang belum terselesaikan.
 
 Selesai jika ambiguitas memiliki pertanyaan yang bisa dijawab dan diaudit, bukan sekadar teks yang dihapus dari konfigurasi.
 
@@ -256,7 +258,8 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 | BE-03 | Selesai di kode/test | Registry berversi, candidate review, binding/dry-run/approval; belum memuat record master |
 | BE-04 | Selesai di kode/test | Target per master, UUID stabil, constraint, storage deployment, pencarian/masking; import belum aktif |
 | BE-05 | Selesai di kode/test | Snapshot/policy tetap, idempotency, checkpoint, temuan, cancel/revalidate/resume dan recovery; AI/apply belum aktif |
-| BE-06 sampai BE-11 | Berikutnya; belum mulai | Pertanyaan/jawaban, review/apply master, referensi/FK dan AI review |
+| BE-06 | Selesai di kode/test | Staging, pertanyaan/keputusan berversi, koreksi, kandidat allowlist, proposal registry approved; import/apply belum aktif |
+| BE-07 sampai BE-11 | Berikutnya; belum mulai | Preview/apply master, referensi/FK dan AI review |
 | BE-12–BE-15 | Belum mulai | Perluasan parameter template, taxonomy, semantic, dan operasional |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 

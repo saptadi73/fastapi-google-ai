@@ -286,3 +286,7 @@ Storage master kanonis, UUID record stabil, deployment schema dan pencarian reco
 ## Batch review import BE-05
 
 Batch persisten, checkpoint worker, idempotency, temuan deterministik dan recovery tersedia. Lihat [panduan BE-05](docs/IMPORT_REVIEW_BE05.md). Migrasi baru: `5ab90e816eee`. Pertanyaan/jawaban dan review AI/apply masih tahap berikutnya.
+
+## Pertanyaan batch BE-06
+
+Pertanyaan dan keputusan per baris, staging koreksi, serta proteksi kandidat/revisi tersedia. Lihat [panduan BE-06](docs/IMPORT_QUESTIONS_BE06.md). Migrasi baru: `6d1305460956`. Koreksi tidak menulis balik Google Sheet atau memuat data ke target.

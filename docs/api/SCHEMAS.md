@@ -312,6 +312,36 @@ Body: —.
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
 
+### GET /api/v1/import-reviews/{review_id}/questions
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+| `status` | query | Tidak | `string / null` {} |
+| `category` | query | Tidak | `string / null` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### POST /api/v1/import-reviews/{review_id}/questions/{question_id}/answer
+
+Body: [ImportQuestionDecision](#importquestiondecision).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+| `question_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal
+
+Body: [ImportProposalResolution](#importproposalresolution).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+| `question_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/import-reviews/{review_id}/cancel
 
 Body: [ImportReviewAction](#importreviewaction).
@@ -1170,6 +1200,44 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 ```json
 {
   "feedback": "Hasil sesuai laporan cabang."
+}
+```
+
+### ImportProposalResolution
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `master_definition_id` | Ya | `string (uuid)` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 2,
+  "master_definition_id": "55555555-5555-4555-8555-555555555555"
+}
+```
+
+### ImportQuestionDecision
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `action` | Ya | `string` | — | {"pattern":"^(KEEP_ORIGINAL&#124;APPLY_CORRECTION&#124;CORRECT_SOURCE&#124;SELECT_RECORD&#124;PROPOSE_MASTER)$"} |
+| `selected_candidate_id` | Tidak | `string (uuid) / null` | — | — |
+| `corrected_value` | Tidak | `integer / number / boolean / string / null` | — | — |
+| `reason` | Tidak | `string` | "" | {"maxLength":2000} |
+| `master_proposal` | Tidak | `MasterDefinitionCreate / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "action": "APPLY_CORRECTION",
+  "corrected_value": 321,
+  "reason": "Nilai sudah dikonfirmasi dari dokumen sumber"
 }
 ```
 
@@ -2079,6 +2147,71 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `created_by` | `CHAR(32)` | Tidak |
 | `approved_by` | `CHAR(32)` | Ya |
 | `approved_at` | `DATETIME` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record ImportReview
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `source_id` | `CHAR(32)` | Tidak |
+| `source_sheet_id` | `CHAR(32)` | Tidak |
+| `snapshot_id` | `CHAR(32)` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `idempotency_key` | `VARCHAR(64)` | Tidak |
+| `status` | `VARCHAR(32)` | Tidak |
+| `revision_no` | `INTEGER` | Tidak |
+| `generation` | `INTEGER` | Tidak |
+| `checkpoint` | `JSONB` | Tidak |
+| `job_id` | `CHAR(32)` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record ImportReviewRow
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `import_review_id` | `CHAR(32)` | Tidak |
+| `source_row` | `INTEGER` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record ImportQuestion
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `import_review_id` | `CHAR(32)` | Tidak |
+| `staging_row_id` | `CHAR(32)` | Ya |
+| `source_row` | `INTEGER` | Ya |
+| `source_column` | `VARCHAR(63)` | Ya |
+| `target_column` | `VARCHAR(63)` | Ya |
+| `question_key` | `VARCHAR(64)` | Tidak |
+| `category` | `VARCHAR(40)` | Tidak |
+| `prompt` | `VARCHAR(2000)` | Tidak |
+| `mandatory` | `BOOLEAN` | Tidak |
+| `allowed_actions` | `JSONB` | Tidak |
+| `candidates` | `JSONB` | Tidak |
+| `status` | `VARCHAR(32)` | Tidak |
+| `revision_no` | `INTEGER` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record ImportDecision
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `import_review_id` | `CHAR(32)` | Tidak |
+| `import_question_id` | `CHAR(32)` | Tidak |
+| `decided_by` | `CHAR(32)` | Tidak |
+| `revision_no` | `INTEGER` | Tidak |
+| `action` | `VARCHAR(40)` | Tidak |
+| `selected_candidate_id` | `CHAR(32)` | Ya |
+| `proposed_master_definition_id` | `CHAR(32)` | Ya |
+| `reason` | `VARCHAR(2000)` | Tidak |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |

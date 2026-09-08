@@ -134,3 +134,9 @@ Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](PANDUAN_REV
 Model dan migrasi `5ab90e816eee`, tujuh endpoint batch/temuan, snapshot dan policy tetap, idempotency, checkpoint antar-job, cancel/revalidate/resume, serta recovery worker tersedia. Kontrak frontend ada di [Batch review BE-05](IMPORT_REVIEW_BE05.md); API Reference memuat 114 operasi. Temuan deterministik tidak mengekspos raw values. Batch berhenti pada NEEDS_INPUT untuk masalah data atau AI_REVIEW_NOT_IMPLEMENTED; belum ada review AI, pertanyaan/jawaban terstruktur, approval/apply batch, atau pengalihan sync NON_MASTER lama. Migrasi BE-05 hanya diterapkan di database test pada sesi implementasi ini.
 
 Verifikasi BE-05: **95 tes lulus**, Ruff lulus, Alembic check lulus dan **114 operasi API** terverifikasi. Pengujian memakai database test serta provider mock; bukan bukti integrasi Google/OpenAI production. Tahap berikutnya BE-06.
+
+## Pertanyaan batch BE-06
+
+BE-06 menambah staging raw/transformed/corrected per batch, pertanyaan dan keputusan berversi, serta endpoint list/jawab/resolve proposal. Kontrak frontend ada di [Pertanyaan batch BE-06](IMPORT_QUESTIONS_BE06.md); API Reference memuat 117 operasi. Koreksi tidak menulis Google Sheet atau target trusted; proposal membuat draft registry dan hanya ditutup setelah master approved. Resolver kandidat otomatis/FK/apply belum tersedia. Migrasi `6d1305460956` hanya diterapkan pada database test di sesi ini.
+
+Verifikasi BE-06: **99 tes lulus**, Ruff, Alembic check, dan exporter API lulus. Tahap berikutnya BE-07: preview dan apply master.
