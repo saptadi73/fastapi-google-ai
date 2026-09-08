@@ -4,6 +4,8 @@ Backend modular untuk mengolah Google Sheets menjadi data PostgreSQL, dashboard 
 berbahasa natural melalui semantic catalog. Acuan: [dokumen baseline](docs/Dokumentasi_Backend_FastAPI_Google_Sheet_AI_ETL_NL2SQL.md).
 Lihat [cakupan implementasi dan batasannya](docs/IMPLEMENTASI.md).
 
+Panduan konfigurasi production dan pergantian key tersedia di [Konfigurasi dan rotasi kredensial](docs/KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).
+
 ## Menjalankan di Windows / PowerShell
 
 Proyek menggunakan Python **3.11** (venv lokal: **3.11.16**). Runtime lokal berada di
