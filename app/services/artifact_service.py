@@ -1,17 +1,18 @@
 import asyncio
 import hashlib
-import io
 from pathlib import Path
 from uuid import uuid4
 
 import yaml
-from openpyxl import Workbook
 
 from app.core.config import ROOT, get_settings
 from app.core.exceptions import AppError
 from app.models.configuration import Artifact
+from app.models.etl import Snapshot
+from app.models.source import DataSource, SourceSheet
 from app.repositories.base import TenantRepository
 from app.services.profiling_service import canonical_json
+from app.services.workbook_service import MIME, export_workbook
 
 
 class ArtifactService:
@@ -37,19 +38,18 @@ class ArtifactService:
         elif fmt == "YAML":
             content, mime = yaml.safe_dump(payload, allow_unicode=True).encode(), "application/yaml"
         else:
-            workbook = Workbook()
-            ws = workbook.active
-            ws.title = "Configuration"
-            ws.append(["Field", "Value (canonical JSON)"])
-            for key, value in payload.items():
-                ws.append([key, canonical_json(value)])
-            # All values use JSON serialization, preventing spreadsheet formula evaluation.
-            stream = io.BytesIO()
-            workbook.save(stream)
-            content, mime = (
-                stream.getvalue(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            source = await self.repo.get(DataSource, config.source_id)
+            sheet = await self.repo.get(SourceSheet, config.source_sheet_id)
+            snapshot = await self.repo.session.scalar(
+                self.repo.query(Snapshot)
+                .where(Snapshot.source_sheet_id == sheet.id)
+                .order_by(Snapshot.created_at.desc())
+                .limit(1)
             )
+            if snapshot is None:
+                raise AppError("PROFILE_REQUIRED", "Jalankan profiling sebelum export.", 409)
+            content = await asyncio.to_thread(export_workbook, config, source, sheet, snapshot)
+            mime = MIME
         name = f"config-v{config.version_no}.{fmt.lower()}"
         path = self.root() / config.tenant_id / config.source_sheet_id / config.id / f"{uuid4()}-{name}"
         await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)

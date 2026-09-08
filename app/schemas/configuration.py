@@ -115,6 +115,34 @@ class ConfigurationCreate(StrictModel):
 class ConfigurationPatch(StrictModel):
     revision_no: int = Field(ge=1)
     configuration: ETLConfiguration
+    question_answers: dict[str, str] = Field(default_factory=dict, max_length=100)
+
+    @model_validator(mode="after")
+    def valid_answers(self):
+        if any(
+            not key.strip() or not value.strip() or len(value) > 2000
+            for key, value in self.question_answers.items()
+        ):
+            raise ValueError("Jawaban pertanyaan wajib terisi dan maksimal 2000 karakter")
+        return self
+
+
+REVIEW_SECTIONS = ["identity", "columns", "cleansing", "quality", "load", "semantic"]
+
+
+class ReviewSubmission(StrictModel):
+    revision_no: int = Field(ge=1)
+    snapshot_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    reviewed_columns: list[str] = Field(min_length=1, max_length=100)
+    reviewed_sections: list[Literal["identity", "columns", "cleansing", "quality", "load", "semantic"]]
+
+
+class WorkbookPreviewRequest(StrictModel):
+    content_base64: str = Field(min_length=1, max_length=2_800_000)
+
+
+class WorkbookApplyRequest(ConfigurationPatch):
+    preview_token: str = Field(min_length=1, max_length=8192)
 
 
 class Decision(StrictModel):

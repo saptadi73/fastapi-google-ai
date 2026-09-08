@@ -6,6 +6,12 @@ Lihat [cakupan implementasi dan batasannya](docs/IMPLEMENTASI.md).
 
 Panduan konfigurasi production dan pergantian key tersedia di [Konfigurasi dan rotasi kredensial](docs/KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).
 
+Spesifikasi alur master/non-master, referensi, dan pertanyaan AI tersedia di [Master data dan validasi import](docs/MASTER_DATA_DAN_VALIDASI_IMPORT.md). Fitur ini masih berupa rancangan, belum diimplementasikan.
+
+Acuan integrasi frontend tersedia di [API Reference](docs/API_REFERENCE.md), dilengkapi payload, respons, hak akses, job polling, dan schema lengkap.
+
+Rancangan verifikasi draft AI melalui form dan Excel dijelaskan di [Review konfigurasi ETL](docs/REVIEW_KONFIGURASI_ETL.md), berdasarkan template parameter workbook.
+
 ## Menjalankan di Windows / PowerShell
 
 Proyek menggunakan Python **3.11** (venv lokal: **3.11.16**). Runtime lokal berada di
@@ -265,5 +271,8 @@ dengan akun bootstrap pada database aplikasi, bukan memuat fixture ETL.
 Tes mencakup JWT/refresh/logout, akses lintas tenant, scope cabang, approval terpisah, revision conflict,
 profiling, DQ, idempotency, schema drift, rollback FULL_REFRESH, integritas artifact, clone/activation rollback,
 SQL AST guard, template intent, error envelope, serta adapter Responses API dengan mock.
-#   f a s t a p i - g o o g l e - a i  
+#   f a s t a p i - g o o g l e - a i 
  
+ 
+
+Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](docs/PANDUAN_REVIEW_ETL.md) memuat cara menjalankan migrasi, halaman Vue `/workspace`, payload preview/apply, dan mekanisme persetujuan.

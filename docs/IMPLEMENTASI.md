@@ -101,3 +101,15 @@ model, biaya akun, akses Service Account, atau kuota eksternal sudah diuji live.
 - [SQLAlchemy async](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
 - [Google Sheets batchGet](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/batchGet)
 - [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+
+
+## Rencana master data dan validasi import
+
+Kebutuhan baru untuk klasifikasi master/non-master, master kanonis lintas Sheet, foreign key referensi, review AI per import, dan pertanyaan pengguna didokumentasikan di [Master data dan validasi import](MASTER_DATA_DAN_VALIDASI_IMPORT.md). Dokumen tersebut adalah spesifikasi lanjutan; fitur-fitur itu belum termasuk implementasi saat ini.
+
+
+## API Reference frontend
+
+Endpoint yang sudah tersedia beserta payload, respons, role, error, dan mekanisme frontend dijelaskan di [API Reference](API_REFERENCE.md). Snapshot OpenAPI dan schema dapat diperbarui dengan `scripts/export_api_reference.py`; contoh payload diverifikasi terhadap schema backend.
+
+Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](PANDUAN_REVIEW_ETL.md) memuat cara menjalankan migrasi, halaman Vue `/workspace`, payload preview/apply, dan mekanisme persetujuan.

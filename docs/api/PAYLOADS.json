@@ -1,0 +1,443 @@
+{
+  "LoginRequest": {
+    "tenant_code": "default",
+    "username": "admin",
+    "password": "PASSWORD_LOGIN_ANDA"
+  },
+  "RefreshRequest": {
+    "refresh_token": "REFRESH_TOKEN_DARI_LOGIN"
+  },
+  "PasswordChange": {
+    "current_password": "PASSWORD_LAMA_ANDA",
+    "new_password": "PASSWORD_BARU_MINIMAL_12_KARAKTER"
+  },
+  "UserCreate": {
+    "username": "viewer_jakarta",
+    "password": "PASSWORD_AWAL_MINIMAL_12_KARAKTER",
+    "full_name": "Viewer Cabang Jakarta",
+    "role": "VIEWER",
+    "row_scope": {
+      "SALES": {
+        "branch_name": [
+          "Jakarta"
+        ]
+      }
+    }
+  },
+  "UserUpdate": {
+    "role": "VIEWER",
+    "is_active": true,
+    "row_scope": {
+      "SALES": {
+        "branch_name": [
+          "Jakarta",
+          "Bandung"
+        ]
+      }
+    }
+  },
+  "SourceCreate": {
+    "source_code": "sales_cabang",
+    "name": "Penjualan Cabang",
+    "spreadsheet_url": "https://docs.google.com/spreadsheets/d/ID_SPREADSHEET_ANDA/edit",
+    "description": "Satu baris per transaksi penjualan",
+    "credential_ref": "default",
+    "sync_schedule": "0 */6 * * *"
+  },
+  "SheetUpdate": {
+    "range_a1": "A:D",
+    "header_row": 1,
+    "data_start_row": 2,
+    "enabled": true
+  },
+  "AIConfigurationRequest": {
+    "source_sheet_id": "22222222-2222-4222-8222-222222222222"
+  },
+  "ConfigurationCreate": {
+    "source_sheet_id": "22222222-2222-4222-8222-222222222222",
+    "configuration": {
+      "schema_version": "1.0",
+      "dataset_business_name": "Penjualan Cabang",
+      "dataset_description": "Data transaksi penjualan per cabang",
+      "grain": "Satu baris per nomor transaksi",
+      "target_schema": "trusted",
+      "target_table": "sales_transaction",
+      "load_strategy": "UPSERT",
+      "columns": [
+        {
+          "source_column": "ID",
+          "target_column": "transaction_id",
+          "target_type": "text",
+          "nullable": false,
+          "is_business_key": true,
+          "transformation_codes": [
+            "trim"
+          ]
+        },
+        {
+          "source_column": "Tanggal",
+          "target_column": "transaction_date",
+          "target_type": "date",
+          "nullable": false,
+          "transformation_codes": [
+            "parse_date_id"
+          ]
+        },
+        {
+          "source_column": "Cabang",
+          "target_column": "branch_name",
+          "target_type": "text",
+          "nullable": false,
+          "transformation_codes": [
+            "trim"
+          ]
+        },
+        {
+          "source_column": "Total",
+          "target_column": "net_amount",
+          "target_type": "numeric",
+          "nullable": false,
+          "transformation_codes": [
+            "parse_decimal_id"
+          ]
+        }
+      ],
+      "data_quality_rules": [
+        {
+          "column": "net_amount",
+          "rule": "min",
+          "value": 0,
+          "action_on_fail": "REJECT_ROW"
+        }
+      ],
+      "semantic": {
+        "code": "SALES",
+        "dimensions": [
+          "transaction_id",
+          "transaction_date",
+          "branch_name"
+        ],
+        "metrics": [
+          {
+            "code": "net_sales",
+            "column": "net_amount",
+            "aggregation": "sum",
+            "label": "Penjualan bersih"
+          },
+          {
+            "code": "transaction_count",
+            "column": "transaction_id",
+            "aggregation": "count",
+            "label": "Jumlah transaksi"
+          }
+        ],
+        "allowed_roles": [
+          "PLATFORM_ADMIN",
+          "DATA_STEWARD",
+          "ANALYST",
+          "VIEWER"
+        ]
+      },
+      "unresolved_questions": [],
+      "overall_confidence": 1
+    }
+  },
+  "ConfigurationPatch": {
+    "revision_no": 1,
+    "configuration": {
+      "schema_version": "1.0",
+      "dataset_business_name": "Penjualan Cabang",
+      "dataset_description": "Data transaksi penjualan per cabang",
+      "grain": "Satu baris per nomor transaksi",
+      "target_schema": "trusted",
+      "target_table": "sales_transaction",
+      "load_strategy": "UPSERT",
+      "columns": [
+        {
+          "source_column": "ID",
+          "target_column": "transaction_id",
+          "target_type": "text",
+          "nullable": false,
+          "is_business_key": true,
+          "transformation_codes": [
+            "trim"
+          ]
+        },
+        {
+          "source_column": "Tanggal",
+          "target_column": "transaction_date",
+          "target_type": "date",
+          "nullable": false,
+          "transformation_codes": [
+            "parse_date_id"
+          ]
+        },
+        {
+          "source_column": "Cabang",
+          "target_column": "branch_name",
+          "target_type": "text",
+          "nullable": false,
+          "transformation_codes": [
+            "trim"
+          ]
+        },
+        {
+          "source_column": "Total",
+          "target_column": "net_amount",
+          "target_type": "numeric",
+          "nullable": false,
+          "transformation_codes": [
+            "parse_decimal_id"
+          ]
+        }
+      ],
+      "data_quality_rules": [
+        {
+          "column": "net_amount",
+          "rule": "min",
+          "value": 0,
+          "action_on_fail": "REJECT_ROW"
+        }
+      ],
+      "semantic": {
+        "code": "SALES",
+        "dimensions": [
+          "transaction_id",
+          "transaction_date",
+          "branch_name"
+        ],
+        "metrics": [
+          {
+            "code": "net_sales",
+            "column": "net_amount",
+            "aggregation": "sum",
+            "label": "Penjualan bersih"
+          },
+          {
+            "code": "transaction_count",
+            "column": "transaction_id",
+            "aggregation": "count",
+            "label": "Jumlah transaksi"
+          }
+        ],
+        "allowed_roles": [
+          "PLATFORM_ADMIN",
+          "DATA_STEWARD",
+          "ANALYST",
+          "VIEWER"
+        ]
+      },
+      "unresolved_questions": [],
+      "overall_confidence": 1
+    },
+    "question_answers": {}
+  },
+  "Decision": {
+    "revision_no": 2,
+    "comment": "Mapping, business key, dan hasil validasi sudah diperiksa."
+  },
+  "ExportRequest": {
+    "format": "XLSX"
+  },
+  "ResolutionRequest": {
+    "resolution": "Nilai tanggal sudah diperbaiki pada Google Sheets; menunggu reprocess."
+  },
+  "ProductUpdate": {
+    "status": "ACTIVE",
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "SavedQueryCreate": {
+    "code": "sales_by_branch",
+    "data_product_code": "SALES",
+    "plan": {
+      "metrics": [
+        "net_sales",
+        "transaction_count"
+      ],
+      "dimensions": [
+        "branch_name"
+      ],
+      "filters": [
+        {
+          "field": "transaction_date",
+          "operator": "between",
+          "value": [
+            "2026-09-01",
+            "2026-09-30"
+          ]
+        }
+      ],
+      "sort": [
+        {
+          "field": "net_sales",
+          "direction": "desc"
+        }
+      ],
+      "time_grain": "none",
+      "limit": 100,
+      "offset": 0
+    },
+    "examples": [
+      "Penjualan per cabang September 2026"
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "QueryPlan": {
+    "metrics": [
+      "net_sales",
+      "transaction_count"
+    ],
+    "dimensions": [
+      "branch_name"
+    ],
+    "filters": [
+      {
+        "field": "transaction_date",
+        "operator": "between",
+        "value": [
+          "2026-09-01",
+          "2026-09-30"
+        ]
+      }
+    ],
+    "sort": [
+      {
+        "field": "net_sales",
+        "direction": "desc"
+      }
+    ],
+    "time_grain": "none",
+    "limit": 100,
+    "offset": 0
+  },
+  "QuestionRequest": {
+    "question": "Berapa penjualan per cabang pada September 2026?",
+    "data_product_code": "SALES",
+    "saved_query_code": null
+  },
+  "FeedbackRequest": {
+    "feedback": "Hasil sesuai laporan cabang."
+  },
+  "ReviewSubmission": {
+    "revision_no": 1,
+    "snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reviewed_columns": [
+      "transaction_id",
+      "transaction_date",
+      "branch_name",
+      "net_amount"
+    ],
+    "reviewed_sections": [
+      "identity",
+      "columns",
+      "cleansing",
+      "quality",
+      "load",
+      "semantic"
+    ]
+  },
+  "WorkbookPreviewRequest": {
+    "content_base64": "BASE64_DARI_FILE_XLSX_EXPORT_APLIKASI"
+  },
+  "WorkbookApplyRequest": {
+    "revision_no": 1,
+    "configuration": {
+      "schema_version": "1.0",
+      "dataset_business_name": "Penjualan Cabang",
+      "dataset_description": "Data transaksi penjualan per cabang",
+      "grain": "Satu baris per nomor transaksi",
+      "target_schema": "trusted",
+      "target_table": "sales_transaction",
+      "load_strategy": "UPSERT",
+      "columns": [
+        {
+          "source_column": "ID",
+          "target_column": "transaction_id",
+          "target_type": "text",
+          "nullable": false,
+          "is_business_key": true,
+          "transformation_codes": [
+            "trim"
+          ]
+        },
+        {
+          "source_column": "Tanggal",
+          "target_column": "transaction_date",
+          "target_type": "date",
+          "nullable": false,
+          "transformation_codes": [
+            "parse_date_id"
+          ]
+        },
+        {
+          "source_column": "Cabang",
+          "target_column": "branch_name",
+          "target_type": "text",
+          "nullable": false,
+          "transformation_codes": [
+            "trim"
+          ]
+        },
+        {
+          "source_column": "Total",
+          "target_column": "net_amount",
+          "target_type": "numeric",
+          "nullable": false,
+          "transformation_codes": [
+            "parse_decimal_id"
+          ]
+        }
+      ],
+      "data_quality_rules": [
+        {
+          "column": "net_amount",
+          "rule": "min",
+          "value": 0,
+          "action_on_fail": "REJECT_ROW"
+        }
+      ],
+      "semantic": {
+        "code": "SALES",
+        "dimensions": [
+          "transaction_id",
+          "transaction_date",
+          "branch_name"
+        ],
+        "metrics": [
+          {
+            "code": "net_sales",
+            "column": "net_amount",
+            "aggregation": "sum",
+            "label": "Penjualan bersih"
+          },
+          {
+            "code": "transaction_count",
+            "column": "transaction_id",
+            "aggregation": "count",
+            "label": "Jumlah transaksi"
+          }
+        ],
+        "allowed_roles": [
+          "PLATFORM_ADMIN",
+          "DATA_STEWARD",
+          "ANALYST",
+          "VIEWER"
+        ]
+      },
+      "unresolved_questions": [],
+      "overall_confidence": 1
+    },
+    "question_answers": {},
+    "preview_token": "TOKEN_DARI_WORKBOOK_PREVIEW"
+  }
+}

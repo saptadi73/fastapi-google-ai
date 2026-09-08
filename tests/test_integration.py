@@ -1,8 +1,11 @@
+import base64
+import io
 from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
+from openpyxl import load_workbook
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import make_url
 
@@ -162,6 +165,20 @@ async def onboard(ctx, config_data):
 
 
 async def activate(ctx, config):
+    validation = (await request(ctx, "POST", f"/configurations/{config['id']}/validate"))["data"]
+    config = (
+        await request(
+            ctx,
+            "POST",
+            f"/configurations/{config['id']}/submit-review",
+            data={
+                "revision_no": config["revision_no"],
+                "snapshot_hash": validation["snapshot_hash"],
+                "reviewed_columns": [c["target_column"] for c in config["configuration_json"]["columns"]],
+                "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+            },
+        )
+    )["data"]
     await request(
         ctx,
         "POST",
@@ -179,6 +196,67 @@ async def sync(ctx, source_id):
     data = await request(ctx, "POST", f"/sources/{source_id}/sync", expected=202)
     await run_pending(ctx.tenant_id)
     return (await request(ctx, "GET", "/jobs/" + data["data"]["job_id"]))["data"]
+
+
+async def test_workbook_preview_apply_review_evidence_and_tenant_isolation(context, config_data):
+    ctx = context
+    config_data["unresolved_questions"] = ["Apakah ID unik?"]
+    _, _, config = await onboard(ctx, config_data)
+    path = f"/configurations/{config['id']}"
+    await request(ctx, "GET", path + "/review", who="outsider", expected=404)
+    view = (await request(ctx, "GET", path + "/review"))["data"]
+    assert view["validation"]["valid"] is False
+    assert len(view["validation"]["row_previews"]) == 3
+    config_data["unresolved_questions"] = []
+    await request(ctx, "PATCH", path, expected=422, data={"revision_no": 1, "configuration": config_data})
+    await request(ctx, "POST", path + "/approve", who="approver", expected=409, data={"revision_no": 1})
+    artifact = (await request(ctx, "POST", path + "/export", expected=201, data={"format": "XLSX"}))["data"]
+    response = await ctx.client.get(
+        "/api/v1" + path + f"/artifacts/{artifact['id']}/download", headers=ctx.headers["admin"]
+    )
+    assert response.status_code == 200
+    book = load_workbook(io.BytesIO(response.content))
+    book["14 Review"]["B2"] = "Sales reviewed"
+    book["14 Review"]["B10"] = "Ya, ID transaksi unik."
+    book["14 Review"]["C10"] = "Selesai"
+    stream = io.BytesIO()
+    book.save(stream)
+    upload = {"content_base64": base64.b64encode(stream.getvalue()).decode()}
+    await request(ctx, "POST", path + "/workbook-preview", who="viewer", expected=403, data=upload)
+    p = (await request(ctx, "POST", path + "/workbook-preview", data=upload))["data"]
+    assert p["can_apply"] is True, p
+    assert p["validation"]["valid"] is True
+    unchanged = (await request(ctx, "GET", path))["data"]
+    assert unchanged["revision_no"] == 1
+    assert unchanged["configuration_json"]["dataset_business_name"] != "Sales reviewed"
+    body = {key: p[key] for key in ("revision_no", "configuration", "question_answers", "preview_token")}
+    tampered = {**body, "configuration": {**body["configuration"], "dataset_business_name": "Tampered"}}
+    await request(ctx, "POST", path + "/workbook-apply", data=tampered, expected=409)
+    updated = (await request(ctx, "POST", path + "/workbook-apply", data=body))["data"]
+    assert updated["revision_no"] == 2
+    assert updated["review_state"]["answers"]["Apakah ID unik?"]["answer"] == "Ya, ID transaksi unik."
+    await request(ctx, "POST", path + "/workbook-apply", data=body, expected=409)
+    await request(ctx, "POST", path + "/approve", who="approver", expected=409, data={"revision_no": 2})
+    review = {
+        "revision_no": 2,
+        "snapshot_hash": p["validation"]["snapshot_hash"],
+        "reviewed_columns": [c["target_column"] for c in updated["configuration_json"]["columns"]],
+        "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+    }
+    await request(
+        ctx, "POST", path + "/submit-review", data={**review, "reviewed_sections": []}, expected=422
+    )
+    await request(
+        ctx, "POST", path + "/submit-review", data={**review, "snapshot_hash": "0" * 64}, expected=409
+    )
+    await request(ctx, "POST", path + "/submit-review", data=review)
+    await request(ctx, "POST", path + "/approve", who="approver", data={"revision_no": 3})
+    ctx.values[1][3] = 999
+    queued = (await request(ctx, "POST", path + "/deploy", who="approver", expected=202))["data"]
+    await run_pending(ctx.tenant_id)
+    job = (await request(ctx, "GET", "/jobs/" + queued["job_id"]))["data"]
+    assert job["status"] == "FAILED"
+    assert job["error_code"] == "REVIEW_STALE"
 
 
 async def test_end_to_end_etl_permissions_and_saved_query(context, config_data):

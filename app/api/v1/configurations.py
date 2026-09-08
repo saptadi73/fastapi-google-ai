@@ -9,7 +9,16 @@ from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.configuration import Artifact, Configuration
 from app.repositories.base import record
-from app.schemas.configuration import ConfigurationCreate, ConfigurationPatch, Decision, ExportRequest
+from app.schemas.configuration import (
+    ConfigurationCreate,
+    ConfigurationPatch,
+    Decision,
+    ExportRequest,
+    ReviewSubmission,
+    WorkbookApplyRequest,
+    WorkbookPreviewRequest,
+)
+from app.services.configuration_review_service import ConfigurationReviewService
 from app.services.configuration_service import ConfigurationService
 
 router = APIRouter(
@@ -19,6 +28,23 @@ router = APIRouter(
 )
 edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
+
+
+@router.get("/{config_id}/review")
+async def review_details(config_id: UUID, session: Session, user: CurrentUser):
+    return success(await ConfigurationReviewService(session, user).review(config_id))
+
+
+@router.post("/{config_id}/workbook-preview", dependencies=edit)
+async def workbook_preview(
+    config_id: UUID, data: WorkbookPreviewRequest, session: Session, user: CurrentUser
+):
+    return success(await ConfigurationReviewService(session, user).preview(config_id, data))
+
+
+@router.post("/{config_id}/workbook-apply", dependencies=edit)
+async def workbook_apply(config_id: UUID, data: WorkbookApplyRequest, session: Session, user: CurrentUser):
+    return success(record(await ConfigurationReviewService(session, user).apply(config_id, data)))
 
 
 @router.post("", status_code=201, dependencies=edit)
@@ -47,8 +73,8 @@ async def validate(config_id: UUID, session: Session, user: CurrentUser):
 
 
 @router.post("/{config_id}/submit-review", dependencies=edit)
-async def submit_review(config_id: UUID, session: Session, user: CurrentUser):
-    return success(record(await ConfigurationService(session, user).submit_review(config_id)))
+async def submit_review(config_id: UUID, data: ReviewSubmission, session: Session, user: CurrentUser):
+    return success(record(await ConfigurationService(session, user).submit_review(config_id, data)))
 
 
 @router.post("/{config_id}/approve", dependencies=review)

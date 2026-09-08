@@ -37,6 +37,7 @@ class Configuration(TenantEntity, Base):
     status: Mapped[str] = mapped_column(String(40), default="NEEDS_REVIEW")
     based_on_fingerprint: Mapped[str] = mapped_column(String(64))
     configuration_json: Mapped[dict] = mapped_column(JSONB)
+    review_state: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
     approved_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
