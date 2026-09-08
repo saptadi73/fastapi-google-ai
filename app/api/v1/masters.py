@@ -13,6 +13,7 @@ from app.schemas.master import (
     MasterDefinitionCreate,
     MasterDefinitionPatch,
     MasterRevisionRequest,
+    MasterColumnBindingCreate,
 )
 from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService
@@ -137,3 +138,29 @@ async def approve_binding(sheet_id: UUID, data: MasterRevisionRequest, session: 
 @router.post("/source-sheets/{sheet_id}/master-binding/reject", dependencies=review)
 async def reject_binding(sheet_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser):
     return success(record(await MasterService(session, user).binding_decision(sheet_id, data, False)))
+
+
+@router.get("/source-sheets/{sheet_id}/column-bindings")
+async def get_column_bindings(sheet_id: UUID, session: Session, user: CurrentUser):
+    return success(await MasterService(session, user).column_bindings(sheet_id))
+
+
+@router.put("/source-sheets/{sheet_id}/column-bindings", dependencies=edit)
+async def put_column_binding(
+    sheet_id: UUID, data: MasterColumnBindingCreate, session: Session, user: CurrentUser
+):
+    return success(await MasterService(session, user).save_column_binding(sheet_id, data))
+
+
+@router.post("/column-bindings/{binding_id}/approve", dependencies=review)
+async def approve_column_binding(
+    binding_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser
+):
+    return success(await MasterService(session, user).column_binding_decision(binding_id, data, True))
+
+
+@router.post("/column-bindings/{binding_id}/reject", dependencies=review)
+async def reject_column_binding(
+    binding_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser
+):
+    return success(await MasterService(session, user).column_binding_decision(binding_id, data, False))

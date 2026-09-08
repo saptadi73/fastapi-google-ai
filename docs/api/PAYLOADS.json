@@ -577,5 +577,15 @@
     "revision_no": 5,
     "master_definition_id": "55555555-5555-4555-8555-555555555555",
     "value": "SKU-001"
+  },
+  "MasterColumnBindingCreate": {
+    "revision_no": 0,
+    "source_column": "Kode Produk",
+    "master_definition_id": "55555555-5555-4555-8555-555555555555",
+    "master_field": "product_code",
+    "master_version": 1,
+    "required": true,
+    "normalization": "TRIM_CASEFOLD",
+    "cardinality": "MANY_TO_ONE"
   }
 }

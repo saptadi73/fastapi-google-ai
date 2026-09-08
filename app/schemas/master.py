@@ -86,3 +86,14 @@ class MasterBindingUpdate(StrictModel):
     master_version: int = Field(ge=1)
     classification_revision: int = Field(ge=1)
     columns: list[ColumnMapping] = Field(min_length=1, max_length=100)
+
+
+class MasterColumnBindingCreate(StrictModel):
+    revision_no: int = Field(ge=0)
+    source_column: str = Field(min_length=1, max_length=200)
+    master_definition_id: UUID
+    master_field: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    master_version: int = Field(ge=1)
+    required: bool = False
+    normalization: str = Field(default="TRIM_CASEFOLD", pattern=r"^[A-Z_]{3,40}$")
+    cardinality: str = Field(default="MANY_TO_ONE", pattern=r"^(MANY_TO_ONE|ONE_TO_ONE)$")

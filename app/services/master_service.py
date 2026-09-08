@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.base import now
-from app.models.master import MasterDefinition, MasterSourceBinding
+from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.source import SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.repositories.source_repository import SourceRepository
@@ -450,3 +450,54 @@ class MasterService:
             "blocking_reason": reason,
             "validation": validation,
         }
+
+    async def column_bindings(self, sheet_id):
+        await self.repo.get(SourceSheet, sheet_id)
+        rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
+            MasterColumnBinding.source_sheet_id == str(sheet_id)
+        ).order_by(MasterColumnBinding.source_column))).all()
+        return [record(row) for row in rows]
+
+    async def save_column_binding(self, sheet_id, data):
+        self.require_role(EDIT_ROLES)
+        await self.repo.get(SourceSheet, sheet_id)
+        master = await self.repo.get(MasterDefinition, data.master_definition_id)
+        if master.status != "APPROVED" or master.approved_version != data.master_version:
+            raise AppError("MASTER_VERSION_UNAVAILABLE", "Master harus aktif dan versi approved sesuai.", 409)
+        definition = MasterSchema.model_validate(master.approved_definition_json)
+        if data.master_field not in {field.name for field in definition.fields}:
+            raise AppError("MASTER_FIELD_INVALID", "Field tujuan tidak tersedia pada master.", 422)
+        binding = await self.session.scalar(self.repo.query(MasterColumnBinding).where(
+            MasterColumnBinding.source_sheet_id == str(sheet_id),
+            MasterColumnBinding.source_column == data.source_column,
+        ).with_for_update())
+        if data.revision_no != (binding.revision_no if binding else 0):
+            raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Revisi binding berubah; muat ulang.", 409)
+        values = data.model_dump(exclude={"revision_no"})
+        values["created_by"] = self.user.id
+        if binding:
+            for key, value in values.items(): setattr(binding, key, value)
+            binding.revision_no += 1
+        else:
+            binding = await self.repo.add(MasterColumnBinding, source_sheet_id=str(sheet_id), **values)
+        audit(self.session, self.user, "master.column_binding_saved", binding.id, source_column=data.source_column)
+        return record(binding)
+
+    async def column_binding_decision(self, binding_id, data, approve=True):
+        self.require_role(REVIEW_ROLES)
+        binding = await self.repo.get(MasterColumnBinding, binding_id)
+        if binding.revision_no != data.revision_no or binding.status != "DRAFT":
+            raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Binding berubah atau bukan draft.", 409)
+        if approve:
+            if get_settings().require_separate_approver and binding.created_by == self.user.id:
+                raise AppError("SEPARATE_APPROVER_REQUIRED", "Approver harus berbeda dari editor binding.", 403)
+            master = await self.repo.get(MasterDefinition, binding.master_definition_id)
+            if master.status != "APPROVED" or master.approved_version != binding.master_version:
+                raise AppError("MASTER_VERSION_UNAVAILABLE", "Versi master binding sudah tidak aktif.", 409)
+            binding.approved_by, binding.approved_at = self.user.id, now()
+            binding.status = "APPROVED"
+        else:
+            binding.status = "REJECTED"
+        binding.revision_no += 1
+        audit(self.session, self.user, "master.column_binding_decided", binding.id, status=binding.status)
+        return record(binding)
