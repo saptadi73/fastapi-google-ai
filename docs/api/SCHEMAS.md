@@ -1001,6 +1001,11 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `pii_classification` | Tidak | `enum ["NONE","LOW","MEDIUM","HIGH"]` | "NONE" | — |
 | `confidence` | Tidak | `number` | 1 | {"maximum":1.0,"minimum":0.0} |
 | `reason` | Tidak | `string` | "" | — |
+| `numeric_precision` | Tidak | `integer / null` | — | — |
+| `numeric_scale` | Tidak | `integer / null` | — | — |
+| `date_format` | Tidak | `string / null` | — | — |
+| `number_locale` | Tidak | `string / null` | — | — |
+| `varchar_length` | Tidak | `integer / null` | — | — |
 
 ### ConfigurationCreate
 

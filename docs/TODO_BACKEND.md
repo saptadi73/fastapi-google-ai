@@ -181,11 +181,13 @@ Selesai jika kebutuhan inti master/non-master berjalan dari pendaftaran sampai t
 
 Prasyarat: BE-11; inventaris field dapat disiapkan lebih awal.
 
+Status: dukungan runtime bertahap tersedia untuk numeric precision/scale, format tanggal, locale angka ID/US, panjang varchar, dan allowlist transformasi. Unit/currency conversion, timezone runtime penuh, multi-target, schema evolution, dan DQ threshold masih terbuka.
+
 - [x] Sediakan parameter catalog runtime untuk field yang sudah didukung dan menandai field unsupported beserta tahap pemiliknya.
-- [x] Inventaris awal locale/timezone/format tanggal/angka, currency, UOM, dan precision/scale pada parameter catalog sebagai unsupported sampai runtime siap.
+- [x] Inventaris awal locale/timezone/format tanggal/angka, currency, dan UOM pada parameter catalog sebagai unsupported; precision/scale numeric sudah didukung compiler.
 - [x] Publikasikan allowlist transformasi runtime dan tandai transform berparameter serta DQ threshold sebagai unsupported.
 - [x] Inventaris effective dating yang sudah didukung policy master serta unit conversion, multi-target, dan schema evolution sebagai unsupported.
-- [ ] Lengkapi locale/timezone/format tanggal/angka, entity/domain, unit/currency, panjang varchar, serta numeric precision/scale.
+- [ ] Lengkapi locale/timezone, entity/domain, dan unit/currency; format tanggal, numeric precision/scale, locale angka, dan panjang varchar sudah didukung bertahap.
 - [x] Sediakan registry operasi allowlist beserta parameter schema dan `on_error`; eksekusi transform berparameter, kondisi, dan urutan dinamis tetap diblokir sampai compiler siap.
 - [ ] Lengkapi DQ format/domain, threshold persen, severity/owner, max_age_days, serta default value dengan semantics yang disetujui.
 - [ ] Implementasikan versi/master bermasa berlaku untuk harga, struktur gaji, atau kebijakan bertanggal; pertahankan fakta historis.

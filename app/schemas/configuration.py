@@ -32,6 +32,25 @@ class ColumnMapping(StrictModel):
     pii_classification: Literal["NONE", "LOW", "MEDIUM", "HIGH"] = "NONE"
     confidence: float = Field(default=1, ge=0, le=1)
     reason: str = ""
+    numeric_precision: int | None = Field(default=None, ge=1, le=100)
+    numeric_scale: int | None = Field(default=None, ge=0, le=50)
+    date_format: str | None = Field(default=None, max_length=40)
+    number_locale: str | None = Field(default=None, pattern=r"^(ID|US)$")
+    varchar_length: int | None = Field(default=None, ge=1, le=10485760)
+
+    @model_validator(mode="after")
+    def valid_numeric_scale(self):
+        if (self.numeric_precision is not None or self.numeric_scale is not None) and self.target_type != "numeric":
+            raise ValueError("numeric_precision/scale hanya berlaku untuk target numeric")
+        if self.numeric_scale is not None and self.numeric_precision is not None and self.numeric_scale > self.numeric_precision:
+            raise ValueError("numeric_scale tidak boleh melebihi numeric_precision")
+        if self.date_format is not None and "parse_date_id" not in self.transformation_codes:
+            raise ValueError("date_format memerlukan transform parse_date_id")
+        if self.number_locale is not None and "parse_decimal_id" not in self.transformation_codes:
+            raise ValueError("number_locale memerlukan transform parse_decimal_id")
+        if self.varchar_length is not None and self.target_type not in ("text", "varchar"):
+            raise ValueError("varchar_length hanya berlaku untuk target text/varchar")
+        return self
 
 
 class QualityRule(StrictModel):

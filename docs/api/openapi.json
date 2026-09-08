@@ -13074,6 +13074,69 @@
             "type": "string",
             "title": "Reason",
             "default": ""
+          },
+          "numeric_precision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numeric Precision"
+          },
+          "numeric_scale": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 50.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numeric Scale"
+          },
+          "date_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Format"
+          },
+          "number_locale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(ID|US)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number Locale"
+          },
+          "varchar_length": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10485760.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Varchar Length"
           }
         },
         "additionalProperties": false,

@@ -6,21 +6,22 @@ from uuid import UUID
 from app.core.exceptions import AppError
 
 
-def decimal_id(value):
+def decimal_id(value, locale="ID"):
     if isinstance(value, (int, float, Decimal)):
         return Decimal(str(value))
     value = str(value).strip().replace("Rp", "").replace(" ", "")
-    if not re.fullmatch(r"-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?", value):
+    pattern = r"-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?" if locale == "ID" else r"-?\d+(?:\.\d+)?"
+    if not re.fullmatch(pattern, value):
         raise ValueError("Invalid Indonesian decimal")
-    return Decimal(value.replace(".", "").replace(",", "."))
+    return Decimal(value.replace(".", "").replace(",", ".") if locale == "ID" else value)
 
 
-def date_id(value):
+def date_id(value, fmt=None):
     if isinstance(value, (int, float)):
         return (datetime(1899, 12, 30) + timedelta(days=value)).date()
-    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+    for current in ((fmt,) if fmt else ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d")):
         try:
-            return datetime.strptime(str(value).strip(), fmt).date()
+            return datetime.strptime(str(value).strip(), current).date()
         except ValueError:
             continue
     raise ValueError("Invalid date")
@@ -91,7 +92,12 @@ def transform_rows(values, sheet, config):
             try:
                 for transform in column.transformation_codes:
                     if value is not None:
-                        value = TRANSFORMS[transform](value)
+                        if transform == "parse_date_id":
+                            value = date_id(value, column.date_format)
+                        elif transform == "parse_decimal_id":
+                            value = decimal_id(value, column.number_locale or "ID")
+                        else:
+                            value = TRANSFORMS[transform](value)
                 value = cast_value(value, column.target_type)
                 if value is None and not column.nullable:
                     raise ValueError("Required value")

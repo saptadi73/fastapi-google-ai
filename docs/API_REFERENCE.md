@@ -435,6 +435,18 @@ Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-bind
 | GET | `/configurations/{config_id}/questions` | S | — | 200 | string[] pertanyaan |
 | GET | `/configurations/{config_id}/diff` | S | `against` UUID wajib | 200 | map field → `{before, after}` |
 
+## 5. Taxonomy (BE-13)
+
+Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat taxonomy/term dalam status `DRAFT`; reviewer mengubah taxonomy menjadi `APPROVED`. Binding kolom dan validasi `in_taxonomy` akan menggunakan versi approved.
+
+| Method | Path | Hak | Body / query | HTTP sukses | Data respons |
+|---|---|---|---|---|---|
+| POST | `/taxonomies` | E | TaxonomyCreate | 201 | Taxonomy DRAFT |
+| GET | `/taxonomies` | S | — | 200 | daftar taxonomy tenant |
+| GET | `/taxonomies/{taxonomy_id}/terms` | S | UUID taxonomy | 200 | daftar term dan hierarchy |
+| POST | `/taxonomies/{taxonomy_id}/terms` | E | TaxonomyTermCreate | 201 | TaxonomyTerm |
+| POST | `/taxonomies/{taxonomy_id}/approve` | R | — | 200 | Taxonomy APPROVED dengan version baru |
+
 ### Payload konfigurasi
 
 Contoh ConfigurationCreate lengkap yang valid secara schema:

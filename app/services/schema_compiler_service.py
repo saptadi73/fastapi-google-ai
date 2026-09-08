@@ -40,6 +40,16 @@ TYPE_MAP = {
 }
 
 
+def mapped_type(mapping):
+    if mapping.varchar_length is not None and mapping.target_type in ("text", "varchar"):
+        return String(mapping.varchar_length)
+    if mapping.target_type == "numeric" and (
+        mapping.numeric_precision is not None or mapping.numeric_scale is not None
+    ):
+        return Numeric(mapping.numeric_precision, mapping.numeric_scale or 0)
+    return TYPE_MAP[mapping.target_type]()
+
+
 def compile_master_table(definition, master_id, tenant_id, load_strategy="UPSERT"):
     """Canonical identity belongs to the master, never to a source tab."""
     if load_strategy != "UPSERT":
@@ -99,7 +109,7 @@ def compile_table(config, sheet_id):
         Column("_row_hash", String(64), nullable=False),
     ]
     for col in config.columns:
-        columns.append(Column(col.target_column, TYPE_MAP[col.target_type](), nullable=col.nullable))
+        columns.append(Column(col.target_column, mapped_type(col), nullable=col.nullable))
     keys = [c.target_column for c in config.columns if c.is_business_key or c.is_primary_key]
     constraints = [UniqueConstraint("_tenant_id", *keys)] if keys else []
     if not keys:

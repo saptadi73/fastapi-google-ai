@@ -12,6 +12,7 @@ from app.api.v1 import (
     reports,
     semantic_catalog,
     sources,
+    taxonomies,
 )
 from app.core.routing import APIRouter
 from app.schemas.common import Envelope
@@ -31,6 +32,7 @@ for child in (
     auth.users_router,
     sources.router,
     masters.router,
+    taxonomies.router,
     import_reviews.router,
     profiling.router,
     configurations.router,
