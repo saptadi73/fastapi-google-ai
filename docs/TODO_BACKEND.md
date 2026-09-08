@@ -127,23 +127,24 @@ Prasyarat: BE-03, BE-06, dan BE-07.
 - [ ] Implementasikan alias berscope tenant/master/kolom, dengan approval, revision, dan pencabutan.
 - [ ] Uji referensi tidak ditemukan, ambigu, master nonaktif, relasi opsional, serta perubahan alias/master setelah preview.
 
-Status BE-08: resolver read-only dasar tersedia untuk dipakai frontend; registry binding kolom, alias approved, penyimpanan UUID pada staging, dan integrasi apply masih terbuka. Confidence AI tidak otomatis menggabungkan entitas berbeda.
+Status BE-08: resolver, registry binding kolom, approval binding, dan penyimpanan UUID exact-match ke staging tersedia; alias approved dan resolusi otomatis berurutan masih terbuka. Confidence AI tidak otomatis menggabungkan entitas berbeda.
 
 ### BE-09 — Foreign key fisik dan urutan dependency
 
 Prasyarat: BE-04 dan BE-08.
 
-- [ ] Hasilkan FK komposit tenant + UUID master dari registry relasi approved; gunakan ON DELETE RESTRICT sesuai kebijakan.
+- [x] Hasilkan FK komposit tenant + UUID master dari binding approved; gunakan ON DELETE RESTRICT sesuai kebijakan.
 - [ ] Validasi ownership/grant REFERENCES pada role DDL dan izin minimum role operasional/reader.
 - [x] Sediakan dependency plan dari binding approved untuk ditampilkan sebelum DDL.
 - [x] Deteksi siklus dependency dari binding approved dan tampilkan hasilnya pada dependency plan.
-- [ ] Tentukan urutan master sebelum transaksi dan tampilkan tindakan koreksi.
+- [x] Tentukan urutan master sebelum transaksi dan tampilkan `load_order` topologis.
+- [ ] Tampilkan tindakan koreksi dan blokir DDL ketika siklus ditemukan.
 - [ ] Validasi orphan/type sebelum memasang FK pada target yang sudah berisi data.
 - [x] Sediakan pemeriksaan orphan read-only pada target trusted terhadap business key master.
-- [ ] Tangani object DDL yang terlanjur dibuat ketika registry gagal commit; retry harus aman dan hasilnya terpantau.
+- [x] Tangani retry deployment constraint yang sudah ada dengan hasil `reused`.
 - [ ] Uji penolakan FK orphan/lintas tenant langsung di PostgreSQL, dependensi bertingkat, siklus, dan kegagalan DDL.
 
-Status BE-09: dependency plan dan pemeriksaan orphan read-only tersedia; deteksi siklus penuh, validasi type, dan pemasangan FK fisik masih terbuka. FK fisik belum berarti query join NL2SQL diaktifkan.
+Status BE-09: dependency plan, load order, deteksi siklus, pemeriksaan orphan/type, dan deployment FK fisik tersedia; tindakan koreksi otomatis dan hardening DDL lintas kegagalan masih terbuka. FK fisik belum berarti query join NL2SQL diaktifkan.
 
 ### BE-10 — Review AI pada setiap snapshot baru
 

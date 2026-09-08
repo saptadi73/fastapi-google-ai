@@ -33,9 +33,15 @@ def upgrade():
         sa.ForeignKeyConstraint(["master_definition_id"], ["platform.master_definition.id"]),
         sa.ForeignKeyConstraint(["created_by"], ["platform.app_user.id"]),
         sa.ForeignKeyConstraint(["approved_by"], ["platform.app_user.id"]),
+        sa.ForeignKeyConstraint(["tenant_id", "approved_by"], ["platform.app_user.tenant_id", "platform.app_user.id"], name="fk_tenant_master_column_bind_approved_by_82f86ae2"),
+        sa.ForeignKeyConstraint(["tenant_id", "master_definition_id"], ["platform.master_definition.tenant_id", "platform.master_definition.id"], name="fk_tenant_master_column_bind_master_definitio_a1d7fff7"),
+        sa.ForeignKeyConstraint(["tenant_id", "source_sheet_id"], ["platform.source_sheet.tenant_id", "platform.source_sheet.id"], name="fk_tenant_master_column_bind_source_sheet_id_e47f7f39"),
+        sa.ForeignKeyConstraint(["tenant_id", "created_by"], ["platform.app_user.tenant_id", "platform.app_user.id"], name="fk_tenant_master_column_bind_created_by_9b06bcf8"),
         sa.UniqueConstraint("tenant_id", "source_sheet_id", "source_column", name="uq_master_column_binding"),
+        sa.UniqueConstraint("tenant_id", "id", name="uq_master_column_binding_tenant_id"),
         schema="platform",
     )
+    op.create_index("ix_platform_master_column_binding_tenant_id", "master_column_binding", ["tenant_id"], schema="platform")
 
 
 def downgrade():

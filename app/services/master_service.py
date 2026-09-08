@@ -550,8 +550,23 @@ class MasterService:
             return False
 
         has_cycle = any(cycle(node) for node in graph)
+        indegree = {node: 0 for node in graph}
+        for children in graph.values():
+            for child in children:
+                indegree[child] = indegree.get(child, 0) + 1
+        queue = sorted(node for node, degree in indegree.items() if degree == 0)
+        order = []
+        while queue:
+            node = queue.pop(0)
+            order.append(node)
+            for child in sorted(graph.get(node, ())):
+                indegree[child] -= 1
+                if indegree[child] == 0:
+                    queue.append(child)
+                    queue.sort()
         return {
             "nodes": sorted(masters),
+            "load_order": order,
             "edges": [
                 {
                     "source_sheet_id": row.source_sheet_id,
@@ -610,3 +625,37 @@ class MasterService:
             orphan_values = [value for value in values if value not in known]
             results.append({"binding_id": binding.id, "status": "ORPHANS_FOUND" if orphan_values else "VALID", "orphan_count": len(orphan_values), "orphan_values": [str(value) for value in orphan_values[:100]]})
         return {"items": results, "execution_ready": bool(results) and all(item["status"] == "VALID" for item in results)}
+
+    async def deploy_foreign_keys(self):
+        self.require_role(REVIEW_ROLES)
+        validation = await self.validate_reference_orphans()
+        if not validation["execution_ready"]:
+            raise AppError("REFERENCE_VALIDATION_REQUIRED", "Selesaikan orphan/type validation sebelum memasang FK.", 409)
+        rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
+            MasterColumnBinding.status == "APPROVED"
+        ))).all()
+        connection = await self.session.connection()
+        created = []
+        for binding in rows:
+            sheet = await self.repo.get(SourceSheet, binding.source_sheet_id)
+            config = await self.repo.get(Configuration, sheet.active_configuration_id)
+            target_name = f"{config.configuration_json['target_table']}_{str(sheet.id).replace('-', '')}"
+            master = await self.repo.get(MasterDefinition, binding.master_definition_id)
+            master_table = "master_" + str(master.id).replace("-", "")
+            target_column = next(c["target_column"] for c in config.configuration_json["columns"] if c["source_column"] == binding.source_column)
+            constraint = f"fk_{target_name[:35]}_{target_column[:20]}"
+            quote = connection.dialect.identifier_preparer.quote
+            exists = await connection.scalar(text(
+                "SELECT 1 FROM pg_constraint WHERE conname = :name"
+            ), {"name": constraint})
+            if exists:
+                created.append({"binding_id": binding.id, "constraint": constraint, "reused": True})
+                continue
+            await connection.execute(text(
+                f"ALTER TABLE trusted.{quote(target_name)} ADD CONSTRAINT {quote(constraint)} "
+                f"FOREIGN KEY ({quote('_tenant_id')}, {quote(target_column)}) "
+                f"REFERENCES trusted.{quote(master_table)} ({quote('_tenant_id')}, {quote('_record_id')}) ON DELETE RESTRICT"
+            ))
+            created.append({"binding_id": binding.id, "constraint": constraint})
+        audit(self.session, self.user, "master.foreign_keys_deployed", self.user.tenant_id, count=len(created))
+        return {"created": created, "execution_ready": True}

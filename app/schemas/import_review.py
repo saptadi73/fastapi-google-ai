@@ -34,6 +34,8 @@ class ImportReferenceResolveRequest(StrictModel):
     revision_no: int = Field(ge=1)
     master_definition_id: UUID
     value: str = Field(min_length=1, max_length=500)
+    staging_row_id: UUID | None = None
+    target_column: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,62}$")
 
 
 class ImportQuestionDecision(StrictModel):

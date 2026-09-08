@@ -35,6 +35,11 @@ async def validate_reference_orphans(session: Session, user: CurrentUser):
     return success(await MasterService(session, user).validate_reference_orphans())
 
 
+@router.post("/master-definitions/deploy-foreign-keys", dependencies=review)
+async def deploy_foreign_keys(session: Session, user: CurrentUser):
+    return success(await MasterService(session, user).deploy_foreign_keys())
+
+
 @router.get("/master-definitions/{master_id}/storage-plan")
 async def master_storage_plan(master_id: UUID, session: Session, user: CurrentUser):
     return success(await MasterStorageService(session, user).plan(master_id))

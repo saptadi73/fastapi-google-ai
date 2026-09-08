@@ -683,12 +683,20 @@ class ImportReviewService:
                 normalized = self.json_value(dict(row))
                 existing[tuple(normalized.get(k) for k in keys)] = normalized
         changes = []
+        seen_keys = set()
+        master_policy = review.dependencies.get("policy", {}).get("master") or {}
+        allow_insert = master_policy.get("new_record_policy") == "PROPOSE_INSERT"
         for row in rows:
             after = {**row.transformed_data, **row.corrected_data}
             key = tuple(after.get(k) for k in keys) if keys else None
+            if key is not None and key in seen_keys:
+                changes.append({"source_row": row.source_row, "outcome": "DUPLICATE", "before": None, "after": after})
+                continue
+            if key is not None:
+                seen_keys.add(key)
             before = existing.get(key) if key is not None else None
             if before is None:
-                outcome = "INSERT"
+                outcome = "INSERT" if allow_insert or review.dependencies["dataset_kind"] != "MASTER" else "INSERT_PROPOSED"
             else:
                 comparable = {k: before.get(k) for k in after}
                 outcome = "UNCHANGED" if comparable == after else "UPDATE"
@@ -699,19 +707,22 @@ class ImportReviewService:
             "import-review-preview",
             30,
         )
-        review.checkpoint = {**review.checkpoint, "preview_hash": preview_hash, "preview_revision": review.revision_no}
+        preview_blockers = sorted({c["outcome"] for c in changes if c["outcome"] in ("INSERT_PROPOSED", "DUPLICATE")})
+        review.checkpoint = {**review.checkpoint, "preview_hash": preview_hash, "preview_revision": review.revision_no, "preview_blockers": preview_blockers}
         return {
             "review": self.response(review),
             "target": target.fullname,
             "changes": changes,
             "summary": {
                 "insert": sum(c["outcome"] == "INSERT" for c in changes),
+                "insert_proposed": sum(c["outcome"] == "INSERT_PROPOSED" for c in changes),
+                "duplicate": sum(c["outcome"] == "DUPLICATE" for c in changes),
                 "update": sum(c["outcome"] == "UPDATE" for c in changes),
                 "unchanged": sum(c["outcome"] == "UNCHANGED" for c in changes),
             },
             "preview_hash": preview_hash,
             "preview_token": preview_token,
-            "can_approve": True,
+            "can_approve": not any(c["outcome"] in ("INSERT_PROPOSED", "DUPLICATE") for c in changes),
         }
 
     async def approve(self, review_id, data):
@@ -725,6 +736,8 @@ class ImportReviewService:
             raise AppError("IMPORT_STATE_CONFLICT", "Batch belum siap disetujui.", 409)
         if review.checkpoint.get("blocking_codes"):
             raise AppError("IMPORT_INPUT_PENDING", "Selesaikan seluruh blocker sebelum approval.", 409)
+        if review.checkpoint.get("preview_blockers"):
+            raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki insert yang memerlukan usulan atau duplicate key.", 409)
         if not review.checkpoint.get("preview_hash"):
             raise AppError("IMPORT_PREVIEW_REQUIRED", "Buat preview batch terlebih dahulu.", 409)
         if get_settings().require_separate_approver and review.created_by == self.user.id:
@@ -791,7 +804,16 @@ class ImportReviewService:
             query = query.where(text(" AND ".join(f'"{key}" = :value' for key in definition.business_key))).params(value=value)
         exact = (await self.session.execute(query.limit(2))).mappings().all()
         if len(exact) == 1:
-            return {"status": "EXACT", "master_id": master.id, "record": self.json_value(dict(exact[0]))}
+            record_value = self.json_value(dict(exact[0]))
+            if data.staging_row_id and data.target_column:
+                staging = await self.session.scalar(self.repo.query(ImportReviewRow).where(
+                    ImportReviewRow.id == str(data.staging_row_id), ImportReviewRow.import_review_id == review.id
+                ).with_for_update())
+                if staging is None:
+                    raise AppError("IMPORT_STAGING_MISSING", "Staging batch tidak tersedia.", 409)
+                staging.corrected_data = {**staging.corrected_data, data.target_column: str(record_value["_record_id"])}
+                audit(self.session, self.user, "import.reference_resolved", staging.id, master_id=master.id, target_column=data.target_column)
+            return {"status": "EXACT", "master_id": master.id, "record": record_value, "staging_updated": bool(data.staging_row_id and data.target_column)}
         label = definition.label_field
         pattern = "%" + value.replace("%", "\\%").replace("_", "\\_") + "%"
         candidates = (await self.session.execute(

@@ -362,7 +362,7 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | POST | `/import-reviews/{review_id}/preview` | E | ImportReviewPreviewRequest | 200 | target, changes[], summary, preview_hash, preview_token, can_approve |
 | POST | `/import-reviews/{review_id}/approve` | R | ImportReviewApproveRequest | 200 | review APPROVED |
 | POST | `/import-reviews/{review_id}/apply` | E | ImportReviewApplyRequest | 200 | review SUCCEEDED, rows_applied |
-| POST | `/import-reviews/{review_id}/resolve-reference` | S | ImportReferenceResolveRequest | 200 | EXACT, CANDIDATE, AMBIGUOUS, atau NOT_FOUND beserta kandidat dan `match_score` |
+| POST | `/import-reviews/{review_id}/resolve-reference` | S | ImportReferenceResolveRequest | 200 | EXACT, CANDIDATE, AMBIGUOUS, atau NOT_FOUND beserta kandidat dan `match_score`; EXACT dapat mengisi staging secara eksplisit |
 
 Urutan untuk frontend: tunggu batch bebas dari `blocking_codes`, panggil `preview`, tampilkan before/after per baris, minta approval reviewer, kemudian kirim token preview yang sama ke `apply`. Jika revision, snapshot, konfigurasi, atau target berubah, backend mengembalikan `409 IMPORT_PREVIEW_STALE` dan frontend harus membuat preview baru. Apply memakai UPSERT berdasarkan business key dan seluruh baris diproses dalam transaksi request.
 
@@ -399,8 +399,9 @@ Metadata master dan binding kini tersedia; kontrak lengkap, payload, respons, ve
 | PUT | `/source-sheets/{sheet_id}/column-bindings` | E | MasterColumnBindingCreate | 200 | binding kolom draft dengan revision baru |
 | POST | `/column-bindings/{binding_id}/approve` | R | MasterRevisionRequest | 200 | binding kolom APPROVED |
 | POST | `/column-bindings/{binding_id}/reject` | R | MasterRevisionRequest | 200 | binding kolom REJECTED |
-| GET | `/master-definitions/dependency-plan` | S | Tidak ada | 200 | nodes, edges (termasuk target_table/target_column), has_cycle, execution_ready |
+| GET | `/master-definitions/dependency-plan` | S | Tidak ada | 200 | nodes, edges (termasuk target_table/target_column), load_order, has_cycle, execution_ready |
 | GET | `/master-definitions/reference-orphans` | S | Tidak ada | 200 | items per binding, orphan_count, orphan_values, type validation, execution_ready |
+| POST | `/master-definitions/deploy-foreign-keys` | R | Tidak ada | 200 | created constraints, execution_ready=true |
 
 Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-binding yang belum mempunyai binding menggunakan MASTER_BINDING_REQUIRED. Binding metadata ready tidak memberi izin load. GET klasifikasi MASTER menambah ringkasan master_binding; field klasifikasi lainnya tetap seperti BE-02.
 
