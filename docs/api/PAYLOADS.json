@@ -589,5 +589,23 @@
     "required": true,
     "normalization": "TRIM_CASEFOLD",
     "cardinality": "MANY_TO_ONE"
+  },
+  "TaxonomyCreate": {
+    "code": "product_category",
+    "name": "Kategori Produk"
+  },
+  "TaxonomyColumnBindingCreate": {
+    "source_column": "category",
+    "taxonomy_id": "00000000-0000-0000-0000-000000000000",
+    "taxonomy_version": 1,
+    "required": false,
+    "normalization": "TRIM_CASEFOLD",
+    "revision_no": 0
+  },
+  "TaxonomyTermCreate": {
+    "code": "beverages",
+    "label": "Minuman",
+    "parent_id": null,
+    "aliases": ["Minuman dan Beverage"]
   }
 }

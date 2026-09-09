@@ -26,3 +26,16 @@ class TaxonomyTerm(TenantEntity, Base):
     label: Mapped[str] = mapped_column(String(200))
     aliases: Mapped[list] = mapped_column(JSONB, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class TaxonomyColumnBinding(TenantEntity, Base):
+    __tablename__ = "taxonomy_column_binding"
+    __table_args__ = (UniqueConstraint("tenant_id", "source_sheet_id", "source_column", name="uq_taxonomy_column_binding"), {"schema": "platform"})
+    source_sheet_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.source_sheet.id"))
+    source_column: Mapped[str] = mapped_column(String(200))
+    taxonomy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.taxonomy.id"))
+    taxonomy_version: Mapped[int] = mapped_column(Integer)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    normalization: Mapped[str] = mapped_column(String(40), default="TRIM_CASEFOLD")
+    revision_no: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")

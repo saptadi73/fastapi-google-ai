@@ -446,6 +446,12 @@ Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat tax
 | GET | `/taxonomies/{taxonomy_id}/terms` | S | UUID taxonomy | 200 | daftar term dan hierarchy |
 | POST | `/taxonomies/{taxonomy_id}/terms` | E | TaxonomyTermCreate | 201 | TaxonomyTerm |
 | POST | `/taxonomies/{taxonomy_id}/approve` | R | — | 200 | Taxonomy APPROVED dengan version baru |
+| GET | `/taxonomies/source-sheets/{sheet_id}/column-bindings` | S | — | 200 | Binding taxonomy per kolom |
+| PUT | `/taxonomies/source-sheets/{sheet_id}/column-bindings` | E | TaxonomyColumnBindingCreate | 200 | Simpan binding DRAFT (optimistic revision) |
+| POST | `/taxonomies/column-bindings/{binding_id}/approve` | R | MasterRevisionRequest | 200 | Setujui binding taxonomy |
+| POST | `/taxonomies/column-bindings/{binding_id}/reject` | R | MasterRevisionRequest | 200 | Tolak binding taxonomy |
+
+Binding hanya boleh menunjuk taxonomy berstatus `APPROVED` dan `taxonomy_version` yang masih aktif. Perubahan binding selalu kembali ke `DRAFT`; reviewer wajib menyetujui ulang. `revision_no` mencegah dua editor menimpa perubahan.
 
 ### Payload konfigurasi
 

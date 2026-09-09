@@ -347,6 +347,38 @@ Body: [MasterRevisionRequest](#masterrevisionrequest).
 |---|---|---|---|
 | `binding_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/taxonomies
+
+Body: —.
+
+### POST /api/v1/taxonomies
+
+Body: [TaxonomyCreate](#taxonomycreate).
+
+### GET /api/v1/taxonomies/{taxonomy_id}/terms
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/{taxonomy_id}/terms
+
+Body: [TaxonomyTermCreate](#taxonomytermcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/{taxonomy_id}/approve
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/import-reviews
 
 Body: [ImportReviewCreate](#importreviewcreate).
@@ -2052,6 +2084,55 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "sync_schedule": "0 */6 * * *"
 }
 ```
+
+### TaxonomyCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `name` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "product_category",
+  "name": "Kategori Produk"
+}
+```
+
+### TaxonomyTermCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `label` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `parent_id` | Tidak | `string / null` | — | — |
+| `aliases` | Tidak | `array<string>` | [] | {"maxItems":30} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "beverages",
+  "label": "Minuman",
+  "parent_id": null,
+  "aliases": [
+    "Minuman dan Beverage"
+  ]
+}
+```
+
+### TaxonomyColumnBindingCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `source_column` | Ya | `string` | — | 1–200 karakter |
+| `taxonomy_id` | Ya | `UUID` | — | — |
+| `taxonomy_version` | Ya | `integer` | — | >=1 |
+| `required` | Tidak | `boolean` | false | — |
+| `normalization` | Tidak | `string` | `TRIM_CASEFOLD` | 2–40 karakter uppercase |
+| `revision_no` | Tidak | `integer` | 0 | >=0 |
 
 ### UserCreate
 

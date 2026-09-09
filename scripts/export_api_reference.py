@@ -34,6 +34,7 @@ def build_documents():
     from app.models.master import MasterDefinition, MasterSourceBinding
     from app.models.semantic import DataProduct, QueryRequest, SavedQuery
     from app.models.source import DataSource, ProfilingRun, SourceSheet
+    from app.models.taxonomy import Taxonomy, TaxonomyTerm
 
     spec = app.openapi()
     models = {}
@@ -48,6 +49,7 @@ def build_documents():
         "monitoring",
         "health",
         "common",
+        "taxonomy",
     ):
         module = importlib.import_module("app.schemas." + name)
         for cls in vars(module).values():

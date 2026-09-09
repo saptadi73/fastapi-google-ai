@@ -201,8 +201,10 @@ Selesai per field/fitur jika konfigurasi benar-benar memengaruhi runtime dan exp
 
 Prasyarat: BE-08, BE-11, dan kamus parameter BE-12.
 
-- [ ] Buat taxonomy/version/hierarchy dan binding domain ke kolom, terpisah dari identitas record master.
-- [ ] Tambahkan usulan AI, approval mapping, alias terkontrol, serta pertanyaan untuk nilai ambigu.
+Status: registry taxonomy berversi, term hierarkis, dan binding kolom tersedia; AI suggestion, validasi term, dan DQ `in_taxonomy` masih terbuka.
+
+- [x] Buat registry taxonomy/version/hierarchy dan term, terpisah dari identitas record master.
+- [~] Tambahkan usulan AI, approval mapping, alias terkontrol, serta pertanyaan untuk nilai ambigu (binding taxonomy kini dapat disimpan dan di-approve dengan optimistic revision; rekomendasi AI/alias/value question belum).
 - [ ] Implementasikan DQ `in_taxonomy` dan dampak perubahan versi mapping pada review lama.
 - [ ] Aktifkan tab 04 dan field taxonomy terkait di API/XLSX setelah engine tersedia.
 - [ ] Uji hierarki, kode tidak ditemukan, mapping konflik, versioning, dan isolasi tenant.
