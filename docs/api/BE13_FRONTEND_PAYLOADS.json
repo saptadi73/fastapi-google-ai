@@ -191,7 +191,8 @@
     "model": "ImportReviewApproveRequest",
     "body": {
       "revision_no": 7,
-      "comment": "Preview telah ditinjau."
+      "comment": "Preview telah ditinjau.",
+      "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   "apply_import": {

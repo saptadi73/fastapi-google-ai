@@ -242,3 +242,18 @@ harus diverifikasi pada environment tujuan. Rincian: [API Reference](API_REFEREN
 
 **Selesai tahap 5:** saran hanya dipakai setelah konfirmasi, penolakan/stale/limit ditampilkan,
 koreksi tetap diverifikasi backend, dan kegagalan AI tidak melewati approval import.
+
+
+## Approval dua akun: kontrak baca preview
+
+TECHNICAL_APPROVER sekarang dapat memanggil GET `/import-reviews/{review_id}/preview`.
+Gunakan data.changes, summary, period_closures, masked_fields, can_approve. Simpan pasangan
+review.revision_no dan preview_hash dari respons yang sama untuk POST approve. Jangan
+menggunakan preview_revision sebagai revision batch setelah approval. GET tidak mengubah
+staging dan tidak mengembalikan token apply; token tetap berasal dari POST milik editor.
+
+Jika belum ada preview atau masih format lama: 409 IMPORT_PREVIEW_REQUIRED, minta editor
+membuat ulang. Jika stale: buang tampilan lama dan minta preview/approval baru. Field sensitif
+before/after tampil [REDACTED] bagi TECHNICAL_APPROVER, meskipun editor admin melihat nilai
+aslinya. Hash tetap sama karena dihitung sebelum masking. can_approve bukan pengganti
+pemeriksaan role/status/versi pada server. Lihat [kontrak lengkap](API_REFERENCE.md#membaca-preview-import-untuk-approval-dua-akun).

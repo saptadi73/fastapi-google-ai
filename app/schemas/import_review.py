@@ -24,6 +24,7 @@ class ImportReviewPreviewRequest(StrictModel):
 class ImportReviewApproveRequest(StrictModel):
     revision_no: int = Field(ge=1)
     comment: str = Field(default="", max_length=2000)
+    preview_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class ImportReviewApplyRequest(StrictModel):

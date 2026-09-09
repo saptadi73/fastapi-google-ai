@@ -169,3 +169,19 @@ Temuan disimpan sebagai JSON per batch dan dipaginasi oleh API; chunk processing
 Lihat [API Reference](API_REFERENCE.md), [TODO backend](TODO_BACKEND.md), dan [Storage BE-04](STORAGE_MASTER_BE04.md). Frontend belum diubah pada tahap ini.
 
 Verifikasi 8 September 2026: **95 tes backend lulus**, Ruff lulus, Alembic check lulus, dan **114 operasi API** terverifikasi. Tes baru mencakup create bersamaan, checkpoint antar-job, blocker tanpa retry loop, temuan tanpa raw values, cancel/revisi stale, snapshot berubah/identik, perubahan master, kegagalan teknis, simulasi worker terputus dan checkpoint reuse, job duplikat/generation lama, tenant actor FK, serta upgrade/downgrade migrasi dalam transaksi yang di-rollback. Tidak ada panggilan provider nyata pada tes ini.
+
+
+## Pembacaan preview oleh reviewer
+
+GET `/import-reviews/{review_id}/preview` tersedia untuk editor/reviewer termasuk
+TECHNICAL_APPROVER. POST preview tetap editor. GET memverifikasi rencana tersimpan via
+hash/revision, memberi before/after yang dimasking menurut role, dan tidak menerbitkan
+token atau mengubah staging. Reviewer mengirim preview_hash dan review.revision_no dari
+hasil GET saat approve. Rincian respons, stale, serta compatibility preview lama ada di
+[API Reference](API_REFERENCE.md#membaca-preview-import-untuk-approval-dua-akun).
+
+
+Verifikasi endpoint baca preview: 21 tes PostgreSQL gabungan dua akun/stale/APPEND/
+taxonomy lulus, ditambah 1 tes GET canonical taxonomy tanpa mutation staging. Regresi
+non-integrasi tanpa workbook: 214 lulus. Ruff file perubahan, exporter --check 152
+operasi, payload approval dua akun, dan git diff --check lulus. Tidak memerlukan migrasi.

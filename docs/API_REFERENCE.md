@@ -364,6 +364,7 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | POST | `/import-reviews/{review_id}/questions/{question_id}/answer` | E | ImportQuestionDecision | 200 | question, review; stale=true jika dependency berubah |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal` | R | ImportProposalResolution | 200 | question, review setelah master aktif-approved |
 | POST | `/import-reviews/{review_id}/preview` | E | ImportReviewPreviewRequest | 200 | target, changes[], summary, preview_hash, preview_token, can_approve |
+| GET | `/import-reviews/{review_id}/preview` | S | Tanpa body | 200 | Preview editor tervalidasi ulang, masked_fields, read_only; tanpa token apply |
 | POST | `/import-reviews/{review_id}/approve` | R | ImportReviewApproveRequest | 200 | review APPROVED |
 | POST | `/import-reviews/{review_id}/apply` | E | ImportReviewApplyRequest | 200 | review SUCCEEDED, rows_applied |
 | POST | `/import-reviews/{review_id}/resolve-reference` | S | ImportReferenceResolveRequest | 200 | ALIAS, EXACT, CANDIDATE, AMBIGUOUS, atau NOT_FOUND; EXACT dapat mengisi staging secara eksplisit |
@@ -1401,3 +1402,51 @@ Saran tidak membuat term/alias/binding atau menyetujui data. Untuk TAXONOMY_INVA
 pengguna mengonfirmasi saran lalu mengirim term.code sebagai corrected_value lewat
 APPLY_CORRECTION. SELECT_RECORD hanya menerima kandidat yang sudah tercantum pada
 pertanyaan, bukan sembarang ID hasil AI. Perubahan registry tetap draft/publish/reviewer.
+
+### Membaca preview import untuk approval dua akun
+
+Editor membuat POST `/import-reviews/{review_id}/preview` seperti sebelumnya.
+TECHNICAL_APPROVER membaca GET `/import-reviews/{review_id}/preview` tanpa body.
+Endpoint tersedia bagi editor/reviewer tenant yang sama; VIEWER/ANALYST mendapat 403,
+ID tenant lain 404. POST preview dan apply tetap khusus editor.
+
+GET mengembalikan envelope data: review, target, changes[], period_closures[], summary,
+preview_hash, preview_revision, can_approve, masked_fields, read_only=true.
+changes[] berisi source_row/outcome/before/after. Summary berisi jumlah insert,
+insert_proposed, duplicate, key_conflict, invalid, update, unchanged.
+Tidak ada preview_token. `review.revision_no` adalah revision batch saat dibaca;
+preview_revision adalah revision saat editor membuat rencana. Setelah approval, batch
+revision berubah tetapi preview_revision/hash tetap menunjuk rencana yang sama dan
+can_approve=false. Tidak ada pagination pada changes untuk kontrak ini.
+
+Hash dihitung dari rencana sebelum masking. Pembaca di luar PLATFORM_ADMIN/DATA_STEWARD
+menerima [REDACTED] pada field MEDIUM/HIGH di before/after; masked_fields menjelaskan
+nama field. Metadata master juga diperhitungkan. Penutupan periode sensitif tetap tunduk
+MASTER_PERIOD_FILTER_FORBIDDEN (403), sesuai kebijakan approval master existing.
+POST preview sekarang memakai masking pembaca yang sama. Before mencakup nilai record
+existing dari target, bukan hanya business key, agar perubahan atribut target terdeteksi.
+
+GET menghitung ulang dengan opsi close_open_periods yang disimpan editor dan membandingkan
+hash/revision/dependency. Tidak membuat token baru atau mengubah staging/checkpoint/status.
+Belum ada preview/preview format lama -> IMPORT_PREVIEW_REQUIRED (409); minta editor
+membuat ulang. Rencana/revision berubah -> IMPORT_PREVIEW_STALE (409), dependency berubah
+-> IMPORT_STALE_REVIEW (409) atau error dependency terkait. Status di luar READY_FOR_APPROVAL/
+APPROVED menghasilkan IMPORT_STATE_CONFLICT (409). Validasi kategori/periode existing
+juga berlaku dan dapat mengembalikan error validasi atau aksesnya.
+
+Reviewer mengirim POST approve dengan revision_no dari review dan preview_hash dari GET.
+Field preview_hash opsional untuk kompatibilitas client lama, tetapi frontend dua akun
+harus mengirimnya untuk memastikan rencana yang disetujui sama dengan yang dibaca.
+Hash berbeda ditolak IMPORT_PREVIEW_STALE. Backend juga memeriksa ulang preview format
+baru saat approve sehingga perubahan target/staging setelah GET ditolak.
+
+Setelah approval, editor memakai preview_token dari POST editor dan revision batch terbaru
+untuk apply. GET bukan penerbit token dan tidak memperpanjang token editor. Jika token
+kedaluwarsa, editor dapat membuat POST preview ulang hanya jika rencana approved masih sama.
+Preview approved format lama/yang berubah perlu revalidate dan approval ulang sesuai workflow.
+Tidak ada migrasi database; preview baru ditandai preview_format=2 pada checkpoint.
+
+
+Perbaikan pendamping alur dua akun: apply NON_MASTER mengembalikan tipe tanggal/numerik
+JSON staging ke tipe target sebelum UPSERT, tanpa menjalankan ulang transformasi/conversion
+sumber. Nilai tidak dapat dikonversi menghasilkan IMPORT_STAGING_VALUE_INVALID (422).

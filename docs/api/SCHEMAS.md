@@ -589,6 +589,14 @@ Body: [ImportReviewPreviewRequest](#importreviewpreviewrequest).
 |---|---|---|---|
 | `review_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/import-reviews/{review_id}/preview
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/import-reviews/{review_id}/approve
 
 Body: [ImportReviewApproveRequest](#importreviewapproverequest).
@@ -1584,13 +1592,15 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `comment` | Tidak | `string` | "" | {"maxLength":2000} |
+| `preview_hash` | Tidak | `string / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
 ```json
 {
   "revision_no": 4,
-  "comment": "Preview diverifikasi oleh reviewer"
+  "comment": "Preview diverifikasi oleh reviewer",
+  "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }
 ```
 

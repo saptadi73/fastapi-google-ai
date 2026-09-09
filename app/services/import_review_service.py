@@ -697,8 +697,24 @@ class ImportReviewService:
         )).all()
         return review, config, rows
 
-    async def preview(self, review_id, data):
+    async def read_preview(self, review_id):
+        self.role()
+        review = await self.locked(review_id)
+        return await self.preview(review_id, SimpleNamespace(revision_no=review.revision_no,
+            close_open_periods=review.checkpoint.get("close_open_periods", False)), _read_only=True)
+
+    async def preview(self, review_id, data, *, _read_only=False):
         review, config, rows = await self._preview_context(review_id, data.revision_no)
+        pinned_revision = review.checkpoint.get("preview_revision")
+        if _read_only:
+            if not review.checkpoint.get("preview_hash") or review.checkpoint.get("preview_format") != 2:
+                raise AppError("IMPORT_PREVIEW_REQUIRED", "Editor harus membuat preview terbaru terlebih dahulu.", 409)
+            expected_revision = review.revision_no - (1 if review.status == "APPROVED" else 0)
+            if pinned_revision != expected_revision:
+                raise AppError("IMPORT_PREVIEW_STALE", "Revision preview berubah; minta editor membuat ulang preview.", 409)
+            # Canonicalization on GET must never persist corrections to staging.
+            rows = [SimpleNamespace(source_row=row.source_row, transformed_data=dict(row.transformed_data),
+                                    corrected_data=dict(row.corrected_data)) for row in rows]
         canonicalize_rows(await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
                                                  config, lock=True), rows, config)
         target = None
@@ -724,7 +740,7 @@ class ImportReviewService:
         if close_open_periods and (not definition or not definition.policy.effective_dating):
             raise AppError("MASTER_EFFECTIVE_DATING_REQUIRED", "Penutupan periode memerlukan master bermasa berlaku.", 409)
         if keys:
-            query = select(*[target.c[k] for k in keys], target.c._record_id if hasattr(target.c, "_record_id") else target.c._row_hash).where(
+            query = select(target).where(
                 target.c._tenant_id == self.user.tenant_id
             )
             for row in (await self.session.execute(query)).mappings():
@@ -783,19 +799,21 @@ class ImportReviewService:
                 comparable = {k: before.get(k) for k in after}
                 outcome = "UNCHANGED" if key in identical_versions or comparable == after else "UPDATE"
             changes.append({"source_row": row.source_row, "outcome": outcome, "before": before, "after": after})
-        preview_hash = digest({"review_id": str(review.id), "revision_no": review.revision_no, "changes": changes,
+        hash_revision = pinned_revision if _read_only or review.status == "APPROVED" else review.revision_no
+        preview_hash = digest({"review_id": str(review.id), "revision_no": hash_revision, "changes": changes,
                                "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash,
                                "period_closures": self.json_value(period_closures)})
-        if review.status == "APPROVED" and preview_hash != review.checkpoint.get("preview_hash"):
+        if (_read_only or review.status == "APPROVED") and preview_hash != review.checkpoint.get("preview_hash"):
             raise AppError("IMPORT_PREVIEW_STALE", "Rencana berubah setelah approval; revalidate dan minta approval ulang.", 409)
-        preview_token = token(
-            {"review_id": str(review.id), "tenant_id": str(review.tenant_id), "revision_no": review.revision_no, "preview_hash": preview_hash},
+        preview_token = None if _read_only else token(
+            {"review_id": str(review.id), "tenant_id": str(review.tenant_id), "revision_no": hash_revision, "preview_hash": preview_hash},
             "import-review-preview",
             30,
         )
         preview_blockers = sorted({c["outcome"] for c in changes if c["outcome"] in ("DUPLICATE", "KEY_CONFLICT", "INVALID")})
-        review.checkpoint = {**review.checkpoint, "preview_hash": preview_hash, "preview_revision": review.revision_no, "preview_blockers": preview_blockers, "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash, "periods_to_close": len(period_closures)}
-        return {
+        if not _read_only:
+            review.checkpoint = {**review.checkpoint, "preview_format": 2, "preview_hash": preview_hash, "preview_revision": hash_revision, "preview_blockers": preview_blockers, "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash, "periods_to_close": len(period_closures)}
+        result = {
             "review": self.response(review),
             "target": target.fullname,
             "changes": changes,
@@ -810,9 +828,23 @@ class ImportReviewService:
                 "unchanged": sum(c["outcome"] == "UNCHANGED" for c in changes),
             },
             "preview_hash": preview_hash,
-            "preview_token": preview_token,
             "can_approve": not any(c["outcome"] in ("DUPLICATE", "KEY_CONFLICT", "INVALID") for c in changes),
         }
+        if _read_only:
+            result.update(preview_revision=pinned_revision, read_only=True,
+                          can_approve=result["can_approve"] and review.status == "READY_FOR_APPROVAL")
+        else:
+            result["preview_token"] = preview_token
+        sensitive = {c.target_column for c in config.columns if c.pii_classification in ("MEDIUM", "HIGH")}
+        if definition:
+            sensitive |= {f.name for f in definition.fields if f.pii_classification in ("MEDIUM", "HIGH")}
+        masked = sensitive if self.user.role not in DATA_ROLES else set()
+        # Hash the unmasked plan above; redact a fresh response for the current reader.
+        result["changes"] = [{**change, **{side: ({key: "[REDACTED]" if key in masked else value
+            for key, value in change[side].items()} if change[side] is not None else None)
+            for side in ("before", "after")}} for change in changes]
+        result["masked_fields"] = sorted(masked)
+        return result
 
     def check_closure_visibility(self, definition, closures):
         if closures and self.user.role not in DATA_ROLES:
@@ -836,6 +868,10 @@ class ImportReviewService:
             raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki insert yang memerlukan usulan atau duplicate key.", 409)
         if not review.checkpoint.get("preview_hash"):
             raise AppError("IMPORT_PREVIEW_REQUIRED", "Buat preview batch terlebih dahulu.", 409)
+        if getattr(data, "preview_hash", None) is not None and data.preview_hash != review.checkpoint["preview_hash"]:
+            raise AppError("IMPORT_PREVIEW_STALE", "Hash berbeda dari preview yang ditinjau reviewer.", 409)
+        if review.checkpoint.get("preview_format") == 2:
+            await self.read_preview(review_id)
         if review.dependencies.get("taxonomy_hash"):
             config = ETLConfiguration.model_validate(review.configuration_json)
             context = await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
@@ -923,6 +959,13 @@ class ImportReviewService:
             if review.dependencies["dataset_kind"] == "MASTER":
                 values = {**values, "_tenant_id": self.user.tenant_id, "_record_id": str(uuid4()), "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_source_snapshot_hash": review.dependencies["snapshot_hash"]}
             else:
+                # Restore JSON staging types for UPSERT as well as APPEND. Source
+                # transformations/conversions have already run and must not repeat.
+                try:
+                    values = {c.target_column: cast_value(values.get(c.target_column), c.target_type)
+                              for c in config.columns}
+                except (ValueError, TypeError, ArithmeticError):
+                    raise AppError("IMPORT_STAGING_VALUE_INVALID", "Nilai staging tidak sesuai tipe target.", 422) from None
                 values = {**values, "_tenant_id": self.user.tenant_id, "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_etl_run_id": review.id, "_row_hash": digest(values)}
             stmt = insert(table).values(**values)
             if review.dependencies["dataset_kind"] != "MASTER" and keyless_append(config):

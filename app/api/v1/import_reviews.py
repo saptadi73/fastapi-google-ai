@@ -10,12 +10,12 @@ from app.domain.import_workflow import ImportAction, ImportStatus
 from app.schemas.import_review import (
     ImportProposalResolution,
     ImportQuestionDecision,
+    ImportReferenceResolveRequest,
     ImportReviewAction,
+    ImportReviewApplyRequest,
+    ImportReviewApproveRequest,
     ImportReviewCreate,
     ImportReviewPreviewRequest,
-    ImportReviewApproveRequest,
-    ImportReviewApplyRequest,
-    ImportReferenceResolveRequest,
 )
 from app.services.import_review_service import ImportReviewService
 
@@ -126,6 +126,11 @@ async def resume_import(review_id: UUID, data: ImportReviewAction, session: Sess
 @router.post("/import-reviews/{review_id}/preview", dependencies=edit)
 async def preview_import(review_id: UUID, data: ImportReviewPreviewRequest, session: Session, user: CurrentUser):
     return success(await ImportReviewService(session, user).preview(review_id, data))
+
+
+@router.get("/import-reviews/{review_id}/preview")
+async def read_import_preview(review_id: UUID, session: Session, user: CurrentUser):
+    return success(await ImportReviewService(session, user).read_preview(review_id))
 
 
 @router.post("/import-reviews/{review_id}/approve", dependencies=[Depends(require_roles(*REVIEW_ROLES))])

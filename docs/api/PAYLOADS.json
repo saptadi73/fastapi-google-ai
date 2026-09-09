@@ -574,7 +574,8 @@
   },
   "ImportReviewApproveRequest": {
     "revision_no": 4,
-    "comment": "Preview diverifikasi oleh reviewer"
+    "comment": "Preview diverifikasi oleh reviewer",
+    "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "ImportReviewApplyRequest": {
     "revision_no": 5,
