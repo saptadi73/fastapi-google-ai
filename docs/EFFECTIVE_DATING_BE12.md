@@ -168,8 +168,11 @@ pengguna, dan import_review_id. INSERT versi baru menggunakan UUID baru.
 
 Response apply menambahkan `periods_closed`; `rows_applied` tetap jumlah INSERT row.
 Keduanya ditulis ke checkpoint. Penutupan dan INSERT memakai transaksi API yang sama;
-kegagalan dipropagasikan agar session rollback. Belum ada bukti rollback/concurrency
-PostgreSQL nyata pada tahap ini; tes mock memeriksa urutan dan guard SQL.
+kegagalan dipropagasikan agar session rollback. Pengujian PostgreSQL pada 9 September
+2026 membuktikan rollback penutupan, status/revision batch, dan audit ketika INSERT
+versi baru gagal karena constraint database. Setelah constraint pengujian dilepas,
+retry dengan token approval yang sama berhasil karena transaksi gagal sebelumnya
+tidak mengubah target atau batch.
 
 | Error | HTTP | Tindakan |
 |---|---|---|
@@ -188,3 +191,38 @@ ulang untuk melewati proses review.
 
 Tidak ada migrasi database. Ini penutupan otomatis yang diusulkan dalam batch dan
 memerlukan approval; bukan koreksi bebas riwayat atau perubahan diam-diam saat insert.
+
+## Verifikasi PostgreSQL penutupan periode
+
+`tests/test_effective_dating_postgres.py` menjalankan tujuh tes pada database test
+terpisah yang divalidasi oleh `tests/conftest.py`. Fixture membuat tenant dan target
+master ber-UUID unik, lalu membersihkan hanya objek miliknya setelah pengujian.
+
+- Preview, token bertanda tangan, approval oleh pengguna berbeda, dan apply memakai
+  service asli dengan record review/staging serta audit yang tersimpan di PostgreSQL.
+- Commit mempertahankan UUID, nilai bisnis, dan lineage versi lama; akhir periode dan
+  revision berubah sekali. Versi baru memperoleh UUID berbeda.
+- Kegagalan constraint INSERT membatalkan penutupan serta perubahan batch/audit;
+  retry setelah penyebab kegagalan diperbaiki berhasil.
+- Dua batch approved bersaing untuk master yang sama. `pg_blocking_pids` membuktikan
+  batch kedua menunggu transaksi pertama. Setelah commit pertama, batch kedua menolak
+  rencana lama dengan `IMPORT_PREVIEW_STALE` dan tetap APPROVED tanpa menulis versi.
+- Retry batch sukses ditolak oleh revision guard. Versi identik pada batch baru
+  dilewati tanpa mengubah record/revision atau membuat audit penutupan.
+- SQL `as_of` memilih tepat satu versi pada batas interval setengah terbuka.
+- Tenant lain tidak dapat apply batch dan ditolak constraint fisik ketika mencoba
+  INSERT langsung ke target master.
+
+Jalankan `venv/Scripts/python.exe -m pytest tests/test_effective_dating_postgres.py
+tests/test_effective_dating.py -q` dalam satu baris: **57 tes lulus** (7 PostgreSQL,
+50 tes effective dating existing). Ruff file baru dan exporter `--check` 145 operasi
+lulus. Tidak ada perubahan kontrak API atau migrasi pada tahap verifikasi ini.
+Regresi `pytest -m 'not integration' -q` juga lulus: **200 tes**, termasuk workbook
+XLSX; 42 tes integrasi dikecualikan dari perintah regresi tersebut. Tujuh tes integrasi
+baru dijalankan melalui perintah terarah di atas; 35 tes integrasi lainnya belum
+dijalankan sebagai suite pada tahap ini.
+
+Batas bukti: `is_current` distub ke true untuk mengisolasi transaksi effective dating;
+validasi snapshot/provider dan lifecycle onboarding tidak diuji end-to-end di suite
+ini. Tes konkurensi mencakup dua apply service, bukan penulis SQL eksternal yang
+melewati lock aplikasi. Koreksi riwayat bebas dan resolver FK as-of masih terbuka.

@@ -42,7 +42,7 @@ EDITABLE = {
 
 def editable(sheet, row, col):
     if sheet == REVIEW:
-        return (2 <= row <= 6 and col == 2) or (10 <= row <= 109 and col in (2, 3))
+        return ((2 <= row <= 6 or row == 8) and col == 2) or (10 <= row <= 109 and col in (2, 3))
     start, end, cols = EDITABLE.get(sheet, (0, 0, set()))
     return start <= row <= end and col in cols
 
@@ -213,6 +213,8 @@ def render(config, source, sheet):
             "Jawab pertanyaan, pilih Selesai; upload tetap membutuhkan preview dan approval aplikasi.",
         ]
     )
+    put(ws, 8, 1, "append_duplicate_policy")
+    put(ws, 8, 2, c.get("append_duplicate_policy"))
     ws.cell(9, 1, "Pertanyaan")
     ws.cell(9, 2, "Jawaban")
     ws.cell(9, 3, "Status")
@@ -366,6 +368,9 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
             ("dataset_business_name", "dataset_description", "grain", "target_table", "load_strategy"), 2
         ):
             c[key] = value(REVIEW, row, 2)
+        # Old signed workbooks have no policy row; preserve their configuration.
+        if value(REVIEW, 8, 1) == "append_duplicate_policy":
+            c["append_duplicate_policy"] = value(REVIEW, 8, 2) or None
         for row, column in enumerate(c["columns"], 5):
             for key, col in {
                 "business_name": 4,

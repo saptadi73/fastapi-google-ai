@@ -12,6 +12,7 @@ from app.models.semantic import DataProduct
 from app.models.source import DataSource, ProfilingRun, SourceSheet
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import ETLConfiguration
+from app.services.append_service import append_row, keyless_append
 from app.services.artifact_service import ArtifactService
 from app.services.audit_service import audit
 from app.services.classification_service import ClassificationService, require_classification
@@ -149,6 +150,9 @@ class ETLExecutionService:
                     "_row_hash": digest(values_dict),
                 }
                 stmt = insert(table).values(**row)
+                if keyless_append(parsed):
+                    run.rows_loaded += await append_row(self.session, table, row, parsed)
+                    continue
                 if parsed.load_strategy == "UPSERT":
                     stmt = stmt.on_conflict_do_update(
                         index_elements=["_tenant_id", *keys],

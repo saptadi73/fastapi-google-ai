@@ -27,6 +27,7 @@ from app.schemas.import_review import (
     ImportQuestionDecision,
     ImportReviewCreate,
 )
+from app.services.append_service import append_outcome, append_row, append_values, keyless_append
 from app.services.audit_service import audit
 from app.services.etl_compiler_service import cast_value, transform_rows
 from app.services.job_service import enqueue
@@ -727,6 +728,12 @@ class ImportReviewService:
                 version_candidates, identical = validate_versions(definition, incoming, existing_versions)
             identical_versions = {tuple(self.json_value(key)) for key in identical}
         changes = []
+        append_hashes = set()
+        is_append = definition is None and keyless_append(config)
+        if is_append:
+            append_hashes = set((await self.session.scalars(
+                select(target.c._row_hash).where(target.c._tenant_id == self.user.tenant_id)
+            )).all())
         seen_keys = set()
         master_policy = review.dependencies.get("policy", {}).get("master") or {}
         allow_insert = master_policy.get("new_record_policy") == "PROPOSE_INSERT"
@@ -734,6 +741,12 @@ class ImportReviewService:
             after = self.json_value(version_candidates[index]) if version_candidates is not None else {**row.transformed_data, **row.corrected_data}
             if not after:
                 changes.append({"source_row": row.source_row, "outcome": "INVALID", "before": None, "after": after})
+                continue
+            if is_append:
+                row_hash = digest(append_values(config, after))
+                outcome = append_outcome(config, row_hash in append_hashes)
+                append_hashes.add(row_hash)
+                changes.append({"source_row": row.source_row, "outcome": outcome, "before": None, "after": after})
                 continue
             key = tuple(after.get(k) for k in keys) if keys else None
             if keys and any(value in (None, "") for value in key):
@@ -881,6 +894,9 @@ class ImportReviewService:
             else:
                 values = {**values, "_tenant_id": self.user.tenant_id, "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_etl_run_id": review.id, "_row_hash": digest(values)}
             stmt = insert(table).values(**values)
+            if review.dependencies["dataset_kind"] != "MASTER" and keyless_append(config):
+                loaded += await append_row(self.session, table, values, config)
+                continue
             if keys and version_rows is None:
                 stmt = stmt.on_conflict_do_update(index_elements=["_tenant_id", *keys], set_={k: stmt.excluded[k] for k in values if k not in ("_tenant_id", *keys, "_record_id")})
             await self.session.execute(stmt)

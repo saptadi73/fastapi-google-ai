@@ -5,6 +5,8 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from app.core.exceptions import AppError
+from app.services.append_service import keyless_append
+from app.services.profiling_service import digest
 
 
 def decimal_id(value, locale="ID"):
@@ -224,6 +226,15 @@ def transform_rows(values, sheet, config, *, reference_time=None):
             issues.append({"source_row": row_number, "data": raw, "errors": errors})
         else:
             good.append((row_number, result))
+    if keyless_append(config):
+        hashes = set()
+        for row_number, result in good:
+            row_hash = digest(result)
+            if row_hash in hashes:
+                if config.append_duplicate_policy == "REJECT_IDENTICAL":
+                    raise AppError("APPEND_IDENTICAL_REJECTED", "Snapshot berisi baris APPEND identik.", 409)
+                warnings.append({"source_row": row_number, "code": "APPEND_IDENTICAL_SKIPPED"})
+            hashes.add(row_hash)
     for rule_index, rule in enumerate(config.data_quality_rules):
         if rule.threshold_percent is not None and dq_seen.get(rule_index, 0):
             rate = dq_failed.get(rule_index, 0) * 100 / dq_seen[rule_index]

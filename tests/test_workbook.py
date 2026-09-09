@@ -29,6 +29,17 @@ def encode(raw):
     return base64.b64encode(raw).decode()
 
 
+def test_append_policy_roundtrip_and_edit(workbook_context):
+    config = workbook_context[0].configuration_json
+    config.update(load_strategy="APPEND", append_duplicate_policy="SKIP_IDENTICAL")
+    for column in config["columns"]:
+        column["is_business_key"] = column["is_primary_key"] = False
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert not result["errors"] and result["configuration"]["append_duplicate_policy"] == "SKIP_IDENTICAL"
+    result = parse_workbook(edited(workbook_context, REVIEW, "B8", "REJECT_IDENTICAL"), *workbook_context)
+    assert not result["errors"] and result["configuration"]["append_duplicate_policy"] == "REJECT_IDENTICAL"
+
+
 def edited(ctx, tab, cell, value):
     book = load_workbook(io.BytesIO(export_workbook(*ctx)))
     book[tab][cell] = value

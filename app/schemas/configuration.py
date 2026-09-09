@@ -182,6 +182,7 @@ class ETLConfiguration(StrictModel):
     target_schema: Literal["trusted"] = "trusted"
     target_table: str = Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")
     load_strategy: Literal["APPEND", "UPSERT", "FULL_REFRESH"]
+    append_duplicate_policy: Literal["SKIP_IDENTICAL", "REJECT_IDENTICAL"] | None = None
     columns: list[ColumnMapping] = Field(min_length=1, max_length=100)
     data_quality_rules: list[QualityRule] = Field(default_factory=list, max_length=100)
     semantic: SemanticDefinition
@@ -195,6 +196,8 @@ class ETLConfiguration(StrictModel):
         if len(names) != len(set(names)) or len(sources) != len(set(sources)):
             raise ValueError("Source/target columns must be unique")
         keys = [c for c in self.columns if c.is_business_key or c.is_primary_key]
+        if self.append_duplicate_policy is not None and (self.load_strategy != "APPEND" or keys):
+            raise ValueError("append_duplicate_policy requires APPEND without business/primary keys")
         if self.load_strategy == "UPSERT" and not keys:
             raise ValueError("UPSERT requires a business key")
         if any(c.nullable for c in keys):

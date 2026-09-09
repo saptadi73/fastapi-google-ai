@@ -1382,6 +1382,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `target_schema` | Tidak | `"trusted"` | "trusted" | — |
 | `target_table` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,29}$"} |
 | `load_strategy` | Ya | `enum ["APPEND","UPSERT","FULL_REFRESH"]` | — | — |
+| `append_duplicate_policy` | Tidak | `enum ["SKIP_IDENTICAL","REJECT_IDENTICAL"] / null` | — | — |
 | `columns` | Ya | `array<ColumnMapping>` | — | {"maxItems":100,"minItems":1} |
 | `data_quality_rules` | Tidak | `array<QualityRule>` | [] | {"maxItems":100} |
 | `semantic` | Ya | `SemanticDefinition` | — | — |

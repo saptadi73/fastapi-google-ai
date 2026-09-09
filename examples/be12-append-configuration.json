@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "Penjualan Cabang",
+  "dataset_description": "Data transaksi penjualan per cabang",
+  "grain": "Satu baris per nomor transaksi",
+  "target_schema": "trusted",
+  "target_table": "sales_transaction",
+  "load_strategy": "APPEND",
+  "append_duplicate_policy": "SKIP_IDENTICAL",
+  "columns": [
+    {
+      "source_column": "ID",
+      "target_column": "transaction_id",
+      "target_type": "text",
+      "business_name": "",
+      "nullable": false,
+      "is_business_key": false,
+      "is_primary_key": false,
+      "transformation_codes": [
+        "trim"
+      ],
+      "pii_classification": "NONE",
+      "confidence": 1.0,
+      "reason": "",
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "date_format": null,
+      "number_locale": null,
+      "varchar_length": null,
+      "unit_conversion": null,
+      "currency_conversion": null,
+      "source_timezone": null,
+      "taxonomy_id": null,
+      "taxonomy_version": null,
+      "taxonomy_required": false
+    },
+    {
+      "source_column": "Tanggal",
+      "target_column": "transaction_date",
+      "target_type": "date",
+      "business_name": "",
+      "nullable": false,
+      "is_business_key": false,
+      "is_primary_key": false,
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "pii_classification": "NONE",
+      "confidence": 1.0,
+      "reason": "",
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "date_format": null,
+      "number_locale": null,
+      "varchar_length": null,
+      "unit_conversion": null,
+      "currency_conversion": null,
+      "source_timezone": null,
+      "taxonomy_id": null,
+      "taxonomy_version": null,
+      "taxonomy_required": false
+    },
+    {
+      "source_column": "Cabang",
+      "target_column": "branch_name",
+      "target_type": "text",
+      "business_name": "",
+      "nullable": false,
+      "is_business_key": false,
+      "is_primary_key": false,
+      "transformation_codes": [
+        "trim"
+      ],
+      "pii_classification": "NONE",
+      "confidence": 1.0,
+      "reason": "",
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "date_format": null,
+      "number_locale": null,
+      "varchar_length": null,
+      "unit_conversion": null,
+      "currency_conversion": null,
+      "source_timezone": null,
+      "taxonomy_id": null,
+      "taxonomy_version": null,
+      "taxonomy_required": false
+    },
+    {
+      "source_column": "Total",
+      "target_column": "net_amount",
+      "target_type": "numeric",
+      "business_name": "",
+      "nullable": false,
+      "is_business_key": false,
+      "is_primary_key": false,
+      "transformation_codes": [
+        "parse_decimal_id"
+      ],
+      "pii_classification": "NONE",
+      "confidence": 1.0,
+      "reason": "",
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "date_format": null,
+      "number_locale": null,
+      "varchar_length": null,
+      "unit_conversion": null,
+      "currency_conversion": null,
+      "source_timezone": null,
+      "taxonomy_id": null,
+      "taxonomy_version": null,
+      "taxonomy_required": false
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "net_amount",
+      "rule": "min",
+      "value": 0,
+      "action_on_fail": "REJECT_ROW",
+      "severity": "ERROR",
+      "owner": null,
+      "threshold_percent": null,
+      "max_age_days": null,
+      "default_value": null
+    }
+  ],
+  "semantic": {
+    "code": "SALES",
+    "dimensions": [
+      "transaction_id",
+      "transaction_date",
+      "branch_name"
+    ],
+    "metrics": [
+      {
+        "code": "net_sales",
+        "column": "net_amount",
+        "aggregation": "sum",
+        "label": "Penjualan bersih"
+      },
+      {
+        "code": "transaction_count",
+        "column": "transaction_id",
+        "aggregation": "count",
+        "label": "Jumlah transaksi"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [],
+  "overall_confidence": 1.0
+}

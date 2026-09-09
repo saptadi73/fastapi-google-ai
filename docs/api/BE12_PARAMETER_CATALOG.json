@@ -22,6 +22,17 @@
         "supported": true
       },
       {
+        "name": "append_duplicate_policy",
+        "type": "enum",
+        "default": null,
+        "supported": true,
+        "allowed": [
+          "SKIP_IDENTICAL",
+          "REJECT_IDENTICAL"
+        ],
+        "scope": "APPEND without business/primary keys; null means SKIP_IDENTICAL"
+      },
+      {
         "name": "columns",
         "type": "array",
         "default": [],

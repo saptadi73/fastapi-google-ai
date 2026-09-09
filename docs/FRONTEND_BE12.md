@@ -56,6 +56,7 @@ bukan anggota `transformation_codes`. UI harus melakukan mapping berikut.
 | Nama catalog | Path payload configuration | Catatan |
 |---|---|---|
 | number_format | columns[i].number_locale | ID/US; default runtime ID; bukan `number_format` |
+| append_duplicate_policy | append_duplicate_policy | SKIP_IDENTICAL/REJECT_IDENTICAL/null; hanya APPEND tanpa business/primary key |
 | numeric_precision_scale | columns[i].numeric_precision dan numeric_scale | Dua integer terpisah |
 | date_format | columns[i].date_format | Pakai pola strptime, bukan literal default catalog `ISO-8601` |
 | source_timezone | columns[i].source_timezone | Nama zona IANA, bukan key `timezone` |
@@ -197,6 +198,7 @@ disimpan menjadi draft, bukan `validation.valid=true`, approved, deployed, atau 
 |---|---|
 | 02 Struktur Kolom | U numeric_precision; V numeric_scale; W varchar_length; X date_format; Y number_locale; Z unit_conversion_json; AA source_timezone; AB currency_conversion_json |
 | 05 Data Quality | G severity; J threshold_percent; K owner; O max_age_days; P default_value_json |
+| 14 Review | B8 append_duplicate_policy; kosong berarti null |
 
 Z/AB adalah JSON object atau null; P JSON scalar (contoh `0`, `false`, `"0"`, `null`).
 J dan O harus menjaga angka nol, jangan diubah menjadi null dengan pemeriksaan falsy.
@@ -242,3 +244,16 @@ untuk date/time picker frontend. As-of lookup tidak mengganti pemilihan record/F
 
 
 Preview import kini menerima close_open_periods (default false), mengembalikan period_closures, dan apply menambahkan periods_closed. Lihat [alur penutupan berapproval](EFFECTIVE_DATING_BE12.md#penutupan-periode-terbuka-melalui-preview-berapproval), termasuk revalidate untuk mencabut approval lama.
+
+Verifikasi backend 9 September 2026: tujuh tes PostgreSQL penutupan periode lulus,
+termasuk rollback, dua apply bersamaan, retry, batas as_of, dan isolasi tenant.
+Kontrak/payload frontend tetap sama; lihat [cakupan dan batas bukti](EFFECTIVE_DATING_BE12.md#verifikasi-postgresql-penutupan-periode).
+
+Pembaruan APPEND: [kontrak kebijakan duplikat](LOAD_POLICIES_BE12.md) menjelaskan
+SKIP_IDENTICAL/REJECT_IDENTICAL, warning dry-run, outcome preview, error 409
+APPEND_IDENTICAL_REJECTED, serta jumlah rows_applied aktual. Default null memakai
+SKIP_IDENTICAL pada APPEND tanpa key. Policy non-null pada strategi lain/kolom key
+ditolak 422. Gunakan konfigurasi lengkap pada PATCH; perubahan policy mengharuskan
+review revision baru. Duplikat bisa muncul setelah approval: REJECT membatalkan
+transaksi, SKIP melewatinya. Preview konfigurasi hanya memeriksa snapshot;
+preview batch juga memeriksa target. Contoh: [konfigurasi APPEND](../examples/be12-append-configuration.json).

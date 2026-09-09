@@ -14804,6 +14804,21 @@
             ],
             "title": "Load Strategy"
           },
+          "append_duplicate_policy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SKIP_IDENTICAL",
+                  "REJECT_IDENTICAL"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Append Duplicate Policy"
+          },
           "columns": {
             "items": {
               "$ref": "#/components/schemas/ColumnMapping"
