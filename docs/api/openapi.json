@@ -2769,6 +2769,24 @@
               ],
               "title": "Record Id"
             }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
           }
         ],
         "responses": {
@@ -15177,6 +15195,11 @@
             "type": "integer",
             "minimum": 1.0,
             "title": "Revision No"
+          },
+          "close_open_periods": {
+            "type": "boolean",
+            "title": "Close Open Periods",
+            "default": false
           }
         },
         "additionalProperties": false,

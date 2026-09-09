@@ -125,7 +125,7 @@ class MasterStorageService(MasterService):
             "execution_ready": False,
         }
 
-    async def records(self, master_id, search="", offset=0, limit=50, active_only=True, record_id=None):
+    async def records(self, master_id, search="", offset=0, limit=50, active_only=True, record_id=None, as_of=None):
         _, definition, table = await self.target(master_id)
         connection = await self.session.connection()
         await connection.run_sync(lambda sync: check_storage(sync, table))
@@ -134,6 +134,10 @@ class MasterStorageService(MasterService):
         # Mask at SELECT time, and never filter by a field hidden from this role.
         visible = [c for c in table.c if c.name not in masked]
         query = select(*visible).where(table.c._tenant_id == self.user.tenant_id)
+        if as_of is not None:
+            from app.services.effective_dating_service import effective_at_condition
+
+            query = query.where(effective_at_condition(definition, table, as_of, masked_fields=masked))
         if active_only:
             query = query.where(table.c._is_active.is_(True))
         if record_id:
@@ -158,6 +162,8 @@ class MasterStorageService(MasterService):
         """Internal primitive for the future approved batch applier; no public write route."""
         self.require_role(DATA_ROLES)
         _, definition, table = await self.target(master_id)
+        if definition.policy.effective_dating:
+            raise AppError("MASTER_VERSION_IMMUTABLE", "Versi bermasa berlaku tidak boleh diubah lewat update atribut.", 409)
         allowed = {f.name for f in definition.fields} - set(definition.business_key)
         if not values or not set(values).issubset(allowed):
             raise AppError(

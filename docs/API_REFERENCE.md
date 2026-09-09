@@ -378,7 +378,7 @@ Kontrak lengkap dan mekanisme deployment: [Storage master BE-04](STORAGE_MASTER_
 |---|---|---|---|---|---|
 | GET | `/master-definitions/{master_id}/storage-plan` | S | UUID master | 200 | target, master_version, revision_no, ddl, schema_policy, execution_ready=false |
 | POST | `/master-definitions/{master_id}/deploy-storage` | R | MasterRevisionRequest | 200 | target, master_version, storage_ready=true, execution_ready=false |
-| GET | `/master-definitions/{master_id}/records` | S | search, offset, limit, active_only, record_id | 200 | items[], has_more, masked_fields[] |
+| GET | `/master-definitions/{master_id}/records` | S | search, offset, limit, active_only, record_id, as_of | 200 | items[], has_more, masked_fields[] |
 
 ## Registry master dan binding sumber (BE-03)
 
@@ -1298,3 +1298,22 @@ Contoh konfigurasi demo lengkap tersedia di `examples/be12-currency-configuratio
 Baris ID=DEMO-1, Tanggal=2026-09-09T01:30:00, Cabang=Jakarta, Total=100
 menghasilkan timestamp UTC 2026-09-08T18:30:00+00:00 dan net_amount=1234550.00.
 Contoh memakai kurs sintetis dan timezone Asia/Jakarta.
+
+
+### Effective dating master BE-12
+
+Versi eksplisit immutable, validasi overlap pada preview/apply, error dan kompatibilitas key: [Panduan effective dating](EFFECTIVE_DATING_BE12.md). Payload master siap pakai: [BE12_EFFECTIVE_MASTER.json](api/BE12_EFFECTIVE_MASTER.json). Tidak ada endpoint baru; policy berada di registry master.
+
+
+### Pencarian versi master pada tanggal tertentu
+
+GET `/master-definitions/{master_id}/records` menerima query opsional `as_of`
+(string 1..64). Detail format, error, masking, dan contoh frontend tersedia pada
+[panduan effective dating](EFFECTIVE_DATING_BE12.md#pencarian-versi-yang-berlaku-as_of).
+Tanpa parameter ini, perilaku daftar riwayat existing tetap berlaku. Response/pagination
+sama; tidak ada pemilihan atau perubahan FK otomatis.
+
+
+### Penutupan periode BE-12
+
+Body preview import mendukung close_open_periods=false. Mode true menghasilkan period_closures yang ikut preview approval; apply menambahkan periods_closed. Revalidate kini menerima batch READY_FOR_APPROVAL/APPROVED untuk mencabut approval dan preview lama. [Kontrak lengkap dan error](EFFECTIVE_DATING_BE12.md#penutupan-periode-terbuka-melalui-preview-berapproval).

@@ -204,6 +204,7 @@ Body: —.
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
 | `active_only` | query | Tidak | `boolean` {"default":true} |
 | `record_id` | query | Tidak | `string (uuid) / null` {} |
+| `as_of` | query | Tidak | `string / null` {} |
 
 ### GET /api/v1/master-definitions
 
@@ -1563,12 +1564,14 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `close_open_periods` | Tidak | `boolean` | false | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
 ```json
 {
-  "revision_no": 3
+  "revision_no": 3,
+  "close_open_periods": false
 }
 ```
 

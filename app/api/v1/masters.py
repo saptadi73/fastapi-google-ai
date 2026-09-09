@@ -10,10 +10,10 @@ from app.models.master import MasterDefinition
 from app.repositories.base import record
 from app.schemas.master import (
     MasterBindingUpdate,
+    MasterColumnBindingCreate,
     MasterDefinitionCreate,
     MasterDefinitionPatch,
     MasterRevisionRequest,
-    MasterColumnBindingCreate,
 )
 from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService
@@ -62,10 +62,11 @@ async def master_records(
     limit: int = Query(50, ge=1, le=100),
     active_only: bool = True,
     record_id: UUID | None = None,
+    as_of: str | None = Query(None, min_length=1, max_length=64),
 ):
     return success(
         await MasterStorageService(session, user).records(
-            master_id, search, offset, limit, active_only, record_id
+            master_id, search, offset, limit, active_only, record_id, as_of
         ),
         offset=offset,
         limit=limit,

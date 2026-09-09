@@ -68,7 +68,7 @@ bukan anggota `transformation_codes`. UI harus melakukan mapping berikut.
 | dq_max_age_days | data_quality_rules[i].rule=`max_age_days`, max_age_days | Parameter wajib untuk rule ini saja |
 | dq_default_value | data_quality_rules[i].default_value | Scalar target |
 | dq_severity_owner | data_quality_rules[i].severity dan owner | Metadata, tidak mengubah action |
-| effective_dating | Policy master terpisah | Jangan kirim pada ETLConfiguration; bukan bukti historical version runtime selesai |
+| effective_dating | Policy master terpisah | Jangan kirim pada ETLConfiguration; versi eksplisit tersedia; lihat panduan effective dating |
 
 `operations` bukan daftar lengkap semua transform string; daftar string yang valid
 ada pada `transformation_codes.allowed`/schema. `capabilities.unsupported` masih
@@ -214,7 +214,7 @@ atau XLSX tidak mengubah status approval.
 
 - Belum ada currency provider live, kurs historis otomatis, currency campuran per baris, custom unit atau konversi lintas dimensi.
 - Belum ada general locale, metadata entity/domain baru pada ColumnMapping, transform expression bebas, kondisi dinamis, multi-target atau schema evolution otomatis.
-- Effective dating policy master bukan implementasi versi historis penuh BE-12.
+- Effective dating mendukung versi eksplisit immutable; penutupan periode terbuka tersedia lewat preview batch opt-in dan approval; koreksi bebas dan resolver FK as-of belum tersedia. Lihat [panduan effective dating](EFFECTIVE_DATING_BE12.md).
 - Timezone scheduler/query dan pin versi tzdb per konfigurasi belum termasuk source_timezone ETL.
 - DDL target existing tetap CREATE_ONLY_OR_IDENTICAL. Mengubah precision/scale/varchar dalam form tidak melakukan migrasi target otomatis.
 - Kontrak BE-12 schema/versi tetap 1.0; strict schema menolak field tambahan. Jangan menyimpan key UI (expanded, label tampilan, dsb.) dalam payload.
@@ -231,3 +231,14 @@ atau XLSX tidak mengubah status approval.
 Bukti backend terakhir: 150 tes non-integrasi lulus, 35 tes integrasi tidak dijalankan;
 exporter memverifikasi 145 operasi API. Bukan verifikasi PostgreSQL/provider nyata
 atau bukti deployment environment tujuan.
+
+
+Pembaruan berikutnya: [Master versi masa berlaku](EFFECTIVE_DATING_BE12.md) mencakup key versi, error preview/apply baru, dan payload registry master.
+
+
+Pembaruan pencarian riwayat: endpoint GET master records kini menerima `as_of`.
+Gunakan [kontrak format, error, dan interval](EFFECTIVE_DATING_BE12.md#pencarian-versi-yang-berlaku-as_of)
+untuk date/time picker frontend. As-of lookup tidak mengganti pemilihan record/FK.
+
+
+Preview import kini menerima close_open_periods (default false), mengembalikan period_closures, dan apply menambahkan periods_closed. Lihat [alur penutupan berapproval](EFFECTIVE_DATING_BE12.md#penutupan-periode-terbuka-melalui-preview-berapproval), termasuk revalidate untuk mencabut approval lama.

@@ -58,7 +58,7 @@ async def parameter_catalog(session: Session, user: CurrentUser):
             {"name": "dq_max_age_days", "type": "integer", "supported": True, "scope": "temporal columns; UTC"},
             {"name": "dq_default_value", "type": "scalar", "supported": True, "scope": "cast before nullability and DQ checks"},
             {"name": "dq_severity_owner", "type": "object", "supported": True, "scope": "finding metadata; action_on_fail controls routing"},
-            {"name": "effective_dating", "type": "object", "default": None, "supported": True, "scope": "MASTER policy"},
+            {"name": "effective_dating", "type": "object", "default": None, "supported": True, "scope": "MASTER policy; explicit versions keyed by entity + valid_from; opt-in batch preview closure with approval"},
             {"name": "unit_conversion", "type": "object", "default": None, "supported": True, "scope": "columns.unit_conversion; non-key numeric", "parameter_schema": UnitConversion.model_json_schema()},
             {"name": "multi_target", "type": "object[]", "default": [], "supported": False, "reason": "BE-12 split grain compiler"},
             {"name": "schema_evolution", "type": "object", "default": {}, "supported": False, "reason": "BE-12 migration compiler"},

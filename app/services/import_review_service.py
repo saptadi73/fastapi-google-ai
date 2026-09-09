@@ -1,7 +1,7 @@
-from difflib import SequenceMatcher
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from difflib import SequenceMatcher
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
-from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
+from app.domain.enums import DATA_ROLES, EDIT_ROLES, REVIEW_ROLES
 from app.domain.import_workflow import ImportAction, ImportStatus, next_import_status
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
@@ -22,19 +22,19 @@ from app.repositories.base import TenantRepository, record
 from app.schemas.configuration import ETLConfiguration
 from app.schemas.data_policy import DatasetPolicy
 from app.schemas.import_review import (
+    AIImportReviewResult,
     ImportProposalResolution,
     ImportQuestionDecision,
     ImportReviewCreate,
-    AIImportReviewResult,
 )
 from app.services.audit_service import audit
 from app.services.etl_compiler_service import cast_value, transform_rows
 from app.services.job_service import enqueue
 from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService, check_storage
+from app.services.openai_service import OpenAIService
 from app.services.profiling_service import digest
 from app.services.workbook_service import decode, token
-from app.services.openai_service import OpenAIService
 
 
 class ImportReviewService:
@@ -599,6 +599,12 @@ class ImportReviewService:
         if action == ImportAction.CANCEL:
             self.move(review, action)
         else:
+            if action == ImportAction.REVALIDATE and review.status in ("READY_FOR_APPROVAL", "APPROVED"):
+                self.move(review, ImportAction.INVALIDATE, worker=True)
+                review.checkpoint = {k: v for k, v in review.checkpoint.items() if k not in (
+                    "preview_hash", "preview_revision", "preview_blockers", "approved_by", "approval_comment",
+                    "close_open_periods", "effective_plan_hash", "periods_to_close",
+                )}
             if review.status not in ("NEEDS_INPUT", "FAILED", "STALE_REVIEW"):
                 raise AppError("IMPORT_STATE_CONFLICT", "Batch belum dapat dilanjutkan.", 409)
             if not await self.is_current(review):
@@ -691,6 +697,12 @@ class ImportReviewService:
             c.target_column for c in config.columns if c.is_business_key or c.is_primary_key
         ])
         existing = {}
+        identical_versions = set()
+        version_candidates = None
+        period_closures, effective_plan_hash = [], None
+        close_open_periods = data.close_open_periods
+        if close_open_periods and (not definition or not definition.policy.effective_dating):
+            raise AppError("MASTER_EFFECTIVE_DATING_REQUIRED", "Penutupan periode memerlukan master bermasa berlaku.", 409)
         if keys:
             query = select(*[target.c[k] for k in keys], target.c._record_id if hasattr(target.c, "_record_id") else target.c._row_hash).where(
                 target.c._tenant_id == self.user.tenant_id
@@ -698,12 +710,28 @@ class ImportReviewService:
             for row in (await self.session.execute(query)).mappings():
                 normalized = self.json_value(dict(row))
                 existing[tuple(normalized.get(k) for k in keys)] = normalized
+        if definition and definition.policy.effective_dating:
+            from app.services.effective_dating_service import validate_versions
+
+            existing_versions = (await self.session.execute(
+                select(target).where(target.c._tenant_id == self.user.tenant_id)
+            )).mappings().all()
+            incoming = [{**r.transformed_data, **r.corrected_data} for r in rows]
+            if close_open_periods:
+                from app.services.effective_dating_service import plan_version_closures, version_plan_hash
+
+                version_candidates, identical, period_closures = plan_version_closures(definition, incoming, existing_versions)
+                self.check_closure_visibility(definition, period_closures)
+                effective_plan_hash = version_plan_hash(incoming, existing_versions)
+            else:
+                version_candidates, identical = validate_versions(definition, incoming, existing_versions)
+            identical_versions = {tuple(self.json_value(key)) for key in identical}
         changes = []
         seen_keys = set()
         master_policy = review.dependencies.get("policy", {}).get("master") or {}
         allow_insert = master_policy.get("new_record_policy") == "PROPOSE_INSERT"
-        for row in rows:
-            after = {**row.transformed_data, **row.corrected_data}
+        for index, row in enumerate(rows):
+            after = self.json_value(version_candidates[index]) if version_candidates is not None else {**row.transformed_data, **row.corrected_data}
             if not after:
                 changes.append({"source_row": row.source_row, "outcome": "INVALID", "before": None, "after": after})
                 continue
@@ -721,20 +749,25 @@ class ImportReviewService:
                 outcome = "INSERT" if allow_insert or review.dependencies["dataset_kind"] != "MASTER" else "INSERT_PROPOSED"
             else:
                 comparable = {k: before.get(k) for k in after}
-                outcome = "UNCHANGED" if comparable == after else "UPDATE"
+                outcome = "UNCHANGED" if key in identical_versions or comparable == after else "UPDATE"
             changes.append({"source_row": row.source_row, "outcome": outcome, "before": before, "after": after})
-        preview_hash = digest({"review_id": str(review.id), "revision_no": review.revision_no, "changes": changes})
+        preview_hash = digest({"review_id": str(review.id), "revision_no": review.revision_no, "changes": changes,
+                               "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash,
+                               "period_closures": self.json_value(period_closures)})
+        if review.status == "APPROVED" and preview_hash != review.checkpoint.get("preview_hash"):
+            raise AppError("IMPORT_PREVIEW_STALE", "Rencana berubah setelah approval; revalidate dan minta approval ulang.", 409)
         preview_token = token(
             {"review_id": str(review.id), "tenant_id": str(review.tenant_id), "revision_no": review.revision_no, "preview_hash": preview_hash},
             "import-review-preview",
             30,
         )
         preview_blockers = sorted({c["outcome"] for c in changes if c["outcome"] in ("DUPLICATE", "KEY_CONFLICT", "INVALID")})
-        review.checkpoint = {**review.checkpoint, "preview_hash": preview_hash, "preview_revision": review.revision_no, "preview_blockers": preview_blockers}
+        review.checkpoint = {**review.checkpoint, "preview_hash": preview_hash, "preview_revision": review.revision_no, "preview_blockers": preview_blockers, "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash, "periods_to_close": len(period_closures)}
         return {
             "review": self.response(review),
             "target": target.fullname,
             "changes": changes,
+            "period_closures": self.json_value(period_closures),
             "summary": {
                 "insert": sum(c["outcome"] == "INSERT" for c in changes),
                 "insert_proposed": sum(c["outcome"] == "INSERT_PROPOSED" for c in changes),
@@ -748,6 +781,13 @@ class ImportReviewService:
             "preview_token": preview_token,
             "can_approve": not any(c["outcome"] in ("DUPLICATE", "KEY_CONFLICT", "INVALID") for c in changes),
         }
+
+    def check_closure_visibility(self, definition, closures):
+        if closures and self.user.role not in DATA_ROLES:
+            period = definition.policy.effective_dating
+            if any(field.name in (period.valid_from_column, period.valid_to_column)
+                   and field.pii_classification in ("MEDIUM", "HIGH") for field in definition.fields):
+                raise AppError("MASTER_PERIOD_FILTER_FORBIDDEN", "Periode sensitif memerlukan role data untuk preview/apply penutupan.", 403)
 
     async def approve(self, review_id, data):
         self.role()
@@ -764,6 +804,9 @@ class ImportReviewService:
             raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki insert yang memerlukan usulan atau duplicate key.", 409)
         if not review.checkpoint.get("preview_hash"):
             raise AppError("IMPORT_PREVIEW_REQUIRED", "Buat preview batch terlebih dahulu.", 409)
+        if review.checkpoint.get("periods_to_close"):
+            _, definition, _ = await MasterStorageService(self.session, self.user).target(review.dependencies["master_id"])
+            self.check_closure_visibility(definition, [True])
         if get_settings().require_separate_approver and review.created_by == self.user.id:
             raise AppError("SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun reviewer lain.", 403)
         self.move(review, ImportAction.APPROVE)
@@ -784,7 +827,6 @@ class ImportReviewService:
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
             {"key": "import-apply:" + str(lock_key)},
         )
-        self.move(review, ImportAction.APPLY)
         if review.dependencies["dataset_kind"] == "MASTER":
             _, definition, table = await MasterStorageService(self.session, self.user).target(review.dependencies["master_id"])
             keys = definition.business_key
@@ -795,9 +837,43 @@ class ImportReviewService:
             keys = [c.target_column for c in config.columns if c.is_business_key or c.is_primary_key]
         connection = await self.session.connection()
         await connection.run_sync(lambda sync: check_storage(sync, table))
+        version_rows, identical = None, set()
+        period_closures = []
+        if review.dependencies["dataset_kind"] == "MASTER" and definition.policy.effective_dating:
+            from app.services.effective_dating_service import validate_versions
+
+            existing_versions = (await self.session.execute(
+                select(table).where(table.c._tenant_id == self.user.tenant_id)
+            )).mappings().all()
+            incoming = [{**r.transformed_data, **r.corrected_data} for r in rows]
+            if review.checkpoint.get("close_open_periods"):
+                from app.services.effective_dating_service import plan_version_closures, version_plan_hash
+
+                if version_plan_hash(incoming, existing_versions) != review.checkpoint.get("effective_plan_hash"):
+                    raise AppError("IMPORT_PREVIEW_STALE", "Target/isi batch berubah sejak preview penutupan; revalidate dan approve ulang.", 409)
+                version_rows, identical, period_closures = plan_version_closures(definition, incoming, existing_versions)
+                self.check_closure_visibility(definition, period_closures)
+            else:
+                version_rows, identical = validate_versions(definition, incoming, existing_versions)
+        self.move(review, ImportAction.APPLY)
+        for closure in period_closures:
+            result = await self.session.execute(table.update().where(
+                table.c._tenant_id == self.user.tenant_id,
+                table.c._record_id == closure["record_id"],
+                table.c._revision_no == closure["revision_no"],
+                table.c[closure["column"]].is_(None),
+                table.c._is_active.is_(True),
+            ).values({closure["column"]: closure["after"], "_revision_no": table.c._revision_no + 1,
+                      "_updated_at": text("now()")}))
+            if result.rowcount != 1:
+                raise AppError("MASTER_RECORD_REVISION_CONFLICT", "Versi penutupan berubah; transaksi dibatalkan.", 409)
+            audit(self.session, self.user, "master.period_closed", closure["record_id"],
+                  import_review_id=str(review.id), **self.json_value({k: v for k, v in closure.items() if k != "record_id"}))
         loaded = 0
-        for row in rows:
-            values = {**row.transformed_data, **row.corrected_data}
+        for index, row in enumerate(rows):
+            values = version_rows[index] if version_rows is not None else {**row.transformed_data, **row.corrected_data}
+            if version_rows is not None and tuple(values[k] for k in keys) in identical:
+                continue
             if not values:
                 continue
             if review.dependencies["dataset_kind"] == "MASTER":
@@ -805,14 +881,14 @@ class ImportReviewService:
             else:
                 values = {**values, "_tenant_id": self.user.tenant_id, "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_etl_run_id": review.id, "_row_hash": digest(values)}
             stmt = insert(table).values(**values)
-            if keys:
+            if keys and version_rows is None:
                 stmt = stmt.on_conflict_do_update(index_elements=["_tenant_id", *keys], set_={k: stmt.excluded[k] for k in values if k not in ("_tenant_id", *keys, "_record_id")})
             await self.session.execute(stmt)
             loaded += 1
         self.move(review, ImportAction.COMPLETE, worker=True)
-        review.checkpoint = {**review.checkpoint, "rows_applied": loaded, "applied_by": str(self.user.id)}
+        review.checkpoint = {**review.checkpoint, "rows_applied": loaded, "periods_closed": len(period_closures), "applied_by": str(self.user.id)}
         audit(self.session, self.user, "import.applied", review.id, rows_applied=loaded)
-        return {"review": self.response(review), "rows_applied": loaded, "status": review.status}
+        return {"review": self.response(review), "rows_applied": loaded, "periods_closed": len(period_closures), "status": review.status}
 
     async def resolve_reference(self, review_id, data):
         self.role()

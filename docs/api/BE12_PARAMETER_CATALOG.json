@@ -246,7 +246,7 @@
         "type": "object",
         "default": null,
         "supported": true,
-        "scope": "MASTER policy"
+        "scope": "MASTER policy; explicit versions keyed by entity + valid_from; opt-in batch preview closure with approval"
       },
       {
         "name": "unit_conversion",

@@ -82,6 +82,7 @@ def validate_master_evolution(previous, proposed):
     new = {f.name: f for f in proposed.fields}
     if (
         previous.business_key != proposed.business_key
+        or previous.policy.effective_dating != proposed.policy.effective_dating
         or any(
             name not in new or (f.type, f.nullable) != (new[name].type, new[name].nullable)
             for name, f in old.items()

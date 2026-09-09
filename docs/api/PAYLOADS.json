@@ -569,7 +569,8 @@
     "master_definition_id": "55555555-5555-4555-8555-555555555555"
   },
   "ImportReviewPreviewRequest": {
-    "revision_no": 3
+    "revision_no": 3,
+    "close_open_periods": false
   },
   "ImportReviewApproveRequest": {
     "revision_no": 4,
@@ -619,17 +620,25 @@
     "target_column": "category_id"
   },
   "TaxonomyValuesValidateRequest": {
-    "values": ["Minuman", "Elektronik"],
+    "values": [
+      "Minuman",
+      "Elektronik"
+    ],
     "taxonomy_version": 1
   },
   "TaxonomyRecommendRequest": {
-    "values": ["Minumn", "Elektronic"],
+    "values": [
+      "Minumn",
+      "Elektronic"
+    ],
     "limit": 3
   },
   "TaxonomyTermCreate": {
     "code": "beverages",
     "label": "Minuman",
     "parent_id": null,
-    "aliases": ["Minuman dan Beverage"]
+    "aliases": [
+      "Minuman dan Beverage"
+    ]
   }
 }

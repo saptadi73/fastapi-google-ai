@@ -1,0 +1,41 @@
+{
+  "code": "product_prices",
+  "definition": {
+    "name": "Riwayat harga produk",
+    "fields": [
+      {
+        "name": "product_code",
+        "type": "text",
+        "nullable": false
+      },
+      {
+        "name": "valid_from",
+        "type": "date",
+        "nullable": false
+      },
+      {
+        "name": "valid_to",
+        "type": "date",
+        "nullable": true
+      },
+      {
+        "name": "price",
+        "type": "numeric",
+        "nullable": false
+      }
+    ],
+    "business_key": [
+      "product_code",
+      "valid_from"
+    ],
+    "label_field": "product_code",
+    "policy": {
+      "new_record_policy": "PROPOSE_INSERT",
+      "source_conflict_policy": "REQUIRE_REVIEW",
+      "effective_dating": {
+        "valid_from_column": "valid_from",
+        "valid_to_column": "valid_to"
+      }
+    }
+  }
+}

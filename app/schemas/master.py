@@ -58,6 +58,10 @@ class MasterSchema(StrictModel):
                     raise ValueError("Masa berlaku harus merujuk field tanggal/waktu")
             if fields[period.valid_from_column].type != fields[period.valid_to_column].type:
                 raise ValueError("Tipe awal dan akhir masa berlaku harus sama")
+            if period.valid_from_column not in self.business_key or len(self.business_key) < 2:
+                raise ValueError("Effective dating requires entity key plus valid_from in business_key")
+            if period.valid_to_column in self.business_key:
+                raise ValueError("valid_to cannot be part of the version business_key")
         return self
 
 

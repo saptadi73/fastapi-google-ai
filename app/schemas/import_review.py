@@ -18,6 +18,7 @@ class ImportReviewAction(StrictModel):
 
 class ImportReviewPreviewRequest(StrictModel):
     revision_no: int = Field(ge=1)
+    close_open_periods: bool = False
 
 
 class ImportReviewApproveRequest(StrictModel):
