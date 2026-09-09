@@ -8,7 +8,7 @@ from app.models.import_review import ImportDecision, ImportQuestion, ImportRevie
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.semantic import DataProduct, QueryRequest, SavedQuery
 from app.models.source import DataSource, ProfilingRun, SourceSheet
-from app.models.taxonomy import Taxonomy, TaxonomyTerm, TaxonomyColumnBinding
+from app.models.taxonomy import Taxonomy, TaxonomyColumnBinding, TaxonomyTerm, TaxonomyVersion
 
 install_tenant_constraints(Base.metadata)
 
@@ -43,4 +43,5 @@ __all__ = [
     "Taxonomy",
     "TaxonomyTerm",
     "TaxonomyColumnBinding",
+    "TaxonomyVersion",
 ]

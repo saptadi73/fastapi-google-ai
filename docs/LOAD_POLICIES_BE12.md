@@ -125,3 +125,8 @@ existing pada master_column_binding dan taxonomy (index, FK tenant, dan kolom
 metadata); ini perlu diselaraskan pada pekerjaan registry/taxonomy berikutnya.
 Database aplikasi/production tidak dimigrasikan. Fixture awal yang gagal cleanup
 sudah dibersihkan berdasarkan UUID tenant/target pengujian tersebut saja.
+
+Pembaruan berikutnya: drift registry di atas telah diperbaiki oleh model metadata
+taxonomy dan migrasi `8a96b7c5d4ef`. Database test sudah upgrade dan `alembic check`
+bersih. Lihat [catatan repair registry](REGISTRY_SCHEMA_REPAIR.md), termasuk kebijakan
+downgrade yang mempertahankan constraint tenant.

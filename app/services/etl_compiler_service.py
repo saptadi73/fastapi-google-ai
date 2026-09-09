@@ -127,7 +127,12 @@ def matches_format(value, format_name):
         return False
 
 
-def transform_rows(values, sheet, config, *, reference_time=None):
+def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None, review_mode=False):
+    from app.services.taxonomy_validation_service import exact_terms, normalized
+
+    for rule in config.data_quality_rules:
+        if rule.rule == "in_taxonomy" and (taxonomy is None or rule.column not in taxonomy):
+            raise AppError("TAXONOMY_CONTEXT_REQUIRED", "Rule in_taxonomy memerlukan binding approved yang dimuat server.", 409)
     reference_time = reference_time or datetime.now(UTC)
     if reference_time.tzinfo is None:
         raise ValueError("reference_time requires timezone")
@@ -196,6 +201,11 @@ def transform_rows(values, sheet, config, *, reference_time=None):
                         failed = True
                 elif rule.rule == "allowed_values":
                     failed = str(value) not in rule.value
+                elif rule.rule == "in_taxonomy":
+                    column, _, _, terms = taxonomy[rule.column]
+                    empty = value is None or not normalized(value)
+                    failed = column.taxonomy_required if empty else len(exact_terms(
+                        [term for term in terms if term.is_active], value)) != 1
                 elif rule.rule == "format" and value is not None:
                     failed = not matches_format(value, rule.value)
                 elif rule.rule == "max_age_days" and value is not None:
@@ -210,6 +220,8 @@ def transform_rows(values, sheet, config, *, reference_time=None):
                               "rule_index": rule_index, "severity": rule.severity, "owner": rule.owner}
                     if rule.action_on_fail == "WARN":
                         warnings.append({"source_row": row_number, **detail})
+                    elif rule.rule == "in_taxonomy" and rule.action_on_fail == "REQUIRE_REVIEW" and review_mode:
+                        errors.append(detail)
                     elif rule.action_on_fail in ("STOP_BATCH", "REQUIRE_REVIEW"):
                         raise AppError(
                             "DQ_" + rule.action_on_fail, "Data quality rule menghentikan batch untuk review."
@@ -223,7 +235,10 @@ def transform_rows(values, sheet, config, *, reference_time=None):
                     errors.append({"column": ",".join(keys), "code": "DUPLICATE_BUSINESS_KEY"})
                 bucket.add(key)
         if errors:
-            issues.append({"source_row": row_number, "data": raw, "errors": errors})
+            issue = {"source_row": row_number, "data": raw, "errors": errors}
+            if review_mode and any(error["code"] == "IN_TAXONOMY" for error in errors):
+                issue["transformed_data"] = result
+            issues.append(issue)
         else:
             good.append((row_number, result))
     if keyless_append(config):

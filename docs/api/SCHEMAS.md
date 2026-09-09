@@ -380,6 +380,48 @@ Body: —.
 |---|---|---|---|
 | `taxonomy_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/taxonomies/{taxonomy_id}/versions
+
+Body: [TaxonomyVersionCreate](#taxonomyversioncreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/taxonomies/{taxonomy_id}/versions
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### GET /api/v1/taxonomies/versions/{version_id}
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `version_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/taxonomies/versions/{version_id}
+
+Body: [TaxonomyVersionUpdate](#taxonomyversionupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `version_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/versions/{version_id}/approve
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `version_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/taxonomies/source-sheets/{sheet_id}/column-bindings
 
 Body: —.
@@ -1886,7 +1928,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
 | `column` | Ya | `string` | — | — |
-| `rule` | Ya | `enum ["not_null","unique","min","max","allowed_values","format","max_age_days"]` | — | — |
+| `rule` | Ya | `enum ["not_null","unique","min","max","allowed_values","format","max_age_days","in_taxonomy"]` | — | — |
 | `value` | Tidak | `string / integer / number / array<string> / null` | — | — |
 | `action_on_fail` | Tidak | `enum ["REJECT_ROW","WARN","STOP_BATCH","REQUIRE_REVIEW"]` | "REJECT_ROW" | — |
 | `severity` | Tidak | `enum ["INFO","WARN","ERROR","CRITICAL"]` | "ERROR" | — |
@@ -2213,7 +2255,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `taxonomy_id` | Ya | `string (uuid)` | — | — |
 | `taxonomy_version` | Ya | `integer` | — | {"minimum":1.0} |
 | `required` | Tidak | `boolean` | false | — |
-| `normalization` | Tidak | `string` | "TRIM_CASEFOLD" | {"pattern":"^[A-Z0-9_]{2,40}$"} |
+| `normalization` | Tidak | `"TRIM_CASEFOLD"` | "TRIM_CASEFOLD" | — |
 | `revision_no` | Tidak | `integer` | 0 | {"minimum":0.0} |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
@@ -2270,7 +2312,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
 | `label` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
-| `parent_id` | Tidak | `string / null` | — | — |
+| `parent_id` | Tidak | `string (uuid) / null` | — | — |
 | `aliases` | Tidak | `array<string>` | [] | {"maxItems":30} |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
@@ -2316,6 +2358,58 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
     "Elektronik"
   ],
   "taxonomy_version": 1
+}
+```
+
+### TaxonomyVersionCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `base_version` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "base_version": 2
+}
+```
+
+### TaxonomyVersionTerm
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `label` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `parent_id` | Tidak | `string (uuid) / null` | — | — |
+| `aliases` | Tidak | `array<string>` | [] | {"maxItems":30} |
+| `id` | Ya | `string (uuid)` | — | — |
+| `is_active` | Tidak | `boolean` | true | — |
+
+### TaxonomyVersionUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `terms` | Ya | `array<TaxonomyVersionTerm>` | — | {"maxItems":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "terms": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "code": "tea",
+      "label": "Tea",
+      "parent_id": null,
+      "aliases": [
+        "Teh"
+      ],
+      "is_active": true
+    }
+  ]
 }
 ```
 
@@ -2626,6 +2720,82 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `revision_no` | `INTEGER` | Tidak |
 | `status` | `VARCHAR(32)` | Tidak |
 | `columns_json` | `JSONB` | Tidak |
+| `fingerprint` | `VARCHAR(64)` | Tidak |
+| `snapshot_hash` | `VARCHAR(64)` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record Taxonomy
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `code` | `VARCHAR(63)` | Tidak |
+| `name` | `VARCHAR(200)` | Tidak |
+| `version` | `INTEGER` | Tidak |
+| `status` | `VARCHAR(20)` | Tidak |
+| `is_active` | `BOOLEAN` | Tidak |
+| `definition_json` | `JSONB` | Tidak |
+| `fingerprint` | `VARCHAR(64)` | Tidak |
+| `snapshot_hash` | `VARCHAR(64)` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record TaxonomyTerm
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `taxonomy_id` | `CHAR(32)` | Tidak |
+| `parent_id` | `CHAR(32)` | Ya |
+| `code` | `VARCHAR(63)` | Tidak |
+| `label` | `VARCHAR(200)` | Tidak |
+| `aliases` | `JSONB` | Tidak |
+| `is_active` | `BOOLEAN` | Tidak |
+| `fingerprint` | `VARCHAR(64)` | Tidak |
+| `snapshot_hash` | `VARCHAR(64)` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record TaxonomyVersion
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `taxonomy_id` | `CHAR(32)` | Tidak |
+| `version` | `INTEGER` | Tidak |
+| `base_version` | `INTEGER` | Ya |
+| `revision_no` | `INTEGER` | Tidak |
+| `status` | `VARCHAR(20)` | Tidak |
+| `definition_json` | `JSONB` | Tidak |
+| `created_by` | `CHAR(32)` | Tidak |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record TaxonomyColumnBinding
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `source_sheet_id` | `CHAR(32)` | Tidak |
+| `source_column` | `VARCHAR(200)` | Tidak |
+| `taxonomy_id` | `CHAR(32)` | Tidak |
+| `taxonomy_version` | `INTEGER` | Tidak |
+| `required` | `BOOLEAN` | Tidak |
+| `normalization` | `VARCHAR(40)` | Tidak |
+| `revision_no` | `INTEGER` | Tidak |
+| `status` | `VARCHAR(20)` | Tidak |
 | `fingerprint` | `VARCHAR(64)` | Tidak |
 | `snapshot_hash` | `VARCHAR(64)` | Tidak |
 | `created_by` | `CHAR(32)` | Tidak |

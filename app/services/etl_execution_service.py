@@ -21,6 +21,7 @@ from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
 from app.services.profiling_service import canonical_json, digest, profile_values
 from app.services.schema_compiler_service import compile_table
+from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
 
 
 class ETLExecutionService:
@@ -121,7 +122,9 @@ class ETLExecutionService:
                 run_key=run_key,
                 rows_extracted=profile["row_count"],
             )
-            good, issues, warnings = transform_rows(values, sheet, parsed)
+            good, issues, warnings = transform_rows(values, sheet, parsed,
+                taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
+            good = await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
             # Never replace trusted data with a partial/invalid FULL_REFRESH snapshot.
             if parsed.load_strategy == "FULL_REFRESH" and issues:
                 raise AppError(

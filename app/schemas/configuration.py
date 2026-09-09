@@ -125,6 +125,8 @@ class ColumnMapping(StrictModel):
             raise ValueError("taxonomy_version memerlukan taxonomy_id")
         if self.taxonomy_required and self.taxonomy_id is None:
             raise ValueError("taxonomy_required memerlukan taxonomy_id")
+        if self.taxonomy_id is not None and (self.taxonomy_version is None or self.target_type not in ("text", "varchar")):
+            raise ValueError("taxonomy_id requires taxonomy_version and text/varchar target")
         if (self.numeric_precision is not None or self.numeric_scale is not None) and self.target_type != "numeric":
             raise ValueError("numeric_precision/scale hanya berlaku untuk target numeric")
         if self.numeric_scale is not None and self.numeric_precision is not None and self.numeric_scale > self.numeric_precision:
@@ -140,7 +142,7 @@ class ColumnMapping(StrictModel):
 
 class QualityRule(StrictModel):
     column: str
-    rule: Literal["not_null", "unique", "min", "max", "allowed_values", "format", "max_age_days"]
+    rule: Literal["not_null", "unique", "min", "max", "allowed_values", "format", "max_age_days", "in_taxonomy"]
     value: str | int | float | list[str] | None = None
     action_on_fail: Literal["REJECT_ROW", "WARN", "STOP_BATCH", "REQUIRE_REVIEW"] = "REJECT_ROW"
     severity: Literal["INFO", "WARN", "ERROR", "CRITICAL"] = "ERROR"
@@ -151,6 +153,8 @@ class QualityRule(StrictModel):
 
     @model_validator(mode="after")
     def valid_parameters(self):
+        if self.rule == "in_taxonomy" and (self.value is not None or self.action_on_fail == "WARN"):
+            raise ValueError("in_taxonomy uses the approved column binding and cannot be warning-only")
         if self.rule == "format" and self.value not in ("UUID", "ISO_DATE", "ISO_DATETIME"):
             raise ValueError("format requires UUID, ISO_DATE, or ISO_DATETIME")
         if (self.rule == "max_age_days") != (self.max_age_days is not None):
@@ -222,6 +226,8 @@ class ETLConfiguration(StrictModel):
             if rule.column not in names:
                 raise ValueError("DQ rule references an unknown column")
             column = next(c for c in self.columns if c.target_column == rule.column)
+            if rule.rule == "in_taxonomy" and not column.taxonomy_id:
+                raise ValueError("in_taxonomy requires a versioned taxonomy column mapping")
             if rule.rule == "max_age_days" and column.target_type not in ("date", "timestamp", "timestamptz"):
                 raise ValueError("max_age_days requires a temporal column")
             if rule.default_value is not None:

@@ -35,6 +35,12 @@ from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService, check_storage
 from app.services.openai_service import OpenAIService
 from app.services.profiling_service import digest
+from app.services.taxonomy_validation_service import (
+    canonicalize_rows,
+    context_hash,
+    review_taxonomy_rows,
+    taxonomy_context,
+)
 from app.services.workbook_service import decode, token
 
 
@@ -180,6 +186,11 @@ class ImportReviewService:
                 configuration_id=configuration.id, configuration_revision=configuration.revision_no
             )
         dependencies["configuration_hash"] = digest(config)
+        parsed = ETLConfiguration.model_validate(config)
+        if any(c.taxonomy_id for c in parsed.columns):
+            dependencies["taxonomy_runtime_version"] = 2
+            dependencies["taxonomy_hash"] = context_hash(await taxonomy_context(
+                self.session, self.user.tenant_id, sheet.id, parsed))
         dependencies["policy"] = DatasetPolicy(
             classification_scope="SHEET", dataset_kind=sheet.dataset_kind, master=master_policy
         ).model_dump(mode="json")
@@ -435,15 +446,33 @@ class ImportReviewService:
                 raise AppError(
                     "IMPORT_DECISION_VALUE_INVALID", "Nilai koreksi tidak cocok dengan tipe target.", 422
                 ) from None
+            if question.category == "TAXONOMY_INVALID":
+                parsed = ETLConfiguration.model_validate(review.configuration_json)
+                context = await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id, parsed, lock=True)
+                candidate = SimpleNamespace(source_row=question.source_row, transformed_data=after, corrected_data={})
+                canonicalize_rows({question.target_column: context[question.target_column]}, [candidate], parsed)
+                after.update(candidate.corrected_data)
         elif data.action == "SELECT_RECORD":
-            after[question.target_column] = str(data.selected_candidate_id)
+            if question.category == "TAXONOMY_AMBIGUOUS":
+                taxonomy = await self.repo.get(Taxonomy, question.evidence["taxonomy_id"], lock=True)
+                term = await self.repo.get(TaxonomyTerm, data.selected_candidate_id)
+                column = next((c for c in review.configuration_json["columns"]
+                               if c["target_column"] == question.target_column), None)
+                if (not column or str(column.get("taxonomy_id")) != taxonomy.id
+                        or taxonomy.version != question.evidence["taxonomy_version"]
+                        or taxonomy.status != "APPROVED" or not taxonomy.is_active
+                        or term.taxonomy_id != taxonomy.id or not term.is_active):
+                    raise AppError("TAXONOMY_VERSION_STALE", "Kandidat taxonomy tidak lagi berlaku.", 409)
+                after[question.target_column] = term.code
+            else:
+                after[question.target_column] = str(data.selected_candidate_id)
         proposal = None
         if data.action == "PROPOSE_MASTER":
             proposal = await MasterService(self.session, self.user).create(data.master_proposal)
         if question.staging_row_id and after:
             row = await self.session.scalar(
                 self.repo.query(ImportReviewRow)
-                .where(ImportReviewRow.id == question.staging_row_id)
+                .where(ImportReviewRow.id == question.staging_row_id, ImportReviewRow.import_review_id == review.id)
                 .with_for_update()
                 .execution_options(populate_existing=True)
             )
@@ -507,7 +536,7 @@ class ImportReviewService:
                 )
             ).all()
         )
-        review.checkpoint["open_question_count"] = open_count
+        review.checkpoint = {**review.checkpoint, "open_question_count": open_count}
         review.revision_no += 1
         audit(
             self.session,
@@ -670,18 +699,8 @@ class ImportReviewService:
 
     async def preview(self, review_id, data):
         review, config, rows = await self._preview_context(review_id, data.revision_no)
-        # Enforce approved taxonomy mappings before generating an apply preview.
-        for column in config.columns:
-            if not column.taxonomy_id:
-                continue
-            taxonomy = await self.repo.get(Taxonomy, column.taxonomy_id)
-            if taxonomy.status != "APPROVED" or not taxonomy.is_active or column.taxonomy_version != taxonomy.version:
-                raise AppError("TAXONOMY_VERSION_STALE", f"Taxonomy untuk kolom {column.source_column} sudah berubah atau belum approved.", 409)
-            terms = (await self.session.scalars(self.repo.query(TaxonomyTerm).where(TaxonomyTerm.taxonomy_id == str(column.taxonomy_id), TaxonomyTerm.is_active.is_(True)))).all()
-            allowed = {str(v).strip().casefold() for term in terms for v in (term.code, term.label, *(term.aliases or []))}
-            invalid = [r.source_row for r in rows if (str(({**r.transformed_data, **r.corrected_data}.get(column.target_column, "")).strip().casefold()) not in allowed)]
-            if invalid and column.taxonomy_required:
-                raise AppError("TAXONOMY_VALUE_INVALID", f"Nilai taxonomy tidak valid pada kolom {column.source_column}, baris {invalid[:20]}.", 422)
+        canonicalize_rows(await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
+                                                 config, lock=True), rows, config)
         target = None
         definition = None
         if review.dependencies["dataset_kind"] == "MASTER":
@@ -817,6 +836,12 @@ class ImportReviewService:
             raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki insert yang memerlukan usulan atau duplicate key.", 409)
         if not review.checkpoint.get("preview_hash"):
             raise AppError("IMPORT_PREVIEW_REQUIRED", "Buat preview batch terlebih dahulu.", 409)
+        if review.dependencies.get("taxonomy_hash"):
+            config = ETLConfiguration.model_validate(review.configuration_json)
+            context = await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
+                                             config, lock=True)
+            if context_hash(context) != review.dependencies["taxonomy_hash"]:
+                raise AppError("IMPORT_STALE_REVIEW", "Dependency taxonomy berubah; revalidate sebelum approval.", 409)
         if review.checkpoint.get("periods_to_close"):
             _, definition, _ = await MasterStorageService(self.session, self.user).target(review.dependencies["master_id"])
             self.check_closure_visibility(definition, [True])
@@ -840,6 +865,12 @@ class ImportReviewService:
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
             {"key": "import-apply:" + str(lock_key)},
         )
+        if config is not None and any(getattr(c, "taxonomy_id", None) for c in config.columns):
+            context = await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
+                                             config, lock=True)
+            if context_hash(context) != review.dependencies.get("taxonomy_hash"):
+                raise AppError("TAXONOMY_VERSION_STALE", "Dependency taxonomy berubah sebelum apply.", 409)
+            canonicalize_rows(context, rows, config)
         if review.dependencies["dataset_kind"] == "MASTER":
             _, definition, table = await MasterStorageService(self.session, self.user).target(review.dependencies["master_id"])
             keys = definition.business_key
@@ -996,7 +1027,9 @@ class ImportReviewService:
             try:
                 config = ETLConfiguration.model_validate(review.configuration_json)
                 good, issues, warnings = transform_rows(
-                    snapshot.values, SimpleNamespace(**review.dependencies["sheet"]), config
+                    snapshot.values, SimpleNamespace(**review.dependencies["sheet"]), config,
+                    taxonomy=await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id, config, lock=True),
+                    review_mode=True,
                 )
                 headers = [
                     str(value).strip()
@@ -1004,6 +1037,7 @@ class ImportReviewService:
                 ]
                 target_for_source = {column.target_column: column.source_column for column in config.columns}
                 outputs = {row_number: output for row_number, output in good}
+                outputs.update({issue["source_row"]: issue["transformed_data"] for issue in issues if "transformed_data" in issue})
                 staging = {}
                 for row_number, raw in enumerate(
                     snapshot.values[review.dependencies["sheet"]["data_start_row"] - 1 :],
@@ -1025,9 +1059,13 @@ class ImportReviewService:
                     staging[row_number] = row
                 findings = [{"source_row": i["source_row"], "errors": i["errors"]} for i in issues]
                 findings.extend({"severity": "WARN", **warning} for warning in warnings)
-                mandatory_questions = 0
+                mandatory_questions, taxonomy_invalid, taxonomy_findings = await review_taxonomy_rows(
+                    self.session, self.user.tenant_id, review, config, list(staging.values()))
+                findings.extend(taxonomy_findings)
                 for issue in issues:
                     for error in issue["errors"]:
+                        if error["code"] == "IN_TAXONOMY":
+                            continue  # The taxonomy question includes approved candidates.
                         target = error["column"].split(",", 1)[0] if error.get("column") else None
                         source = target_for_source.get(target)
                         key = digest({"row": issue["source_row"], "target": target, "code": error["code"]})
@@ -1100,15 +1138,15 @@ class ImportReviewService:
                     blockers.append("CONFIGURATION_QUESTIONS_PENDING")
                 checkpoint = {
                     "deterministic_complete": True,
-                    "rows_valid": len(good),
-                    "rows_invalid": len(issues),
+                    "rows_valid": sum(number not in taxonomy_invalid for number, _ in good),
+                    "rows_invalid": len({i["source_row"] for i in issues} | taxonomy_invalid),
                     "warning_count": len(warnings),
                     "blocking_codes": blockers,
                     "open_question_count": mandatory_questions + len(warnings),
                     "ai_coverage": "NOT_STARTED",
                 }
             except AppError as exc:
-                if not exc.code.startswith("DQ_") and exc.code != "CONFIGURATION_CONFLICT":
+                if not exc.code.startswith(("DQ_", "TAXONOMY_")) and exc.code != "CONFIGURATION_CONFLICT":
                     raise
                 findings = [{"code": exc.code}]
                 checkpoint = {

@@ -1,0 +1,243 @@
+{
+  "create_taxonomy": {
+    "method": "POST",
+    "path": "/taxonomies",
+    "model": "TaxonomyCreate",
+    "body": {
+      "code": "beverage",
+      "name": "Beverage"
+    }
+  },
+  "create_term": {
+    "method": "POST",
+    "path": "/taxonomies/{taxonomy_id}/terms",
+    "model": "TaxonomyTermCreate",
+    "body": {
+      "code": "tea",
+      "label": "Tea",
+      "parent_id": null,
+      "aliases": [
+        "Teh"
+      ]
+    }
+  },
+  "resolve_term": {
+    "method": "POST",
+    "path": "/taxonomies/{taxonomy_id}/resolve-term",
+    "model": "TaxonomyTermResolveRequest",
+    "body": {
+      "value": " Teh "
+    }
+  },
+  "validate_values": {
+    "method": "POST",
+    "path": "/taxonomies/{taxonomy_id}/validate-values",
+    "model": "TaxonomyValuesValidateRequest",
+    "body": {
+      "taxonomy_version": 2,
+      "values": [
+        "Teh",
+        "tea",
+        "unknown"
+      ]
+    }
+  },
+  "save_binding": {
+    "method": "PUT",
+    "path": "/taxonomies/source-sheets/{sheet_id}/column-bindings",
+    "model": "TaxonomyColumnBindingCreate",
+    "body": {
+      "revision_no": 0,
+      "source_column": "Kategori",
+      "taxonomy_id": "00000000-0000-0000-0000-000000000001",
+      "taxonomy_version": 2,
+      "required": true,
+      "normalization": "TRIM_CASEFOLD"
+    }
+  },
+  "binding_approve": {
+    "method": "POST",
+    "path": "/taxonomies/column-bindings/{binding_id}/approve",
+    "model": "MasterRevisionRequest",
+    "body": {
+      "revision_no": 1
+    }
+  },
+  "binding_reject": {
+    "method": "POST",
+    "path": "/taxonomies/column-bindings/{binding_id}/reject",
+    "model": "MasterRevisionRequest",
+    "body": {
+      "revision_no": 1
+    }
+  },
+  "patch_configuration": {
+    "method": "PATCH",
+    "path": "/configurations/{config_id}",
+    "model": "ConfigurationPatch",
+    "body": {
+      "revision_no": 1,
+      "configuration": {
+        "dataset_business_name": "Penjualan minuman",
+        "grain": "Satu baris per transaksi",
+        "target_table": "beverage_sales",
+        "load_strategy": "UPSERT",
+        "columns": [
+          {
+            "source_column": "ID",
+            "target_column": "transaction_id",
+            "target_type": "text",
+            "nullable": false,
+            "is_business_key": true
+          },
+          {
+            "source_column": "Kategori",
+            "target_column": "category",
+            "target_type": "text",
+            "taxonomy_id": "00000000-0000-0000-0000-000000000001",
+            "taxonomy_version": 2,
+            "taxonomy_required": true
+          },
+          {
+            "source_column": "Total",
+            "target_column": "net_amount",
+            "target_type": "numeric"
+          }
+        ],
+        "data_quality_rules": [
+          {
+            "column": "category",
+            "rule": "in_taxonomy",
+            "value": null,
+            "action_on_fail": "REQUIRE_REVIEW"
+          }
+        ],
+        "semantic": {
+          "code": "BEVERAGE_SALES",
+          "dimensions": [
+            "category"
+          ],
+          "metrics": [
+            {
+              "code": "net_sales",
+              "column": "net_amount",
+              "aggregation": "sum"
+            }
+          ]
+        }
+      },
+      "question_answers": {}
+    }
+  },
+  "create_import": {
+    "method": "POST",
+    "path": "/import-reviews",
+    "model": "ImportReviewCreate",
+    "body": {
+      "source_sheet_id": "00000000-0000-0000-0000-000000000003",
+      "configuration_id": "00000000-0000-0000-0000-000000000004"
+    }
+  },
+  "answer_candidate": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/questions/{question_id}/answer",
+    "model": "ImportQuestionDecision",
+    "body": {
+      "revision_no": 1,
+      "action": "SELECT_RECORD",
+      "selected_candidate_id": "00000000-0000-0000-0000-000000000002"
+    }
+  },
+  "answer_correction": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/questions/{question_id}/answer",
+    "model": "ImportQuestionDecision",
+    "body": {
+      "revision_no": 1,
+      "action": "APPLY_CORRECTION",
+      "corrected_value": "Teh"
+    }
+  },
+  "answer_source": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/questions/{question_id}/answer",
+    "model": "ImportQuestionDecision",
+    "body": {
+      "revision_no": 1,
+      "action": "CORRECT_SOURCE",
+      "reason": "Kategori diperbaiki pada sumber; lanjut dengan snapshot dan batch baru."
+    }
+  },
+  "resume_import": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/resume",
+    "model": "ImportReviewAction",
+    "body": {
+      "revision_no": 5,
+      "comment": "Pertanyaan wajib sudah selesai."
+    }
+  },
+  "preview_import": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/preview",
+    "model": "ImportReviewPreviewRequest",
+    "body": {
+      "revision_no": 7
+    }
+  },
+  "approve_import": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/approve",
+    "model": "ImportReviewApproveRequest",
+    "body": {
+      "revision_no": 7,
+      "comment": "Preview telah ditinjau."
+    }
+  },
+  "apply_import": {
+    "method": "POST",
+    "path": "/import-reviews/{review_id}/apply",
+    "model": "ImportReviewApplyRequest",
+    "body": {
+      "revision_no": 8,
+      "preview_token": "REPLACE_WITH_IMPORT_PREVIEW_TOKEN"
+    }
+  },
+  "create_version": {
+    "method": "POST",
+    "path": "/taxonomies/{taxonomy_id}/versions",
+    "model": "TaxonomyVersionCreate",
+    "body": {
+      "base_version": 2
+    }
+  },
+  "update_version": {
+    "method": "PUT",
+    "path": "/taxonomies/versions/{version_id}",
+    "model": "TaxonomyVersionUpdate",
+    "body": {
+      "revision_no": 1,
+      "terms": [
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "code": "tea",
+          "label": "Tea",
+          "parent_id": null,
+          "aliases": [
+            "Teh",
+            "Teh tawar"
+          ],
+          "is_active": true
+        }
+      ]
+    }
+  },
+  "publish_version": {
+    "method": "POST",
+    "path": "/taxonomies/versions/{version_id}/approve",
+    "model": "MasterRevisionRequest",
+    "body": {
+      "revision_no": 2
+    }
+  }
+}

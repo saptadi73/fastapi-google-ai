@@ -25,6 +25,7 @@ TEMPLATE = ROOT / "docs/Template_Parameter_Google_Sheet_AI_ETL.xlsx"
 MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 META = "_ETL_Metadata"
 REVIEW = "14 Review"
+TAXONOMY = "04 Taxonomy Mapping"
 COLUMN_PARAMETERS = {
     "numeric_precision": 21, "numeric_scale": 22, "varchar_length": 23,
     "date_format": 24, "number_locale": 25, "unit_conversion": 26, "source_timezone": 27, "currency_conversion": 28,
@@ -33,6 +34,7 @@ COLUMN_PARAMETERS = {
 EDITABLE = {
     "02 Struktur Kolom": (5, 104, {4, 10, 11, 12, 13, 17, 20, *COLUMN_PARAMETERS.values()}),
     "03 Aturan Cleansing": (5, 1004, {3, 4, 5, 9}),
+    TAXONOMY: (5, 104, {21, 22, 23}),
     "05 Data Quality": (5, 104, {3, 5, 6, 7, 8, 9, 10, 11, 15, 16}),
     "06 Target Database": (5, 104, {6}),
     "10 Data Product Catalog": (5, 5, {1, 11, 15}),
@@ -125,6 +127,8 @@ def render(config, source, sheet):
         put(ws, 5, col, val)
     for name, position in COLUMN_PARAMETERS.items():
         put(book["02 Struktur Kolom"], 4, position, name + ("_json" if name in ("unit_conversion", "currency_conversion") else ""))
+    for position, name in {21: "taxonomy_id", 22: "taxonomy_version", 23: "taxonomy_required", 24: "normalization"}.items():
+        put(book[TAXONOMY], 4, position, name)
     rule_row = 5
     for i, column in enumerate(c["columns"], 5):
         ws = book["02 Struktur Kolom"]
@@ -144,6 +148,11 @@ def render(config, source, sheet):
         for name, position in COLUMN_PARAMETERS.items():
             parameter = column[name]
             put(ws, i, position, json.dumps(parameter, ensure_ascii=False) if name in ("unit_conversion", "currency_conversion") else parameter)
+        for position, parameter in {1: source.source_code, 2: column["source_column"],
+                                    21: column["taxonomy_id"], 22: column["taxonomy_version"],
+                                    23: "Ya" if column["taxonomy_required"] else "Tidak",
+                                    24: "TRIM_CASEFOLD"}.items():
+            put(book[TAXONOMY], i, position, parameter)
         ws = book["06 Target Database"]
         for col, val in {
             1: f"COL{i - 4}",
@@ -243,8 +252,11 @@ def render(config, source, sheet):
     ws.column_dimensions["B"].width = 70
     ws.column_dimensions["C"].width = 18
     book["00 Petunjuk"]["A2"] = (
-        "Draft aplikasi: edit sel kuning. Sheet 04, 07, 08, 12, 13 belum dapat diimport. Status Excel tidak memberi approval."
+        "Draft aplikasi: edit sel kuning. Mapping taxonomy ada di tab 04 kolom U-W. Sheet 07, 08, 12, 13 belum dapat diimport. Status Excel tidak memberi approval."
     )
+    book[TAXONOMY]["A2"] = "U: UUID taxonomy, V: versi, W: wajib Ya/Tidak. Binding tetap perlu approval melalui aplikasi."
+    for col, width in {"U": 40, "V": 22, "W": 22, "X": 22}.items():
+        book[TAXONOMY].column_dimensions[col].width = width
     book["00 Petunjuk"]["E6"] = "=COUNTIF('03 Aturan Cleansing'!$I$5:$I$1004,\"Ya\")"
     return book
 
@@ -387,11 +399,18 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
                     parameter if parameter != "" else None
                 )
             column["target_column"] = value("06 Target Database", row, 6)
+            if value(TAXONOMY, 4, 21) == "taxonomy_id":
+                column["taxonomy_id"] = value(TAXONOMY, row, 21) or None
+                column["taxonomy_version"] = value(TAXONOMY, row, 22) or None
+                column["taxonomy_required"] = active(TAXONOMY, row, 23, "Ya", "Tidak")
+            elif any(value(TAXONOMY, row, col) != "" for col in (21, 22, 23)):
+                raise ValueError("Unduh workbook terbaru untuk mengedit mapping taxonomy")
             column["transformation_codes"] = []
         # Extra structural rows would otherwise disappear silently.
         for tab, cols in (
             ("02 Struktur Kolom", EDITABLE["02 Struktur Kolom"][2]),
             ("06 Target Database", {6}),
+            (TAXONOMY, {21, 22, 23}),
         ):
             for row in range(5 + len(c["columns"]), 105):
                 if any(value(tab, row, col) != "" for col in cols):

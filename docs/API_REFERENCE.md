@@ -439,7 +439,11 @@ Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-bind
 
 ## 5. Taxonomy (BE-13)
 
-Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat taxonomy/term dalam status `DRAFT`; reviewer mengubah taxonomy menjadi `APPROVED`. Binding kolom dan validasi `in_taxonomy` akan menggunakan versi approved.
+Mulai integrasi frontend dari [handoff BE-13 bertahap](FRONTEND_BE13.md) dan
+[19 contoh payload per aksi](api/BE13_FRONTEND_PAYLOADS.json). Status tersedia di kode
+tidak menyatakan deployment environment tujuan sudah selesai.
+
+Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat taxonomy/term dalam status `DRAFT`; reviewer mengubah taxonomy menjadi `APPROVED`. Binding kolom dan validasi `in_taxonomy` menggunakan versi approved.
 
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
@@ -448,6 +452,11 @@ Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat tax
 | GET | `/taxonomies/{taxonomy_id}/terms` | S | UUID taxonomy | 200 | daftar term dan hierarchy |
 | POST | `/taxonomies/{taxonomy_id}/terms` | E | TaxonomyTermCreate | 201 | TaxonomyTerm |
 | POST | `/taxonomies/{taxonomy_id}/approve` | R | — | 200 | Taxonomy APPROVED dengan version baru |
+| POST | `/taxonomies/{taxonomy_id}/versions` | E | TaxonomyVersionCreate | 201 | Draft versi berikutnya; retry mengembalikan draft sama |
+| GET | `/taxonomies/{taxonomy_id}/versions` | S | offset, limit | 200 | Riwayat snapshot/draft terbaru dahulu, items dan has_more |
+| GET | `/taxonomies/versions/{version_id}` | S | Tanpa body | 200 | TaxonomyVersion beserta definition_json.terms |
+| PUT | `/taxonomies/versions/{version_id}` | E | TaxonomyVersionUpdate | 200 | Ganti seluruh term draft, revision bertambah |
+| POST | `/taxonomies/versions/{version_id}/approve` | R | MasterRevisionRequest | 200 | Publikasi atomik; versi terbit immutable |
 | POST | `/taxonomies/{taxonomy_id}/resolve-term` | S | TaxonomyTermResolveRequest | 200 | Resolusi exact/candidate/ambiguous/not found |
 | POST | `/taxonomies/{taxonomy_id}/ambiguity-question` | E | TaxonomyAmbiguityQuestionRequest | 201 | Buat ImportQuestion untuk nilai taxonomy ambigu |
 | POST | `/taxonomies/{taxonomy_id}/validate-values` | S | TaxonomyValuesValidateRequest | 200 | Validasi `in_taxonomy` dan versi taxonomy |
@@ -459,13 +468,13 @@ Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat tax
 
 Binding hanya boleh menunjuk taxonomy berstatus `APPROVED` dan `taxonomy_version` yang masih aktif. Perubahan binding selalu kembali ke `DRAFT`; reviewer wajib menyetujui ulang. `revision_no` mencegah dua editor menimpa perubahan.
 
-`resolve-term` menormalisasi input dengan trim dan case-fold. Jika satu kode/label/alias cocok, respons berstatus `EXACT`. Beberapa kandidat menghasilkan `AMBIGUOUS` dan `requires_question=true`; tidak ada kecocokan menghasilkan `NOT_FOUND`. Frontend harus meminta pilihan pengguna sebelum menyimpan nilai yang bukan `EXACT`.
+`resolve-term` menormalisasi input dengan trim dan case-fold. Jika satu kode/label/alias cocok, respons berstatus `EXACT`. Jika exact tidak ditemukan, resolver mencari kandidat tambahan: satu kandidat menghasilkan `CANDIDATE`, beberapa menghasilkan `AMBIGUOUS`, dan tanpa kandidat menghasilkan `NOT_FOUND`. Hasil selain `EXACT` memakai `requires_question=true`. Frontend harus meminta pilihan pengguna sebelum menyimpan nilai yang bukan `EXACT`.
 
-Gunakan `validate-values` sebelum membuat preview/apply import untuk pemeriksaan `in_taxonomy`. Pipeline ETL berikutnya dapat memanggil endpoint ini berdasarkan binding taxonomy yang berstatus `APPROVED`; import lama tetap berjalan tanpa taxonomy binding.
+Endpoint `validate-values` dapat digunakan untuk pemeriksaan awal. Worker, dry-run, preview/apply, dan ETL langsung memvalidasi binding approved secara internal; pemanggilan endpoint oleh frontend bukan prasyarat validasi runtime.
 
 Field taxonomy pada `ColumnMapping` bersifat opsional: `taxonomy_id` dan `taxonomy_version` menunjuk taxonomy approved, sedangkan `taxonomy_required=true` mewajibkan nilai lolos validasi sebelum apply.
 
-`QualityRule` kini menerima `severity`, `owner`, `threshold_percent`, `max_age_days`, dan `default_value`. Parameter tersebut tersimpan dalam konfigurasi; enforcement threshold/default pada compiler akan diaktifkan bertahap setelah semantics runtime disepakati.
+`QualityRule` kini menerima `severity`, `owner`, `threshold_percent`, `max_age_days`, dan `default_value`. Parameter tersebut tersimpan dalam konfigurasi; compiler sudah menerapkan threshold/default sebagaimana dijelaskan di bawah.
 
 Compiler ETL menerapkan `default_value` saat nilai kolom null dan menghentikan batch dengan `DQ_THRESHOLD_EXCEEDED` jika persentase kegagalan rule melewati `threshold_percent`.
 
@@ -1317,3 +1326,46 @@ sama; tidak ada pemilihan atau perubahan FK otomatis.
 ### Penutupan periode BE-12
 
 Body preview import mendukung close_open_periods=false. Mode true menghasilkan period_closures yang ikut preview approval; apply menambahkan periods_closed. Revalidate kini menerima batch READY_FOR_APPROVAL/APPROVED untuk mencabut approval dan preview lama. [Kontrak lengkap dan error](EFFECTIVE_DATING_BE12.md#penutupan-periode-terbuka-melalui-preview-berapproval).
+
+### Metadata registry taxonomy
+
+Taxonomy, term, dan column binding kini memetakan metadata fisik existing:
+fingerprint, snapshot_hash, created_by, approved_by, approved_at. Approval taxonomy
+dan binding menyimpan reviewer/waktu yang terlihat pada pembacaan berikutnya.
+Body request tidak berubah. Kontrak respons dan migrasi:
+[penyelarasan schema registry](REGISTRY_SCHEMA_REPAIR.md).
+
+### Hasil tinjauan taxonomy BE-13
+
+Taxonomy approved kini immutable untuk penambahan term; approval ulang tidak mengubah
+version. Approve/reject binding menaikkan revision. Pertanyaan ambigu wajib menunjuk
+staging batch/kolom/nilai yang sesuai, dan pemilihan term menyimpan kode kategori.
+Dependency taxonomy/binding/term diperiksa hingga final write, dengan error stale
+dan ambiguity yang eksplisit. [Kontrak lengkap dan batas BE-13](REVIEW_BE13.md).
+
+### Lanjutan versi taxonomy dan XLSX
+
+Gunakan `POST /taxonomies/{taxonomy_id}/versions` dengan base_version aktif, edit seluruh
+term menggunakan revision_no terbaru, lalu reviewer mempublikasikan draft. UUID dan kode
+term existing tidak berubah; penghilangan term menonaktifkannya. Snapshot terbit immutable.
+Binding lama harus diperbarui dan disetujui ulang. Lihat [kontrak dan batasan BE-13](REVIEW_BE13.md).
+
+Tab 04 XLSX kini mengedit referensi taxonomy pada konfigurasi: U=taxonomy_id, V=taxonomy_version, W=taxonomy_required
+(Ya/Tidak). Identitas sumber dan normalisasi signed. Binding registry tetap perlu
+disimpan/disetujui melalui endpoint binding; workbook tidak memberikan approval.
+Dry-run, preview/apply dan ETL langsung menulis kode canonical dari label/alias valid.
+Raw staging dipertahankan. Benturan business key baru akibat normalisasi menghasilkan
+`TAXONOMY_KEY_COLLISION` (422). DSL DQ `in_taxonomy` dan pertanyaan worker otomatis tersedia; rekomendasi AI generatif masih terbuka.
+
+### Rule in_taxonomy dan pertanyaan worker
+
+`data_quality_rules` menerima `{"column":"branch_name","rule":"in_taxonomy","action_on_fail":"REQUIRE_REVIEW"}`.
+Kolom harus mempunyai taxonomy_id/version dan binding approved; value harus null, WARN ditolak.
+Required mengikuti binding. Rule juga dapat diedit pada tab 05 XLSX. STOP_BATCH dan threshold
+menghentikan batch; REQUIRE_REVIEW menghasilkan pertanyaan di worker dan menghentikan ETL langsung.
+
+Worker menormalisasi nilai valid tanpa mengubah raw, lalu membuat pertanyaan wajib untuk
+TAXONOMY_AMBIGUOUS (SELECT_RECORD/CORRECT_SOURCE) atau TAXONOMY_INVALID
+(APPLY_CORRECTION/CORRECT_SOURCE). Koreksi harus valid dan disimpan sebagai kode canonical.
+Jawab melalui endpoint import review existing, lalu resume. Resume tidak menggandakan staging/pertanyaan.
+Baca [rincian BE-13](REVIEW_BE13.md) untuk collision, stale dependency, dan keterbatasan AI.

@@ -4,6 +4,9 @@ Acuan kode workspace pada 9 September 2026, schema konfigurasi `1.0`. Perubahan 
 berarti sudah terdeploy pada environment frontend. Semua path di bawah relatif
 terhadap `/api/v1`; gunakan Bearer token dan envelope API existing.
 
+Lanjutan kategori/domain tersedia pada [handoff frontend BE-13 bertahap](FRONTEND_BE13.md).
+Panduan tersebut mencakup registry, binding, pertanyaan import, versioning, dan XLSX taxonomy.
+
 ## Mulai dari sini
 
 1. Ambil `GET /configurations/parameter-catalog` dan konfigurasi/revision dari `GET /configurations/{id}`.

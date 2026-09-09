@@ -34,7 +34,7 @@ def build_documents():
     from app.models.master import MasterDefinition, MasterSourceBinding
     from app.models.semantic import DataProduct, QueryRequest, SavedQuery
     from app.models.source import DataSource, ProfilingRun, SourceSheet
-    from app.models.taxonomy import Taxonomy, TaxonomyTerm
+    from app.models.taxonomy import Taxonomy, TaxonomyColumnBinding, TaxonomyTerm, TaxonomyVersion
 
     spec = app.openapi()
     models = {}
@@ -186,6 +186,10 @@ def build_documents():
         (Configuration, set()),
         (MasterDefinition, set()),
         (MasterSourceBinding, set()),
+        (Taxonomy, set()),
+        (TaxonomyTerm, set()),
+        (TaxonomyVersion, set()),
+        (TaxonomyColumnBinding, set()),
         (ImportReview, {"configuration_json", "dependencies", "findings"}),
         (ImportReviewRow, {"raw_data", "transformed_data", "corrected_data"}),
         (ImportQuestion, {"evidence"}),

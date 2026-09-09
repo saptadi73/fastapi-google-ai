@@ -640,5 +640,23 @@
     "aliases": [
       "Minuman dan Beverage"
     ]
+  },
+  "TaxonomyVersionCreate": {
+    "base_version": 2
+  },
+  "TaxonomyVersionUpdate": {
+    "revision_no": 1,
+    "terms": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "code": "tea",
+        "label": "Tea",
+        "parent_id": null,
+        "aliases": [
+          "Teh"
+        ],
+        "is_active": true
+      }
+    ]
   }
 }

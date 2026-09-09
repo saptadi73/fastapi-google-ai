@@ -22,6 +22,7 @@ from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
 from app.services.schema_compiler_service import deploy_schema, schema_plan
+from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
 
 
 class ConfigurationService:
@@ -155,7 +156,9 @@ class ConfigurationService:
         )
         if snapshot is None:
             raise AppError("PROFILE_REQUIRED", "Snapshot belum tersedia.", 409)
-        good, issues, warnings = transform_rows(snapshot.values, sheet, parsed)
+        good, issues, warnings = transform_rows(snapshot.values, sheet, parsed,
+            taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
+        good = await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
         suspected = {c["source_column"] for c in profile.profile_json["columns"] if c.get("pii_suspected")}
         headers = [str(v).strip() for v in snapshot.values[sheet.header_row - 1]]
         previews = []
@@ -312,7 +315,9 @@ class ConfigurationService:
         )
         if profile["fingerprint"] != config.based_on_fingerprint:
             raise AppError("CONFIGURATION_CONFLICT", "Schema sumber berubah sejak approval.", 409)
-        _, issues, _ = transform_rows(values, sheet, parsed)
+        good, issues, _ = transform_rows(values, sheet, parsed,
+            taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
+        await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
         if issues or parsed.unresolved_questions:
             raise AppError("CONFIGURATION_INVALID", "Dry-run gagal; perbaiki data atau konfigurasi.")
         # Check catalog collisions before DDL.
