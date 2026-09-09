@@ -17,6 +17,7 @@ from app.models.etl import Snapshot
 from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.source import DataSource, SourceSheet
+from app.models.taxonomy import Taxonomy, TaxonomyTerm
 from app.repositories.base import TenantRepository, record
 from app.schemas.configuration import ETLConfiguration
 from app.schemas.data_policy import DatasetPolicy
@@ -662,6 +663,18 @@ class ImportReviewService:
 
     async def preview(self, review_id, data):
         review, config, rows = await self._preview_context(review_id, data.revision_no)
+        # Enforce approved taxonomy mappings before generating an apply preview.
+        for column in config.columns:
+            if not column.taxonomy_id:
+                continue
+            taxonomy = await self.repo.get(Taxonomy, column.taxonomy_id)
+            if taxonomy.status != "APPROVED" or not taxonomy.is_active or column.taxonomy_version != taxonomy.version:
+                raise AppError("TAXONOMY_VERSION_STALE", f"Taxonomy untuk kolom {column.source_column} sudah berubah atau belum approved.", 409)
+            terms = (await self.session.scalars(self.repo.query(TaxonomyTerm).where(TaxonomyTerm.taxonomy_id == str(column.taxonomy_id), TaxonomyTerm.is_active.is_(True)))).all()
+            allowed = {str(v).strip().casefold() for term in terms for v in (term.code, term.label, *(term.aliases or []))}
+            invalid = [r.source_row for r in rows if (str(({**r.transformed_data, **r.corrected_data}.get(column.target_column, "")).strip().casefold()) not in allowed)]
+            if invalid and column.taxonomy_required:
+                raise AppError("TAXONOMY_VALUE_INVALID", f"Nilai taxonomy tidak valid pada kolom {column.source_column}, baris {invalid[:20]}.", 422)
         target = None
         definition = None
         if review.dependencies["dataset_kind"] == "MASTER":

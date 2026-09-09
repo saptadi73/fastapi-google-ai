@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "Demo BE12 USD ke IDR",
+  "dataset_description": "Kurs sintetis untuk demo; bukan kurs pasar.",
+  "grain": "Satu baris per nomor transaksi",
+  "target_schema": "trusted",
+  "target_table": "demo_currency",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "ID",
+      "target_column": "transaction_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "transformation_codes": [
+        "trim"
+      ]
+    },
+    {
+      "source_column": "Tanggal",
+      "target_column": "transaction_date",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "transformation_codes": [],
+      "source_timezone": "Asia/Jakarta"
+    },
+    {
+      "source_column": "Cabang",
+      "target_column": "branch_name",
+      "target_type": "text",
+      "nullable": false,
+      "transformation_codes": [
+        "trim"
+      ]
+    },
+    {
+      "source_column": "Total",
+      "target_column": "net_amount",
+      "target_type": "numeric",
+      "nullable": false,
+      "transformation_codes": [
+        "parse_decimal_id"
+      ],
+      "number_locale": "US",
+      "numeric_precision": 18,
+      "numeric_scale": 2,
+      "currency_conversion": {
+        "from_currency": "USD",
+        "to_currency": "IDR",
+        "rate": "12345.5",
+        "rate_date": "2026-09-09",
+        "rate_reference": "synthetic-demo-rate",
+        "output_scale": 2,
+        "rounding": "HALF_UP",
+        "on_error": "REJECT_ROW"
+      }
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "net_amount",
+      "rule": "min",
+      "value": 0,
+      "action_on_fail": "REJECT_ROW"
+    }
+  ],
+  "semantic": {
+    "code": "DEMO_CURRENCY",
+    "dimensions": [
+      "transaction_id",
+      "transaction_date",
+      "branch_name"
+    ],
+    "metrics": [
+      {
+        "code": "net_sales",
+        "column": "net_amount",
+        "aggregation": "sum",
+        "label": "Penjualan demo (IDR)"
+      },
+      {
+        "code": "transaction_count",
+        "column": "transaction_id",
+        "aggregation": "count",
+        "label": "Jumlah transaksi"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [],
+  "overall_confidence": 1
+}

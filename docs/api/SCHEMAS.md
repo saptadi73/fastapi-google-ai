@@ -379,6 +379,70 @@ Body: —.
 |---|---|---|---|
 | `taxonomy_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/taxonomies/source-sheets/{sheet_id}/column-bindings
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/taxonomies/source-sheets/{sheet_id}/column-bindings
+
+Body: [TaxonomyColumnBindingCreate](#taxonomycolumnbindingcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/column-bindings/{binding_id}/approve
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `binding_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/column-bindings/{binding_id}/reject
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `binding_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/{taxonomy_id}/resolve-term
+
+Body: [TaxonomyTermResolveRequest](#taxonomytermresolverequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/{taxonomy_id}/ambiguity-question
+
+Body: [TaxonomyAmbiguityQuestionRequest](#taxonomyambiguityquestionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/{taxonomy_id}/validate-values
+
+Body: [TaxonomyValuesValidateRequest](#taxonomyvaluesvalidaterequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/taxonomies/{taxonomy_id}/recommend-terms
+
+Body: [TaxonomyRecommendRequest](#taxonomyrecommendrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/import-reviews
 
 Body: [ImportReviewCreate](#importreviewcreate).
@@ -1038,6 +1102,12 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `date_format` | Tidak | `string / null` | — | — |
 | `number_locale` | Tidak | `string / null` | — | — |
 | `varchar_length` | Tidak | `integer / null` | — | — |
+| `unit_conversion` | Tidak | `UnitConversion / null` | — | — |
+| `currency_conversion` | Tidak | `CurrencyConversion / null` | — | — |
+| `source_timezone` | Tidak | `string / null` | — | — |
+| `taxonomy_id` | Tidak | `string (uuid) / null` | — | — |
+| `taxonomy_version` | Tidak | `integer / null` | — | — |
+| `taxonomy_required` | Tidak | `boolean` | false | — |
 
 ### ConfigurationCreate
 
@@ -1092,6 +1162,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
         "source_column": "Total",
         "target_column": "net_amount",
         "target_type": "numeric",
+        "numeric_precision": 12,
+        "numeric_scale": 2,
         "nullable": false,
         "transformation_codes": [
           "parse_decimal_id"
@@ -1103,7 +1175,11 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
         "column": "net_amount",
         "rule": "min",
         "value": 0,
-        "action_on_fail": "REJECT_ROW"
+        "action_on_fail": "REJECT_ROW",
+        "severity": "ERROR",
+        "owner": "data-steward",
+        "threshold_percent": 5,
+        "default_value": 0
       }
     ],
     "semantic": {
@@ -1242,6 +1318,19 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "question_answers": {}
 }
 ```
+
+### CurrencyConversion
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `from_currency` | Ya | `enum ["IDR","USD","EUR","SGD","JPY","THB"]` | — | — |
+| `to_currency` | Ya | `enum ["IDR","USD","EUR","SGD","JPY","THB"]` | — | — |
+| `rate` | Ya | `number / string` | — | — |
+| `rate_date` | Ya | `string (date)` | — | — |
+| `rate_reference` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
+| `output_scale` | Ya | `integer` | — | {"maximum":50.0,"minimum":0.0} |
+| `rounding` | Ya | `enum ["HALF_UP","HALF_EVEN","DOWN"]` | — | — |
+| `on_error` | Tidak | `"REJECT_ROW"` | "REJECT_ROW" | — |
 
 ### DatabaseHealth
 
@@ -1793,9 +1882,14 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
 | `column` | Ya | `string` | — | — |
-| `rule` | Ya | `enum ["not_null","unique","min","max","allowed_values"]` | — | — |
+| `rule` | Ya | `enum ["not_null","unique","min","max","allowed_values","format","max_age_days"]` | — | — |
 | `value` | Tidak | `string / integer / number / array<string> / null` | — | — |
 | `action_on_fail` | Tidak | `enum ["REJECT_ROW","WARN","STOP_BATCH","REQUIRE_REVIEW"]` | "REJECT_ROW" | — |
+| `severity` | Tidak | `enum ["INFO","WARN","ERROR","CRITICAL"]` | "ERROR" | — |
+| `owner` | Tidak | `string / null` | — | — |
+| `threshold_percent` | Tidak | `number / null` | — | — |
+| `max_age_days` | Tidak | `integer / null` | — | — |
+| `default_value` | Tidak | `string / integer / number / boolean / null` | — | — |
 
 ### QueryFilter
 
@@ -2085,6 +2179,52 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### TaxonomyAmbiguityQuestionRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `value` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
+| `import_review_id` | Ya | `string (uuid)` | — | — |
+| `staging_row_id` | Tidak | `string (uuid) / null` | — | — |
+| `source_column` | Tidak | `string / null` | — | — |
+| `target_column` | Tidak | `string / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "value": "Minuman",
+  "import_review_id": "00000000-0000-0000-0000-000000000000",
+  "staging_row_id": null,
+  "source_column": "category",
+  "target_column": "category_id"
+}
+```
+
+### TaxonomyColumnBindingCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `source_column` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `taxonomy_id` | Ya | `string (uuid)` | — | — |
+| `taxonomy_version` | Ya | `integer` | — | {"minimum":1.0} |
+| `required` | Tidak | `boolean` | false | — |
+| `normalization` | Tidak | `string` | "TRIM_CASEFOLD" | {"pattern":"^[A-Z0-9_]{2,40}$"} |
+| `revision_no` | Tidak | `integer` | 0 | {"minimum":0.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "source_column": "category",
+  "taxonomy_id": "00000000-0000-0000-0000-000000000000",
+  "taxonomy_version": 1,
+  "required": false,
+  "normalization": "TRIM_CASEFOLD",
+  "revision_no": 0
+}
+```
+
 ### TaxonomyCreate
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2098,6 +2238,25 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 {
   "code": "product_category",
   "name": "Kategori Produk"
+}
+```
+
+### TaxonomyRecommendRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `values` | Ya | `array<string>` | — | {"maxItems":500,"minItems":1} |
+| `limit` | Tidak | `integer` | 3 | {"maximum":10.0,"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "values": [
+    "Minumn",
+    "Elektronic"
+  ],
+  "limit": 3
 }
 ```
 
@@ -2123,16 +2282,49 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
-### TaxonomyColumnBindingCreate
+### TaxonomyTermResolveRequest
 
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
-| `source_column` | Ya | `string` | — | 1–200 karakter |
-| `taxonomy_id` | Ya | `UUID` | — | — |
-| `taxonomy_version` | Ya | `integer` | — | >=1 |
-| `required` | Tidak | `boolean` | false | — |
-| `normalization` | Tidak | `string` | `TRIM_CASEFOLD` | 2–40 karakter uppercase |
-| `revision_no` | Tidak | `integer` | 0 | >=0 |
+| `value` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "value": "Minuman"
+}
+```
+
+### TaxonomyValuesValidateRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `values` | Ya | `array<string>` | — | {"maxItems":10000,"minItems":1} |
+| `taxonomy_version` | Tidak | `integer / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "values": [
+    "Minuman",
+    "Elektronik"
+  ],
+  "taxonomy_version": 1
+}
+```
+
+### UnitConversion
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `from_unit` | Ya | `enum ["KG","G","MG","T","L","ML","M","CM","MM"]` | — | — |
+| `to_unit` | Ya | `enum ["KG","G","MG","T","L","ML","M","CM","MM"]` | — | — |
+| `factor` | Ya | `number / string` | — | — |
+| `output_scale` | Ya | `integer` | — | {"maximum":50.0,"minimum":0.0} |
+| `rounding` | Ya | `enum ["HALF_UP","HALF_EVEN","DOWN"]` | — | — |
+| `on_error` | Tidak | `"REJECT_ROW"` | "REJECT_ROW" | — |
 
 ### UserCreate
 

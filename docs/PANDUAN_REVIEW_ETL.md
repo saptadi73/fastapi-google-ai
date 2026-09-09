@@ -145,3 +145,6 @@ Status `Tidak` pada cleansing atau `Nonaktif` pada aturan kualitas/metrik berart
 - `scripts/export_api_reference.py --check` kini memeriksa 116 operasi setelah penambahan pertanyaan dan keputusan batch BE-06, serta seluruh contoh payload terhadap schema runtime.
 
 Batch data persisten terpisah dari review konfigurasi tersedia di [BE-05](IMPORT_REVIEW_BE05.md). Saat NEEDS_INPUT karena temuan, frontend memuat dan menjawab pertanyaan dari [BE-06](IMPORT_QUESTIONS_BE06.md); koreksi hanya staging, tidak mengubah Google Sheet. NEEDS_INPUT tidak boleh diatasi dengan retry otomatis. Review AI dan apply data belum tersedia.
+
+
+Parameter runtime terbaru (DQ, precision, unit, timezone, currency) dan mapping XLSX untuk frontend: [Panduan frontend BE-12](FRONTEND_BE12.md).

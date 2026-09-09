@@ -25,11 +25,15 @@ TEMPLATE = ROOT / "docs/Template_Parameter_Google_Sheet_AI_ETL.xlsx"
 MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 META = "_ETL_Metadata"
 REVIEW = "14 Review"
+COLUMN_PARAMETERS = {
+    "numeric_precision": 21, "numeric_scale": 22, "varchar_length": 23,
+    "date_format": 24, "number_locale": 25, "unit_conversion": 26, "source_timezone": 27, "currency_conversion": 28,
+}
 # Only these cells are writable. Unsupported parameters and identifiers are signed.
 EDITABLE = {
-    "02 Struktur Kolom": (5, 104, {4, 10, 11, 12, 13, 17, 20}),
+    "02 Struktur Kolom": (5, 104, {4, 10, 11, 12, 13, 17, 20, *COLUMN_PARAMETERS.values()}),
     "03 Aturan Cleansing": (5, 1004, {3, 4, 5, 9}),
-    "05 Data Quality": (5, 104, {3, 5, 6, 8, 9}),
+    "05 Data Quality": (5, 104, {3, 5, 6, 7, 8, 9, 10, 11, 15, 16}),
     "06 Target Database": (5, 104, {6}),
     "10 Data Product Catalog": (5, 5, {1, 11, 15}),
     "11 Metric Definitions": (5, 204, {1, 2, 6, 7, 16}),
@@ -119,6 +123,8 @@ def render(config, source, sheet):
         13: sheet.data_start_row,
     }.items():
         put(ws, 5, col, val)
+    for name, position in COLUMN_PARAMETERS.items():
+        put(book["02 Struktur Kolom"], 4, position, name + ("_json" if name in ("unit_conversion", "currency_conversion") else ""))
     rule_row = 5
     for i, column in enumerate(c["columns"], 5):
         ws = book["02 Struktur Kolom"]
@@ -135,6 +141,9 @@ def render(config, source, sheet):
             20: column["reason"],
         }.items():
             put(ws, i, col, val)
+        for name, position in COLUMN_PARAMETERS.items():
+            parameter = column[name]
+            put(ws, i, position, json.dumps(parameter, ensure_ascii=False) if name in ("unit_conversion", "currency_conversion") else parameter)
         ws = book["06 Target Database"]
         for col, val in {
             1: f"COL{i - 4}",
@@ -158,11 +167,18 @@ def render(config, source, sheet):
             for col, val in {3: column["source_column"], 4: priority * 10, 5: operation, 9: "Ya"}.items():
                 put(book["03 Aturan Cleansing"], rule_row, col, val)
             rule_row += 1
+    put(book["05 Data Quality"], 4, 15, "max_age_days")
+    put(book["05 Data Quality"], 4, 16, "default_value_json")
     for i, rule in enumerate(c["data_quality_rules"], 5):
         for col, val in {
             3: rule["column"],
             5: rule["rule"],
             6: json.dumps(rule["value"], ensure_ascii=False),
+            7: rule["severity"],
+            10: rule["threshold_percent"],
+            11: rule["owner"],
+            15: rule["max_age_days"],
+            16: json.dumps(rule["default_value"], ensure_ascii=False),
             8: rule["action_on_fail"],
             9: "Aktif",
         }.items():
@@ -360,6 +376,11 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
                 column[key] = value("02 Struktur Kolom", row, col)
             for key, col in {"nullable": 11, "is_primary_key": 12, "is_business_key": 13}.items():
                 column[key] = active("02 Struktur Kolom", row, col, "Ya", "Tidak")
+            for name, position in COLUMN_PARAMETERS.items():
+                parameter = value("02 Struktur Kolom", row, position)
+                column[name] = (json.loads(parameter) if parameter != "" else None) if name in ("unit_conversion", "currency_conversion") else (
+                    parameter if parameter != "" else None
+                )
             column["target_column"] = value("06 Target Database", row, 6)
             column["transformation_codes"] = []
         # Extra structural rows would otherwise disappear silently.
@@ -395,7 +416,7 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
         c["data_quality_rules"] = []
         for row in range(5, 105):
             tab = "05 Data Quality"
-            if not any(value(tab, row, col) != "" for col in (3, 5, 6, 8, 9)):
+            if not any(value(tab, row, col) != "" for col in (3, 5, 6, 7, 8, 9, 10, 11, 15, 16)):
                 continue
             if active(tab, row, 9, "Aktif", "Nonaktif"):
                 raw = value(tab, row, 6, "null")
@@ -405,6 +426,11 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
                         "rule": value(tab, row, 5),
                         "value": json.loads(raw) if isinstance(raw, str) else raw,
                         "action_on_fail": value(tab, row, 8),
+                        "severity": value(tab, row, 7, "ERROR"),
+                        "threshold_percent": value(tab, row, 10) if value(tab, row, 10) != "" else None,
+                        "owner": value(tab, row, 11) or None,
+                        "max_age_days": value(tab, row, 15) if value(tab, row, 15) != "" else None,
+                        "default_value": json.loads(str(value(tab, row, 16, "null"))),
                     }
                 )
         semantic = c["semantic"]

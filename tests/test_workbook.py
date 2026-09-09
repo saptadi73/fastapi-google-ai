@@ -69,3 +69,53 @@ def test_stale_and_invalid_upload(workbook_context):
 def test_question_cannot_be_closed_without_answer(workbook_context):
     workbook_context[0].configuration_json["unresolved_questions"] = ["Apakah ID unik?"]
     assert parse_workbook(edited(workbook_context, REVIEW, "C10", "Selesai"), *workbook_context)["errors"]
+
+
+def test_unit_and_column_parameters_roundtrip_and_edit(workbook_context):
+    column = workbook_context[0].configuration_json["columns"][3]
+    column.update(numeric_precision=12, numeric_scale=2, number_locale="ID",
+                  transformation_codes=["parse_decimal_id"],
+                  unit_conversion={"from_unit": "KG", "to_unit": "G", "factor": "1000",
+                                   "output_scale": 2, "rounding": "HALF_UP", "on_error": "REJECT_ROW"})
+    workbook_context[0].configuration_json["columns"][2]["varchar_length"] = 30
+    workbook_context[0].configuration_json["columns"][1]["date_format"] = "%d/%m/%Y"
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert result["errors"] == []
+    assert result["configuration"] == workbook_context[0].configuration_json
+    result = parse_workbook(edited(workbook_context, "02 Struktur Kolom", "U8", 14), *workbook_context)
+    assert result["errors"] == []
+    assert result["configuration"]["columns"][3]["numeric_precision"] == 14
+    result = parse_workbook(edited(workbook_context, "02 Struktur Kolom", "Z8", '{"from_unit":"USD"}'), *workbook_context)
+    assert result["errors"]
+
+
+def test_timezone_workbook_roundtrip_and_edit(workbook_context):
+    column = workbook_context[0].configuration_json["columns"][1]
+    column.update(target_type="timestamptz", source_timezone="Asia/Jakarta", transformation_codes=[])
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert result["errors"] == []
+    assert result["configuration"] == workbook_context[0].configuration_json
+    result = parse_workbook(edited(workbook_context, "02 Struktur Kolom", "AA6", "America/New_York"), *workbook_context)
+    assert result["errors"] == []
+    assert result["configuration"]["columns"][1]["source_timezone"] == "America/New_York"
+    result = parse_workbook(edited(workbook_context, "02 Struktur Kolom", "AA6", "Not/AZone"), *workbook_context)
+    assert result["errors"]
+
+
+def test_currency_workbook_roundtrip_and_edit(workbook_context):
+    import json
+
+    conversion = {"from_currency": "USD", "to_currency": "IDR", "rate": "12345.5",
+                  "rate_date": "2026-09-09", "rate_reference": "synthetic-demo-rate",
+                  "output_scale": 2, "rounding": "HALF_UP", "on_error": "REJECT_ROW"}
+    workbook_context[0].configuration_json["columns"][3]["currency_conversion"] = conversion
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert result["errors"] == []
+    assert result["configuration"] == workbook_context[0].configuration_json
+    updated = {**conversion, "rate": "12346"}
+    result = parse_workbook(edited(workbook_context, "02 Struktur Kolom", "AB8", json.dumps(updated)), *workbook_context)
+    assert result["errors"] == []
+    assert result["configuration"]["columns"][3]["currency_conversion"] == updated
+    updated["rate_reference"] = " "
+    result = parse_workbook(edited(workbook_context, "02 Struktur Kolom", "AB8", json.dumps(updated)), *workbook_context)
+    assert result["errors"]

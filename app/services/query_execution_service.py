@@ -42,6 +42,13 @@ def build_query(product, user, plan):
         schema="semantic",
     )
     metrics = {m["code"]: m for m in product.metrics}
+    allowed_aggregations = {"sum", "avg", "min", "max", "count", "count_distinct"}
+    for code, metric in metrics.items():
+        if metric.get("aggregation") not in allowed_aggregations or metric.get("column") not in columns:
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Definisi metric '{code}' tidak valid.")
+        # Metric expressions are intentionally limited to a column plus an allowlisted aggregation.
+        if set(metric) - {"code", "name", "label", "column", "aggregation", "description", "unit", "default_period", "null_handling"}:
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Expression metric '{code}' tidak diizinkan.")
     if len(set(plan.dimensions)) != len(plan.dimensions) or len(set(plan.metrics)) != len(plan.metrics):
         raise AppError("QUERY_INVALID", "Metric/dimension duplikat.")
     if not set(plan.dimensions).issubset(product.dimensions) or not set(plan.metrics).issubset(metrics):

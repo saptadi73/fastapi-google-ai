@@ -15,7 +15,7 @@ Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres.
 - [x] Semantic product dan structured query satu produk, termasuk saved query dasar.
 - [x] API Reference, contoh payload, dan exporter schema/OpenAPI.
 
-Verifikasi terbaru setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **117 operasi API**. Migrasi BE-06 `6d1305460956`, staging pertanyaan/keputusan, dan Alembic check diuji pada database test; integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master, batch/checkpoint, dan pertanyaan/keputusan staging tersedia, sedangkan pemuatan record masih pekerjaan di bawah.
+Verifikasi historis setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **117 operasi API**. Migrasi BE-06 `6d1305460956`, staging pertanyaan/keputusan, dan Alembic check diuji pada database test; integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master, batch/checkpoint, dan pertanyaan/keputusan staging tersedia, sedangkan pemuatan record masih pekerjaan di bawah.
 
 ## Urutan implementasi
 
@@ -179,21 +179,31 @@ Selesai jika kebutuhan inti master/non-master berjalan dari pendaftaran sampai t
 
 ### BE-12 — Lengkapi kamus parameter dan runtime ETL
 
+Acuan implementasi frontend paralel: [Panduan frontend BE-12](FRONTEND_BE12.md), termasuk mapping catalog/payload, batas runtime, error, dan contoh request lengkap.
+
 Prasyarat: BE-11; inventaris field dapat disiapkan lebih awal.
 
-Status: dukungan runtime bertahap tersedia untuk numeric precision/scale, format tanggal, locale angka ID/US, panjang varchar, dan allowlist transformasi. Unit/currency conversion, timezone runtime penuh, multi-target, schema evolution, dan DQ threshold masih terbuka.
+Status: dukungan runtime bertahap tersedia untuk numeric precision/scale, format tanggal, locale angka ID/US, panjang varchar, dan allowlist transformasi. Multi-target dan schema evolution masih terbuka; currency conversion dengan kurs tetap eksplisit kini tersedia; timezone sumber timestamptz kini tersedia; DQ format/domain, umur maksimum, default bertipe, metadata severity/owner, dan threshold per rule kini tersedia.
 
 - [x] Sediakan parameter catalog runtime untuk field yang sudah didukung dan menandai field unsupported beserta tahap pemiliknya.
 - [x] Inventaris awal locale/timezone/format tanggal/angka, currency, dan UOM pada parameter catalog sebagai unsupported; precision/scale numeric sudah didukung compiler.
-- [x] Publikasikan allowlist transformasi runtime dan tandai transform berparameter serta DQ threshold sebagai unsupported.
-- [x] Inventaris effective dating yang sudah didukung policy master serta unit conversion, multi-target, dan schema evolution sebagai unsupported.
-- [ ] Lengkapi locale/timezone, entity/domain, dan unit/currency; format tanggal, numeric precision/scale, locale angka, dan panjang varchar sudah didukung bertahap.
+- [x] Publikasikan allowlist transformasi runtime; DQ threshold dan konversi unit/currency eksplisit kini didukung. Transform expression/kondisi dinamis tetap unsupported.
+- [x] Inventaris effective dating policy master, unit conversion, multi-target, dan schema evolution; unit conversion massa/volume/panjang kini didukung, multi-target/schema evolution tetap unsupported.
+- [~] Lengkapi locale/timezone, entity/domain, dan unit/currency (timezone IANA sumber timestamptz tersedia, normalisasi UTC dan penolakan DST ambigu/gap; unit dan currency kurs tetap eksplisit tersedia); format tanggal, numeric precision/scale, locale angka, dan panjang varchar sudah didukung bertahap.
 - [x] Sediakan registry operasi allowlist beserta parameter schema dan `on_error`; eksekusi transform berparameter, kondisi, dan urutan dinamis tetap diblokir sampai compiler siap.
-- [ ] Lengkapi DQ format/domain, threshold persen, severity/owner, max_age_days, serta default value dengan semantics yang disetujui.
+- [~] Lengkapi DQ format/domain, threshold persen, severity/owner, max_age_days, serta default value dengan semantics yang disetujui (runtime format allowlist/domain allowed_values, threshold per rule, default bertipe, umur UTC, dan round-trip XLSX tersedia; severity/owner menjadi metadata, action_on_fail mengendalikan routing; notifikasi owner otomatis belum tersedia).
 - [ ] Implementasikan versi/master bermasa berlaku untuk harga, struktur gaji, atau kebijakan bertanggal; pertahankan fakta historis.
-- [ ] Implementasikan konversi satuan eksplisit, termasuk faktor/pembulatan; bedakan alias ejaan dari konversi KG → G.
+- [x] Implementasikan konversi satuan eksplisit untuk massa/volume/panjang, faktor tervalidasi dan pembulatan HALF_UP/HALF_EVEN/DOWN; alias ejaan dan satuan custom tetap unsupported; currency memakai parameter terpisah.
 - [ ] Rancang split grain/multi-target, schema evolution, default/update condition, serta kebijakan append event identik.
 - [ ] Tambahkan dukungan bertahap ke schema, compiler, dry-run, artifact, API, dan XLSX secara bersamaan; unsupported tetap ditolak sampai runtime tersedia.
+
+Progres DQ BE-12 (9 September 2026): format allowlist `UUID`/`ISO_DATE`/`ISO_DATETIME`, domain `allowed_values`, umur maksimum UTC, threshold per indeks rule (batas inklusif), default sebelum cast/nullability, dan metadata severity/owner telah terhubung compiler serta XLSX. Tab 05 memakai G/J/K/O/P untuk parameter tambahan. Tidak memerlukan migrasi database. Bukti: 23 tes DQ/ETL/XLSX lulus dalam pengujian terarah (19 tes awal + 4 kasus tambahan); 14 tes query security lulus setelah memperbaiki allowlist `label` metric. Ruff pada file perubahan tahap ini lulus; Ruff global masih memiliki 20 temuan di file lain. Exporter `--check` memverifikasi 145 operasi. Integrasi PostgreSQL/provider nyata belum dijalankan pada tahap ini. Severity/owner belum mengirim notifikasi atau assignment otomatis.
+
+Progres konversi satuan BE-12 (9 September 2026): `columns.unit_conversion` terhubung schema, compiler bersama dry-run/load, artifact konfigurasi, catalog API, dan XLSX tab 02 kolom Z. Faktor harus cocok dengan satuan dan dimensi allowlist; konversi key/currency/custom ditolak. Batas precision/scale dan panjang varchar kini diperiksa runtime sebelum penulisan. XLSX U-Y juga menampilkan parameter numeric/varchar/date/locale yang sebelumnya hanya tersimpan di konfigurasi. Tidak ada migrasi model; perubahan tipe target terdeploy tetap melalui gate migrasi existing. Pengujian unit/runtime dan round-trip XLSX lulus; PostgreSQL/provider nyata belum diuji pada tahap ini.
+
+Progres timezone BE-12 (9 September 2026): `columns.source_timezone` mendukung zona IANA untuk input naive timestamptz, normalisasi UTC, offset eksplisit, dan penolakan DST overlap/gap. Schema, compiler dry-run/load, API catalog, artifact, dan XLSX AA terhubung. tzdata ditambahkan sebagai dependency langsung memakai versi lock existing. Tidak ada migrasi database. Timezone scheduler/query, konversi date-only, serta pin tzdb per konfigurasi tetap di luar cakupan ini. Bukti: suite non-integrasi 126 tes lulus (35 tes integrasi tidak dijalankan), termasuk 18 tes timezone dan round-trip/edit XLSX; Ruff file perubahan lulus dan exporter --check memverifikasi 145 operasi API. PostgreSQL/provider nyata belum diverifikasi.
+
+Progres currency BE-12 (9 September 2026): `columns.currency_conversion` memuat pasangan currency allowlist, kurs positif finite, tanggal/referensi wajib, dan pembulatan Decimal. Runtime mendukung kurs tetap per revisi konfigurasi, DQ/precision setelah konversi, serta default dalam mata uang target. Metadata kurs ikut artifact dan dependency hash existing; XLSX tab 02 AB mendukung edit/round-trip. Tidak ada migrasi database. Currency campuran per baris, provider live, dan historical rate otomatis tetap unsupported; tanggal kurs adalah metadata eksplisit, bukan pemilih/filter tanggal transaksi. Verifikasi: 150 tes non-integrasi lulus, 35 tes integrasi tidak dijalankan; Ruff file perubahan lulus, exporter --check memverifikasi 145 operasi. Contoh examples/be12-currency-configuration.json dijalankan dengan hasil 100 USD sintetis menjadi 1234550.00 IDR dan timestamp UTC yang sesuai. PostgreSQL/provider nyata belum diuji.
 
 Selesai per field/fitur jika konfigurasi benar-benar memengaruhi runtime dan export–import tidak kehilangan maknanya. Pecah tahap ini menjadi PR per kemampuan, bukan satu perubahan besar.
 
@@ -203,11 +213,13 @@ Prasyarat: BE-08, BE-11, dan kamus parameter BE-12.
 
 Status: registry taxonomy berversi, term hierarkis, dan binding kolom tersedia; AI suggestion, validasi term, dan DQ `in_taxonomy` masih terbuka.
 
-- [x] Buat registry taxonomy/version/hierarchy dan term, terpisah dari identitas record master.
-- [~] Tambahkan usulan AI, approval mapping, alias terkontrol, serta pertanyaan untuk nilai ambigu (binding taxonomy kini dapat disimpan dan di-approve dengan optimistic revision; rekomendasi AI/alias/value question belum).
-- [ ] Implementasikan DQ `in_taxonomy` dan dampak perubahan versi mapping pada review lama.
-- [ ] Aktifkan tab 04 dan field taxonomy terkait di API/XLSX setelah engine tersedia.
-- [ ] Uji hierarki, kode tidak ditemukan, mapping konflik, versioning, dan isolasi tenant.
+- [x] Buat registry taxonomy/version/hierarchy dan term, terpisah dari identitas record master; tersedia endpoint CRUD term dan approval version.
+- [x] Sediakan binding taxonomy ke kolom sumber dengan optimistic revision dan approval/rejection.
+- [x] Sediakan resolver term exact/alias/kandidat/ambigu dengan flag `requires_question`.
+- [~] Tambahkan usulan AI, approval mapping, alias terkontrol, serta pertanyaan untuk nilai ambigu (resolver, ranking rekomendasi, dan `ImportQuestion` tersedia; rekomendasi generatif dan alias approval terpisah masih terbuka).
+- [x] Implementasikan DQ `in_taxonomy` dan dampak perubahan versi mapping pada review lama; preview kini menolak taxonomy stale dan nilai invalid jika `taxonomy_required=true`.
+- [x] Aktifkan field taxonomy pada mapping kolom ETL (`taxonomy_id`, `taxonomy_version`, `taxonomy_required`) sehingga tab 04/XLSX dapat diekspor; resolusi nilai tetap memakai endpoint DQ sebelum apply.
+- [~] Uji hierarki, kode tidak ditemukan, mapping konflik, versioning, dan isolasi tenant (kontrak schema taxonomy/ETL sudah diuji; pengujian integrasi PostgreSQL lintas tenant masih perlu environment test database).
 
 Selesai jika nilai kategori dinormalisasi melalui aturan approved tanpa mengubah identitas master secara keliru.
 
@@ -216,7 +228,7 @@ Selesai jika nilai kategori dinormalisasi melalui aturan approved tanpa mengubah
 Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 
 - [ ] Lengkapi metadata bisnis produk, default periode, unit, sinonim, dan lifecycle approval metrik.
-- [ ] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi.
+- [~] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi (aggregation dan kolom metric kini divalidasi; expression AST lanjutan belum).
 - [ ] Tambahkan query template berparameter dan periode relatif, timezone, output type, priority, serta ambiguity policy.
 - [ ] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda.
 - [ ] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join.
@@ -276,7 +288,8 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 | BE-06 | Selesai di kode/test | Staging, pertanyaan/keputusan berversi, koreksi, kandidat allowlist, proposal registry approved; import/apply belum aktif |
 | BE-07 | Implementasi inti tersedia | Preview token, approval reviewer, apply UPSERT; hardening policy/conflict masih terbuka |
 | BE-08 sampai BE-11 | Berikutnya; belum mulai | Referensi/FK, review AI, dan integrasi alur lengkap |
-| BE-12–BE-15 | Belum mulai | Perluasan parameter template, taxonomy, semantic, dan operasional |
+| BE-12 | Sebagian selesai | DQ, precision/varchar, locale angka, unit, timezone sumber, currency kurs tetap; lihat [handoff frontend](FRONTEND_BE12.md). Effective dating lanjutan, multi-target, dan schema evolution masih pending |
+| BE-13 sampai BE-15 | Bertahap | Taxonomy/semantic memiliki implementasi parsial sesuai checklist; parameter operasional lanjutan belum selesai |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 
 Referensi: [Spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), [cakupan template ETL](REVIEW_KONFIGURASI_ETL.md), [API Reference aktif](API_REFERENCE.md), [batasan implementasi](IMPLEMENTASI.md), dan [konfigurasi/rotasi kredensial](KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).

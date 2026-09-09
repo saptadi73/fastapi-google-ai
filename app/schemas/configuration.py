@@ -1,5 +1,8 @@
+from datetime import date
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, model_validator
 
@@ -20,6 +23,57 @@ Transform = Literal[
 ]
 
 
+# Multipliers to the base unit within each dimension; never currency rates or aliases.
+UNIT_DEFINITIONS = {
+    "KG": ("mass", Decimal("1000")), "G": ("mass", Decimal("1")),
+    "MG": ("mass", Decimal("0.001")), "T": ("mass", Decimal("1000000")),
+    "L": ("volume", Decimal("1000")), "ML": ("volume", Decimal("1")),
+    "M": ("length", Decimal("1000")), "CM": ("length", Decimal("10")),
+    "MM": ("length", Decimal("1")),
+}
+
+
+class UnitConversion(StrictModel):
+    from_unit: Literal["KG", "G", "MG", "T", "L", "ML", "M", "CM", "MM"]
+    to_unit: Literal["KG", "G", "MG", "T", "L", "ML", "M", "CM", "MM"]
+    factor: Decimal = Field(gt=0, max_digits=20, decimal_places=12, allow_inf_nan=False)
+    output_scale: int = Field(ge=0, le=50)
+    rounding: Literal["HALF_UP", "HALF_EVEN", "DOWN"]
+    on_error: Literal["REJECT_ROW"] = "REJECT_ROW"
+
+    @model_validator(mode="after")
+    def valid_conversion(self):
+        source_dimension, source_factor = UNIT_DEFINITIONS[self.from_unit]
+        target_dimension, target_factor = UNIT_DEFINITIONS[self.to_unit]
+        if source_dimension != target_dimension or self.from_unit == self.to_unit:
+            raise ValueError("Conversion requires distinct units of the same dimension")
+        if self.factor != source_factor / target_factor:
+            raise ValueError("Conversion factor does not match the declared units")
+        return self
+
+
+CurrencyCode = Literal["IDR", "USD", "EUR", "SGD", "JPY", "THB"]
+
+
+class CurrencyConversion(StrictModel):
+    from_currency: CurrencyCode
+    to_currency: CurrencyCode
+    rate: Decimal = Field(gt=0, max_digits=30, decimal_places=18, allow_inf_nan=False)
+    rate_date: date
+    rate_reference: str = Field(min_length=1, max_length=500)
+    output_scale: int = Field(ge=0, le=50)
+    rounding: Literal["HALF_UP", "HALF_EVEN", "DOWN"]
+    on_error: Literal["REJECT_ROW"] = "REJECT_ROW"
+
+    @model_validator(mode="after")
+    def valid_conversion(self):
+        if self.from_currency == self.to_currency:
+            raise ValueError("Currency conversion requires distinct currencies")
+        if not self.rate_reference.strip():
+            raise ValueError("Currency rate_reference must not be blank")
+        return self
+
+
 class ColumnMapping(StrictModel):
     source_column: str = Field(min_length=1, max_length=200)
     target_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
@@ -37,9 +91,40 @@ class ColumnMapping(StrictModel):
     date_format: str | None = Field(default=None, max_length=40)
     number_locale: str | None = Field(default=None, pattern=r"^(ID|US)$")
     varchar_length: int | None = Field(default=None, ge=1, le=10485760)
+    unit_conversion: UnitConversion | None = None
+    currency_conversion: CurrencyConversion | None = None
+    source_timezone: str | None = Field(default=None, min_length=1, max_length=100)
+    taxonomy_id: UUID | None = None
+    taxonomy_version: int | None = Field(default=None, ge=1)
+    taxonomy_required: bool = False
 
     @model_validator(mode="after")
     def valid_numeric_scale(self):
+        if self.source_timezone is not None:
+            if self.target_type != "timestamptz" or "parse_date_id" in self.transformation_codes:
+                raise ValueError("source_timezone requires timestamptz without parse_date_id")
+            try:
+                ZoneInfo(self.source_timezone)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError("source_timezone must be a known IANA timezone") from None
+        if self.currency_conversion is not None:
+            if self.unit_conversion is not None:
+                raise ValueError("unit_conversion and currency_conversion cannot be combined")
+            if self.target_type != "numeric" or self.is_business_key or self.is_primary_key:
+                raise ValueError("currency_conversion requires a non-key numeric column")
+            if self.numeric_precision is not None and (self.numeric_scale or 0) != self.currency_conversion.output_scale:
+                raise ValueError("numeric_scale must equal currency conversion output_scale")
+        if self.unit_conversion is not None:
+            if self.target_type != "numeric" or self.is_business_key or self.is_primary_key:
+                raise ValueError("unit_conversion requires a non-key numeric column")
+            if self.numeric_precision is not None and (self.numeric_scale or 0) != self.unit_conversion.output_scale:
+                raise ValueError("numeric_scale must equal unit conversion output_scale")
+        if self.numeric_scale is not None and self.numeric_precision is None:
+            raise ValueError("numeric_scale requires numeric_precision")
+        if self.taxonomy_version is not None and self.taxonomy_id is None:
+            raise ValueError("taxonomy_version memerlukan taxonomy_id")
+        if self.taxonomy_required and self.taxonomy_id is None:
+            raise ValueError("taxonomy_required memerlukan taxonomy_id")
         if (self.numeric_precision is not None or self.numeric_scale is not None) and self.target_type != "numeric":
             raise ValueError("numeric_precision/scale hanya berlaku untuk target numeric")
         if self.numeric_scale is not None and self.numeric_precision is not None and self.numeric_scale > self.numeric_precision:
@@ -55,9 +140,22 @@ class ColumnMapping(StrictModel):
 
 class QualityRule(StrictModel):
     column: str
-    rule: Literal["not_null", "unique", "min", "max", "allowed_values"]
+    rule: Literal["not_null", "unique", "min", "max", "allowed_values", "format", "max_age_days"]
     value: str | int | float | list[str] | None = None
     action_on_fail: Literal["REJECT_ROW", "WARN", "STOP_BATCH", "REQUIRE_REVIEW"] = "REJECT_ROW"
+    severity: Literal["INFO", "WARN", "ERROR", "CRITICAL"] = "ERROR"
+    owner: str | None = Field(default=None, max_length=100)
+    threshold_percent: float | None = Field(default=None, ge=0, le=100)
+    max_age_days: int | None = Field(default=None, ge=0, le=36500)
+    default_value: str | int | float | bool | None = None
+
+    @model_validator(mode="after")
+    def valid_parameters(self):
+        if self.rule == "format" and self.value not in ("UUID", "ISO_DATE", "ISO_DATETIME"):
+            raise ValueError("format requires UUID, ISO_DATE, or ISO_DATETIME")
+        if (self.rule == "max_age_days") != (self.max_age_days is not None):
+            raise ValueError("max_age_days is required exclusively for rule max_age_days")
+        return self
 
 
 class MetricDefinition(StrictModel):
@@ -116,9 +214,17 @@ class ETLConfiguration(StrictModel):
                 "numeric",
             ):
                 raise ValueError("sum/avg require numeric columns")
+        defaults = {}
         for rule in self.data_quality_rules:
             if rule.column not in names:
                 raise ValueError("DQ rule references an unknown column")
+            column = next(c for c in self.columns if c.target_column == rule.column)
+            if rule.rule == "max_age_days" and column.target_type not in ("date", "timestamp", "timestamptz"):
+                raise ValueError("max_age_days requires a temporal column")
+            if rule.default_value is not None:
+                if rule.column in defaults and (type(defaults[rule.column]) is not type(rule.default_value) or defaults[rule.column] != rule.default_value):
+                    raise ValueError("Conflicting default values for column")
+                defaults[rule.column] = rule.default_value
             if rule.rule in ("min", "max") and not isinstance(rule.value, (int, float)):
                 raise ValueError("min/max require a numeric value")
             if rule.rule == "allowed_values" and not isinstance(rule.value, list):

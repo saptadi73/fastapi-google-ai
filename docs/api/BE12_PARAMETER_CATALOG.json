@@ -1,0 +1,598 @@
+{
+  "status": "success",
+  "data": {
+    "schema_version": "1.0",
+    "parameters": [
+      {
+        "name": "dataset_business_name",
+        "type": "string",
+        "default": "",
+        "supported": true
+      },
+      {
+        "name": "target_table",
+        "type": "identifier",
+        "default": "",
+        "supported": true
+      },
+      {
+        "name": "load_strategy",
+        "type": "enum",
+        "default": "UPSERT",
+        "supported": true
+      },
+      {
+        "name": "columns",
+        "type": "array",
+        "default": [],
+        "supported": true
+      },
+      {
+        "name": "data_quality_rules",
+        "type": "array",
+        "default": [],
+        "supported": true
+      },
+      {
+        "name": "locale",
+        "type": "string",
+        "default": "id-ID",
+        "supported": false,
+        "reason": "BE-12 runtime locale"
+      },
+      {
+        "name": "source_timezone",
+        "type": "string",
+        "default": null,
+        "supported": true,
+        "scope": "columns.source_timezone; IANA source zone for naive timestamptz; output UTC; DST ambiguity/gaps rejected"
+      },
+      {
+        "name": "date_format",
+        "type": "string",
+        "default": "ISO-8601",
+        "supported": true,
+        "scope": "parse_date_id columns"
+      },
+      {
+        "name": "number_format",
+        "type": "enum",
+        "default": "ID",
+        "supported": true,
+        "allowed": [
+          "ID",
+          "US"
+        ],
+        "scope": "parse_decimal_id columns"
+      },
+      {
+        "name": "currency_conversion",
+        "type": "object",
+        "default": null,
+        "supported": true,
+        "scope": "columns.currency_conversion; explicit fixed rate per configuration revision",
+        "parameter_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "from_currency": {
+              "enum": [
+                "IDR",
+                "USD",
+                "EUR",
+                "SGD",
+                "JPY",
+                "THB"
+              ],
+              "title": "From Currency",
+              "type": "string"
+            },
+            "to_currency": {
+              "enum": [
+                "IDR",
+                "USD",
+                "EUR",
+                "SGD",
+                "JPY",
+                "THB"
+              ],
+              "title": "To Currency",
+              "type": "string"
+            },
+            "rate": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,31}0*$)\\d{0,12}\\.\\d{0,18}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Rate"
+            },
+            "rate_date": {
+              "format": "date",
+              "title": "Rate Date",
+              "type": "string"
+            },
+            "rate_reference": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Rate Reference",
+              "type": "string"
+            },
+            "output_scale": {
+              "maximum": 50,
+              "minimum": 0,
+              "title": "Output Scale",
+              "type": "integer"
+            },
+            "rounding": {
+              "enum": [
+                "HALF_UP",
+                "HALF_EVEN",
+                "DOWN"
+              ],
+              "title": "Rounding",
+              "type": "string"
+            },
+            "on_error": {
+              "const": "REJECT_ROW",
+              "default": "REJECT_ROW",
+              "title": "On Error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "from_currency",
+            "to_currency",
+            "rate",
+            "rate_date",
+            "rate_reference",
+            "output_scale",
+            "rounding"
+          ],
+          "title": "CurrencyConversion",
+          "type": "object"
+        }
+      },
+      {
+        "name": "uom",
+        "type": "string",
+        "default": "",
+        "supported": false,
+        "reason": "BE-12 unit conversion"
+      },
+      {
+        "name": "numeric_precision_scale",
+        "type": "object",
+        "default": {},
+        "supported": true,
+        "scope": "numeric columns"
+      },
+      {
+        "name": "varchar_length",
+        "type": "integer",
+        "default": null,
+        "supported": true,
+        "scope": "text/varchar columns"
+      },
+      {
+        "name": "transformation_codes",
+        "type": "enum[]",
+        "default": [],
+        "supported": true,
+        "allowed": [
+          "trim",
+          "normalize_whitespace",
+          "parse_date_id",
+          "parse_decimal_id",
+          "uppercase",
+          "lowercase",
+          "null_if_empty"
+        ]
+      },
+      {
+        "name": "transform_parameters",
+        "type": "object[]",
+        "default": [],
+        "supported": false,
+        "reason": "BE-12 parameterized transform registry"
+      },
+      {
+        "name": "dq_threshold_percent",
+        "type": "number",
+        "default": null,
+        "supported": true,
+        "scope": "data_quality_rules.threshold_percent; per-rule failure rate"
+      },
+      {
+        "name": "dq_format",
+        "type": "enum",
+        "supported": true,
+        "allowed": [
+          "UUID",
+          "ISO_DATE",
+          "ISO_DATETIME"
+        ]
+      },
+      {
+        "name": "dq_domain",
+        "type": "array",
+        "supported": true,
+        "scope": "allowed_values"
+      },
+      {
+        "name": "dq_max_age_days",
+        "type": "integer",
+        "supported": true,
+        "scope": "temporal columns; UTC"
+      },
+      {
+        "name": "dq_default_value",
+        "type": "scalar",
+        "supported": true,
+        "scope": "cast before nullability and DQ checks"
+      },
+      {
+        "name": "dq_severity_owner",
+        "type": "object",
+        "supported": true,
+        "scope": "finding metadata; action_on_fail controls routing"
+      },
+      {
+        "name": "effective_dating",
+        "type": "object",
+        "default": null,
+        "supported": true,
+        "scope": "MASTER policy"
+      },
+      {
+        "name": "unit_conversion",
+        "type": "object",
+        "default": null,
+        "supported": true,
+        "scope": "columns.unit_conversion; non-key numeric",
+        "parameter_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "from_unit": {
+              "enum": [
+                "KG",
+                "G",
+                "MG",
+                "T",
+                "L",
+                "ML",
+                "M",
+                "CM",
+                "MM"
+              ],
+              "title": "From Unit",
+              "type": "string"
+            },
+            "to_unit": {
+              "enum": [
+                "KG",
+                "G",
+                "MG",
+                "T",
+                "L",
+                "ML",
+                "M",
+                "CM",
+                "MM"
+              ],
+              "title": "To Unit",
+              "type": "string"
+            },
+            "factor": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,21}0*$)\\d{0,8}\\.\\d{0,12}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Factor"
+            },
+            "output_scale": {
+              "maximum": 50,
+              "minimum": 0,
+              "title": "Output Scale",
+              "type": "integer"
+            },
+            "rounding": {
+              "enum": [
+                "HALF_UP",
+                "HALF_EVEN",
+                "DOWN"
+              ],
+              "title": "Rounding",
+              "type": "string"
+            },
+            "on_error": {
+              "const": "REJECT_ROW",
+              "default": "REJECT_ROW",
+              "title": "On Error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "from_unit",
+            "to_unit",
+            "factor",
+            "output_scale",
+            "rounding"
+          ],
+          "title": "UnitConversion",
+          "type": "object"
+        }
+      },
+      {
+        "name": "multi_target",
+        "type": "object[]",
+        "default": [],
+        "supported": false,
+        "reason": "BE-12 split grain compiler"
+      },
+      {
+        "name": "schema_evolution",
+        "type": "object",
+        "default": {},
+        "supported": false,
+        "reason": "BE-12 migration compiler"
+      },
+      {
+        "name": "taxonomy_mapping",
+        "type": "array",
+        "default": [],
+        "supported": false,
+        "reason": "BE-13"
+      },
+      {
+        "name": "join_relationships",
+        "type": "array",
+        "default": [],
+        "supported": false,
+        "reason": "BE-14"
+      }
+    ],
+    "operations": [
+      {
+        "code": "convert_currency",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "from_currency": {
+              "enum": [
+                "IDR",
+                "USD",
+                "EUR",
+                "SGD",
+                "JPY",
+                "THB"
+              ],
+              "title": "From Currency",
+              "type": "string"
+            },
+            "to_currency": {
+              "enum": [
+                "IDR",
+                "USD",
+                "EUR",
+                "SGD",
+                "JPY",
+                "THB"
+              ],
+              "title": "To Currency",
+              "type": "string"
+            },
+            "rate": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,31}0*$)\\d{0,12}\\.\\d{0,18}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Rate"
+            },
+            "rate_date": {
+              "format": "date",
+              "title": "Rate Date",
+              "type": "string"
+            },
+            "rate_reference": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Rate Reference",
+              "type": "string"
+            },
+            "output_scale": {
+              "maximum": 50,
+              "minimum": 0,
+              "title": "Output Scale",
+              "type": "integer"
+            },
+            "rounding": {
+              "enum": [
+                "HALF_UP",
+                "HALF_EVEN",
+                "DOWN"
+              ],
+              "title": "Rounding",
+              "type": "string"
+            },
+            "on_error": {
+              "const": "REJECT_ROW",
+              "default": "REJECT_ROW",
+              "title": "On Error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "from_currency",
+            "to_currency",
+            "rate",
+            "rate_date",
+            "rate_reference",
+            "output_scale",
+            "rounding"
+          ],
+          "title": "CurrencyConversion",
+          "type": "object"
+        },
+        "on_error": "REJECT_ROW",
+        "supported": true,
+        "scope": "columns.currency_conversion; after cast before DQ; no live provider"
+      },
+      {
+        "code": "trim",
+        "parameters": {},
+        "on_error": "REJECT_ROW",
+        "supported": true
+      },
+      {
+        "code": "normalize_whitespace",
+        "parameters": {},
+        "on_error": "REJECT_ROW",
+        "supported": true
+      },
+      {
+        "code": "parse_date_id",
+        "parameters": {},
+        "on_error": "REJECT_ROW",
+        "supported": true
+      },
+      {
+        "code": "parse_decimal_id",
+        "parameters": {},
+        "on_error": "REJECT_ROW",
+        "supported": true
+      },
+      {
+        "code": "convert_unit",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "from_unit": {
+              "enum": [
+                "KG",
+                "G",
+                "MG",
+                "T",
+                "L",
+                "ML",
+                "M",
+                "CM",
+                "MM"
+              ],
+              "title": "From Unit",
+              "type": "string"
+            },
+            "to_unit": {
+              "enum": [
+                "KG",
+                "G",
+                "MG",
+                "T",
+                "L",
+                "ML",
+                "M",
+                "CM",
+                "MM"
+              ],
+              "title": "To Unit",
+              "type": "string"
+            },
+            "factor": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,21}0*$)\\d{0,8}\\.\\d{0,12}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Factor"
+            },
+            "output_scale": {
+              "maximum": 50,
+              "minimum": 0,
+              "title": "Output Scale",
+              "type": "integer"
+            },
+            "rounding": {
+              "enum": [
+                "HALF_UP",
+                "HALF_EVEN",
+                "DOWN"
+              ],
+              "title": "Rounding",
+              "type": "string"
+            },
+            "on_error": {
+              "const": "REJECT_ROW",
+              "default": "REJECT_ROW",
+              "title": "On Error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "from_unit",
+            "to_unit",
+            "factor",
+            "output_scale",
+            "rounding"
+          ],
+          "title": "UnitConversion",
+          "type": "object"
+        },
+        "on_error": "REJECT_ROW",
+        "supported": true,
+        "scope": "columns.unit_conversion; after cast and before DQ"
+      }
+    ],
+    "capabilities": {
+      "review_sections": [
+        "identity",
+        "columns",
+        "cleansing",
+        "quality",
+        "load",
+        "semantic"
+      ],
+      "editable_template_tabs": [
+        "02 Struktur Kolom",
+        "03 Aturan Cleansing",
+        "05 Data Quality",
+        "06 Target Database",
+        "10 Data Product Catalog",
+        "11 Metric Definitions",
+        "14 Review"
+      ],
+      "unsupported": [
+        "Master registry dan foreign key otomatis",
+        "Taxonomy mapping",
+        "Join relationships",
+        "Intent query mapping",
+        "Ekspresi transformasi bebas",
+        "Pengaturan OpenAI dan operasional melalui Excel"
+      ],
+      "max_workbook_bytes": 2000000,
+      "preview_expiry_minutes": 15
+    }
+  },
+  "meta": {},
+  "errors": []
+}

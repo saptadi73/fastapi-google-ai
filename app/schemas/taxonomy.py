@@ -22,3 +22,24 @@ class TaxonomyColumnBindingCreate(StrictModel):
     required: bool = False
     normalization: str = Field(default="TRIM_CASEFOLD", pattern=r"^[A-Z0-9_]{2,40}$")
     revision_no: int = Field(default=0, ge=0)
+
+
+class TaxonomyTermResolveRequest(StrictModel):
+    value: str = Field(min_length=1, max_length=500)
+
+
+class TaxonomyAmbiguityQuestionRequest(TaxonomyTermResolveRequest):
+    import_review_id: UUID
+    staging_row_id: UUID | None = None
+    source_column: str | None = Field(default=None, max_length=63)
+    target_column: str | None = Field(default=None, max_length=63)
+
+
+class TaxonomyValuesValidateRequest(StrictModel):
+    values: list[str] = Field(min_length=1, max_length=10000)
+    taxonomy_version: int | None = Field(default=None, ge=1)
+
+
+class TaxonomyRecommendRequest(StrictModel):
+    values: list[str] = Field(min_length=1, max_length=500)
+    limit: int = Field(default=3, ge=1, le=10)

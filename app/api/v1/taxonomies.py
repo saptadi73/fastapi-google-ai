@@ -8,8 +8,9 @@ from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.taxonomy import Taxonomy, TaxonomyTerm, TaxonomyColumnBinding
 from app.models.source import SourceSheet
+from app.models.import_review import ImportReview, ImportQuestion
 from app.repositories.base import TenantRepository, record
-from app.schemas.taxonomy import TaxonomyCreate, TaxonomyTermCreate, TaxonomyColumnBindingCreate
+from app.schemas.taxonomy import TaxonomyCreate, TaxonomyTermCreate, TaxonomyColumnBindingCreate, TaxonomyTermResolveRequest, TaxonomyAmbiguityQuestionRequest, TaxonomyValuesValidateRequest, TaxonomyRecommendRequest
 from app.schemas.master import MasterRevisionRequest
 
 router = APIRouter(prefix="/taxonomies", tags=["Taxonomy"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))])
@@ -110,3 +111,81 @@ async def reject_column_binding(binding_id: UUID, data: MasterRevisionRequest, s
         raise AppError("REVISION_CONFLICT", "Binding telah berubah; ambil data terbaru.", 409)
     binding.status, binding.approved_by, binding.approved_at = "REJECTED", None, None
     return success(record(binding))
+
+
+@router.post("/{taxonomy_id}/resolve-term")
+async def resolve_term(taxonomy_id: UUID, data: TaxonomyTermResolveRequest, session: Session, user: CurrentUser):
+    repo = TenantRepository(session, user.tenant_id)
+    taxonomy = await repo.get(Taxonomy, taxonomy_id)
+    if taxonomy.status != "APPROVED" or not taxonomy.is_active:
+        raise AppError("TAXONOMY_NOT_APPROVED", "Taxonomy harus approved dan aktif.", 422)
+    value = data.value.strip().casefold()
+    terms = (await session.scalars(repo.query(TaxonomyTerm).where(TaxonomyTerm.taxonomy_id == str(taxonomy_id), TaxonomyTerm.is_active.is_(True)))).all()
+    exact = [t for t in terms if t.code.casefold() == value or t.label.casefold() == value or value in {str(a).casefold() for a in (t.aliases or [])}]
+    if len(exact) == 1:
+        return success({"status": "EXACT", "taxonomy_id": str(taxonomy_id), "taxonomy_version": taxonomy.version, "term": record(exact[0]), "requires_question": False})
+    from difflib import SequenceMatcher
+    candidates = [t for t in terms if value in t.label.casefold() or value in t.code.casefold() or any(value in str(a).casefold() for a in (t.aliases or []))]
+    candidates.sort(key=lambda t: max(SequenceMatcher(None, value, t.label.casefold()).ratio(), SequenceMatcher(None, value, t.code.casefold()).ratio()), reverse=True)
+    status = "AMBIGUOUS" if len(candidates) > 1 else "NOT_FOUND" if not candidates else "CANDIDATE"
+    return success({"status": status, "taxonomy_id": str(taxonomy_id), "taxonomy_version": taxonomy.version, "candidates": [record(t) for t in candidates[:10]], "requires_question": status != "EXACT"})
+
+
+@router.post("/{taxonomy_id}/ambiguity-question", dependencies=edit, status_code=201)
+async def create_ambiguity_question(taxonomy_id: UUID, data: TaxonomyAmbiguityQuestionRequest, session: Session, user: CurrentUser):
+    repo = TenantRepository(session, user.tenant_id)
+    await repo.get(Taxonomy, taxonomy_id)
+    review = await repo.get(ImportReview, data.import_review_id)
+    resolution = await resolve_term(taxonomy_id, TaxonomyTermResolveRequest(value=data.value), session, user)
+    payload = resolution.get("data", resolution)
+    if not payload.get("requires_question"):
+        return success({"created": False, "resolution": payload})
+    key = f"taxonomy:{taxonomy_id}:{data.staging_row_id}:{data.source_column}:{data.value.casefold()}"[:64]
+    existing = (await session.scalars(repo.query(ImportQuestion).where(ImportQuestion.import_review_id == str(review.id), ImportQuestion.question_key == key))).first()
+    if existing:
+        return success(record(existing))
+    candidates = payload.get("candidates", [])
+    q = await repo.add(ImportQuestion, import_review_id=str(review.id), staging_row_id=str(data.staging_row_id) if data.staging_row_id else None, source_column=data.source_column, target_column=data.target_column, source_row=None, question_key=key, category="TAXONOMY_AMBIGUOUS", prompt=f"Pilih term taxonomy untuk nilai '{data.value}'.", allowed_actions=["SELECT_RECORD", "CORRECT_SOURCE"], candidates=candidates, evidence={"taxonomy_id": str(taxonomy_id), "taxonomy_version": payload.get("taxonomy_version")}, status="OPEN", revision_no=1, fingerprint=key, snapshot_hash=key)
+    return success(record(q))
+
+
+@router.post("/{taxonomy_id}/validate-values")
+async def validate_taxonomy_values(taxonomy_id: UUID, data: TaxonomyValuesValidateRequest, session: Session, user: CurrentUser):
+    repo = TenantRepository(session, user.tenant_id)
+    taxonomy = await repo.get(Taxonomy, taxonomy_id)
+    if taxonomy.status != "APPROVED" or not taxonomy.is_active:
+        raise AppError("TAXONOMY_NOT_APPROVED", "Taxonomy harus approved dan aktif.", 422)
+    if data.taxonomy_version is not None and data.taxonomy_version != taxonomy.version:
+        return success({"valid": False, "code": "TAXONOMY_VERSION_STALE", "expected_version": taxonomy.version, "received_version": data.taxonomy_version})
+    terms = (await session.scalars(repo.query(TaxonomyTerm).where(TaxonomyTerm.taxonomy_id == str(taxonomy_id), TaxonomyTerm.is_active.is_(True)))).all()
+    index = {}
+    for term in terms:
+        for key in [term.code, term.label, *(term.aliases or [])]: index[str(key).strip().casefold()] = term
+    invalid, ambiguous = [], []
+    for raw in data.values:
+        key = raw.strip().casefold()
+        matches = [t for t in terms if key in {t.code.casefold(), t.label.casefold(), *(str(a).casefold() for a in (t.aliases or []))}]
+        if not matches: invalid.append(raw)
+        elif len(matches) > 1: ambiguous.append(raw)
+    return success({"valid": not invalid and not ambiguous, "taxonomy_version": taxonomy.version, "checked": len(data.values), "invalid_values": invalid[:100], "ambiguous_values": ambiguous[:100]})
+
+
+@router.post("/{taxonomy_id}/recommend-terms")
+async def recommend_terms(taxonomy_id: UUID, data: TaxonomyRecommendRequest, session: Session, user: CurrentUser):
+    from difflib import SequenceMatcher
+    repo = TenantRepository(session, user.tenant_id)
+    taxonomy = await repo.get(Taxonomy, taxonomy_id)
+    if taxonomy.status != "APPROVED" or not taxonomy.is_active:
+        raise AppError("TAXONOMY_NOT_APPROVED", "Taxonomy harus approved dan aktif.", 422)
+    terms = (await session.scalars(repo.query(TaxonomyTerm).where(TaxonomyTerm.taxonomy_id == str(taxonomy_id), TaxonomyTerm.is_active.is_(True)))).all()
+    result = []
+    for raw in data.values:
+        value = raw.strip().casefold()
+        scored = []
+        for term in terms:
+            labels = [term.code, term.label, *(term.aliases or [])]
+            score = max(SequenceMatcher(None, value, str(label).casefold()).ratio() for label in labels)
+            scored.append((score, term))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        result.append({"value": raw, "candidates": [{"term": record(term), "confidence": round(score, 4)} for score, term in scored[:data.limit]], "requires_confirmation": True})
+    return success({"taxonomy_id": str(taxonomy_id), "taxonomy_version": taxonomy.version, "recommendations": result})

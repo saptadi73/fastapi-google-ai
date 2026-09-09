@@ -5184,6 +5184,842 @@
         }
       }
     },
+    "/api/v1/taxonomies/source-sheets/{sheet_id}/column-bindings": {
+      "get": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "List Column Bindings",
+        "operationId": "list_column_bindings_api_v1_taxonomies_source_sheets__sheet_id__column_bindings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Save Column Binding",
+        "operationId": "save_column_binding_api_v1_taxonomies_source_sheets__sheet_id__column_bindings_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyColumnBindingCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/taxonomies/column-bindings/{binding_id}/approve": {
+      "post": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Approve Column Binding",
+        "operationId": "approve_column_binding_api_v1_taxonomies_column_bindings__binding_id__approve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/taxonomies/column-bindings/{binding_id}/reject": {
+      "post": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Reject Column Binding",
+        "operationId": "reject_column_binding_api_v1_taxonomies_column_bindings__binding_id__reject_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/taxonomies/{taxonomy_id}/resolve-term": {
+      "post": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Resolve Term",
+        "operationId": "resolve_term_api_v1_taxonomies__taxonomy_id__resolve_term_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "taxonomy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Taxonomy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyTermResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/taxonomies/{taxonomy_id}/ambiguity-question": {
+      "post": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Create Ambiguity Question",
+        "operationId": "create_ambiguity_question_api_v1_taxonomies__taxonomy_id__ambiguity_question_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "taxonomy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Taxonomy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyAmbiguityQuestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/taxonomies/{taxonomy_id}/validate-values": {
+      "post": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Validate Taxonomy Values",
+        "operationId": "validate_taxonomy_values_api_v1_taxonomies__taxonomy_id__validate_values_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "taxonomy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Taxonomy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyValuesValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/taxonomies/{taxonomy_id}/recommend-terms": {
+      "post": {
+        "tags": [
+          "Taxonomy"
+        ],
+        "summary": "Recommend Terms",
+        "operationId": "recommend_terms_api_v1_taxonomies__taxonomy_id__recommend_terms_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "taxonomy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Taxonomy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyRecommendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/import-reviews": {
       "post": {
         "tags": [
@@ -13609,6 +14445,68 @@
               }
             ],
             "title": "Varchar Length"
+          },
+          "unit_conversion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnitConversion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency_conversion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrencyConversion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_timezone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timezone"
+          },
+          "taxonomy_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Id"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          },
+          "taxonomy_required": {
+            "type": "boolean",
+            "title": "Taxonomy Required",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -13665,6 +14563,91 @@
           "configuration"
         ],
         "title": "ConfigurationPatch"
+      },
+      "CurrencyConversion": {
+        "properties": {
+          "from_currency": {
+            "type": "string",
+            "enum": [
+              "IDR",
+              "USD",
+              "EUR",
+              "SGD",
+              "JPY",
+              "THB"
+            ],
+            "title": "From Currency"
+          },
+          "to_currency": {
+            "type": "string",
+            "enum": [
+              "IDR",
+              "USD",
+              "EUR",
+              "SGD",
+              "JPY",
+              "THB"
+            ],
+            "title": "To Currency"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,31}0*$)\\d{0,12}\\.\\d{0,18}0*$)"
+              }
+            ],
+            "title": "Rate"
+          },
+          "rate_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Rate Date"
+          },
+          "rate_reference": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Rate Reference"
+          },
+          "output_scale": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Output Scale"
+          },
+          "rounding": {
+            "type": "string",
+            "enum": [
+              "HALF_UP",
+              "HALF_EVEN",
+              "DOWN"
+            ],
+            "title": "Rounding"
+          },
+          "on_error": {
+            "type": "string",
+            "const": "REJECT_ROW",
+            "title": "On Error",
+            "default": "REJECT_ROW"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "from_currency",
+          "to_currency",
+          "rate",
+          "rate_date",
+          "rate_reference",
+          "output_scale",
+          "rounding"
+        ],
+        "title": "CurrencyConversion"
       },
       "DatabaseHealth": {
         "properties": {
@@ -14776,7 +15759,9 @@
               "unique",
               "min",
               "max",
-              "allowed_values"
+              "allowed_values",
+              "format",
+              "max_age_days"
             ],
             "title": "Rule"
           },
@@ -14813,6 +15798,75 @@
             ],
             "title": "Action On Fail",
             "default": "REJECT_ROW"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "INFO",
+              "WARN",
+              "ERROR",
+              "CRITICAL"
+            ],
+            "title": "Severity",
+            "default": "ERROR"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "threshold_percent": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Percent"
+          },
+          "max_age_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 36500.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Age Days"
+          },
+          "default_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Value"
           }
         },
         "additionalProperties": false,
@@ -15398,6 +16452,109 @@
         ],
         "title": "SourceCreate"
       },
+      "TaxonomyAmbiguityQuestionRequest": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "import_review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Import Review Id"
+          },
+          "staging_row_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staging Row Id"
+          },
+          "source_column": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Column"
+          },
+          "target_column": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Column"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "import_review_id"
+        ],
+        "title": "TaxonomyAmbiguityQuestionRequest"
+      },
+      "TaxonomyColumnBindingCreate": {
+        "properties": {
+          "source_column": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source Column"
+          },
+          "taxonomy_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Taxonomy Id"
+          },
+          "taxonomy_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Taxonomy Version"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "normalization": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]{2,40}$",
+            "title": "Normalization",
+            "default": "TRIM_CASEFOLD"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision No",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_column",
+          "taxonomy_id",
+          "taxonomy_version"
+        ],
+        "title": "TaxonomyColumnBindingCreate"
+      },
       "TaxonomyCreate": {
         "properties": {
           "code": {
@@ -15419,6 +16576,32 @@
           "name"
         ],
         "title": "TaxonomyCreate"
+      },
+      "TaxonomyRecommendRequest": {
+        "properties": {
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Values"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 3
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "TaxonomyRecommendRequest"
       },
       "TaxonomyTermCreate": {
         "properties": {
@@ -15460,6 +16643,131 @@
           "label"
         ],
         "title": "TaxonomyTermCreate"
+      },
+      "TaxonomyTermResolveRequest": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "title": "TaxonomyTermResolveRequest"
+      },
+      "TaxonomyValuesValidateRequest": {
+        "properties": {
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Values"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "TaxonomyValuesValidateRequest"
+      },
+      "UnitConversion": {
+        "properties": {
+          "from_unit": {
+            "type": "string",
+            "enum": [
+              "KG",
+              "G",
+              "MG",
+              "T",
+              "L",
+              "ML",
+              "M",
+              "CM",
+              "MM"
+            ],
+            "title": "From Unit"
+          },
+          "to_unit": {
+            "type": "string",
+            "enum": [
+              "KG",
+              "G",
+              "MG",
+              "T",
+              "L",
+              "ML",
+              "M",
+              "CM",
+              "MM"
+            ],
+            "title": "To Unit"
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,21}0*$)\\d{0,8}\\.\\d{0,12}0*$)"
+              }
+            ],
+            "title": "Factor"
+          },
+          "output_scale": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Output Scale"
+          },
+          "rounding": {
+            "type": "string",
+            "enum": [
+              "HALF_UP",
+              "HALF_EVEN",
+              "DOWN"
+            ],
+            "title": "Rounding"
+          },
+          "on_error": {
+            "type": "string",
+            "const": "REJECT_ROW",
+            "title": "On Error",
+            "default": "REJECT_ROW"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "from_unit",
+          "to_unit",
+          "factor",
+          "output_scale",
+          "rounding"
+        ],
+        "title": "UnitConversion"
       },
       "UserCreate": {
         "properties": {

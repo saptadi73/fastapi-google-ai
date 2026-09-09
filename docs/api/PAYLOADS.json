@@ -96,6 +96,8 @@
           "source_column": "Total",
           "target_column": "net_amount",
           "target_type": "numeric",
+          "numeric_precision": 12,
+          "numeric_scale": 2,
           "nullable": false,
           "transformation_codes": [
             "parse_decimal_id"
@@ -107,7 +109,11 @@
           "column": "net_amount",
           "rule": "min",
           "value": 0,
-          "action_on_fail": "REJECT_ROW"
+          "action_on_fail": "REJECT_ROW",
+          "severity": "ERROR",
+          "owner": "data-steward",
+          "threshold_percent": 5,
+          "default_value": 0
         }
       ],
       "semantic": {
@@ -601,6 +607,24 @@
     "required": false,
     "normalization": "TRIM_CASEFOLD",
     "revision_no": 0
+  },
+  "TaxonomyTermResolveRequest": {
+    "value": "Minuman"
+  },
+  "TaxonomyAmbiguityQuestionRequest": {
+    "value": "Minuman",
+    "import_review_id": "00000000-0000-0000-0000-000000000000",
+    "staging_row_id": null,
+    "source_column": "category",
+    "target_column": "category_id"
+  },
+  "TaxonomyValuesValidateRequest": {
+    "values": ["Minuman", "Elektronik"],
+    "taxonomy_version": 1
+  },
+  "TaxonomyRecommendRequest": {
+    "values": ["Minumn", "Elektronic"],
+    "limit": 3
   },
   "TaxonomyTermCreate": {
     "code": "beverages",

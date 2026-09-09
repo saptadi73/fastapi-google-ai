@@ -1,10 +1,12 @@
 # API Reference untuk frontend
 
-Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **8 September 2026**.
+Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **9 September 2026**.
 
-Dokumen ini menjelaskan **117 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **145 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
+
+- [Panduan implementasi frontend BE-12: field, state UI, error, XLSX, dan payload siap pakai](FRONTEND_BE12.md)
 
 - [Konvensi, autentikasi, dan hak akses](#1-konvensi-umum)
 - [Autentikasi dan pengguna](#2-autentikasi-dan-pengguna)
@@ -446,12 +448,26 @@ Taxonomy menyimpan kategori baku berversi dan term hierarkis. Editor membuat tax
 | GET | `/taxonomies/{taxonomy_id}/terms` | S | UUID taxonomy | 200 | daftar term dan hierarchy |
 | POST | `/taxonomies/{taxonomy_id}/terms` | E | TaxonomyTermCreate | 201 | TaxonomyTerm |
 | POST | `/taxonomies/{taxonomy_id}/approve` | R | — | 200 | Taxonomy APPROVED dengan version baru |
+| POST | `/taxonomies/{taxonomy_id}/resolve-term` | S | TaxonomyTermResolveRequest | 200 | Resolusi exact/candidate/ambiguous/not found |
+| POST | `/taxonomies/{taxonomy_id}/ambiguity-question` | E | TaxonomyAmbiguityQuestionRequest | 201 | Buat ImportQuestion untuk nilai taxonomy ambigu |
+| POST | `/taxonomies/{taxonomy_id}/validate-values` | S | TaxonomyValuesValidateRequest | 200 | Validasi `in_taxonomy` dan versi taxonomy |
+| POST | `/taxonomies/{taxonomy_id}/recommend-terms` | S | TaxonomyRecommendRequest | 200 | Rekomendasi kandidat term berbasis kemiripan; selalu perlu konfirmasi |
 | GET | `/taxonomies/source-sheets/{sheet_id}/column-bindings` | S | — | 200 | Binding taxonomy per kolom |
 | PUT | `/taxonomies/source-sheets/{sheet_id}/column-bindings` | E | TaxonomyColumnBindingCreate | 200 | Simpan binding DRAFT (optimistic revision) |
 | POST | `/taxonomies/column-bindings/{binding_id}/approve` | R | MasterRevisionRequest | 200 | Setujui binding taxonomy |
 | POST | `/taxonomies/column-bindings/{binding_id}/reject` | R | MasterRevisionRequest | 200 | Tolak binding taxonomy |
 
 Binding hanya boleh menunjuk taxonomy berstatus `APPROVED` dan `taxonomy_version` yang masih aktif. Perubahan binding selalu kembali ke `DRAFT`; reviewer wajib menyetujui ulang. `revision_no` mencegah dua editor menimpa perubahan.
+
+`resolve-term` menormalisasi input dengan trim dan case-fold. Jika satu kode/label/alias cocok, respons berstatus `EXACT`. Beberapa kandidat menghasilkan `AMBIGUOUS` dan `requires_question=true`; tidak ada kecocokan menghasilkan `NOT_FOUND`. Frontend harus meminta pilihan pengguna sebelum menyimpan nilai yang bukan `EXACT`.
+
+Gunakan `validate-values` sebelum membuat preview/apply import untuk pemeriksaan `in_taxonomy`. Pipeline ETL berikutnya dapat memanggil endpoint ini berdasarkan binding taxonomy yang berstatus `APPROVED`; import lama tetap berjalan tanpa taxonomy binding.
+
+Field taxonomy pada `ColumnMapping` bersifat opsional: `taxonomy_id` dan `taxonomy_version` menunjuk taxonomy approved, sedangkan `taxonomy_required=true` mewajibkan nilai lolos validasi sebelum apply.
+
+`QualityRule` kini menerima `severity`, `owner`, `threshold_percent`, `max_age_days`, dan `default_value`. Parameter tersebut tersimpan dalam konfigurasi; enforcement threshold/default pada compiler akan diaktifkan bertahap setelah semantics runtime disepakati.
+
+Compiler ETL menerapkan `default_value` saat nilai kolom null dan menghentikan batch dengan `DQ_THRESHOLD_EXCEEDED` jika persentase kegagalan rule melewati `threshold_percent`.
 
 ### Payload konfigurasi
 
@@ -1147,3 +1163,138 @@ Sumber implementasi: [router API](../app/api/v1/router.py), [schema request](../
 
 
 Wizard Vue dan round-trip Excel untuk parameter yang didukung sudah diimplementasikan. Lihat [Panduan review dan import Excel](PANDUAN_REVIEW_ETL.md) untuk payload, respons, batasan, serta langkah menjalankan migrasi.
+
+
+### Parameter DQ BE-12
+
+`data_quality_rules` mendukung domain eksplisit melalui `allowed_values` dan
+`format` dengan `value`: `UUID`, `ISO_DATE`, `ISO_DATETIME`. Format memeriksa hasil
+transform/cast; null dilewati (gunakan `not_null` bila wajib).
+Rule `max_age_days` wajib memiliki parameter integer bernama sama dan hanya berlaku
+pada date/timestamp/timestamptz. Batas umur inklusif terhadap waktu UTC saat evaluasi;
+timestamp tanpa zona dianggap UTC, date dibandingkan per tanggal UTC. Nilai masa
+depan tidak gagal rule umur maksimum.
+
+`default_value` mengisi kosong/null setelah transform, sebelum cast, nullability,
+key, dan DQ. Default tidak memperbaiki input nonkosong yang invalid. Default invalid
+masuk quarantine TYPE_OR_NULL_ERROR; default berbeda untuk satu kolom ditolak schema.
+Default adalah nilai target, bukan input transform.
+
+`threshold_percent` menghitung persentase gagal per indeks rule pada baris yang
+lolos tipe/null. Melebihi batas menghasilkan DQ_THRESHOLD_EXCEEDED, termasuk WARN;
+sama dengan batas atau nol baris terevaluasi tidak melanggar threshold. Aksi per
+baris tetap berlaku: REJECT_ROW masuk quarantine, WARN masuk warnings,
+STOP_BATCH/REQUIRE_REVIEW menghentikan batch segera. Severity/owner disertakan pada
+metadata temuan; action_on_fail mengendalikan routing, tanpa notifikasi otomatis.
+
+XLSX tab `05 Data Quality`: G severity, J threshold_percent, K owner,
+O max_age_days, P default_value_json. Export/import mempertahankan parameter;
+P memakai JSON scalar, contoh `0`, `false`, `"2026-09-01"`, `null`.
+JSON/YAML memakai field yang sama. Tidak ada perubahan model penyimpanan/migrasi.
+
+
+### Konversi satuan dan batas tipe BE-12
+
+`columns[].unit_conversion` adalah objek opsional untuk kolom numeric non-key:
+
+```json
+{"from_unit":"KG","to_unit":"G","factor":"1000","output_scale":2,"rounding":"HALF_UP","on_error":"REJECT_ROW"}
+```
+
+Allowlist dimensi: massa `T/KG/G/MG`, volume `L/ML`, panjang `M/CM/MM`.
+Faktor wajib positif, sesuai rasio satuan, dan sebaiknya dikirim sebagai string decimal.
+Satuan asal/tujuan harus berbeda dan dalam dimensi yang sama; currency, satuan custom,
+konversi densitas, serta alias ejaan belum didukung. Faktor dan parameter ikut revision,
+approval, snapshot konfigurasi, dan artifact konfigurasi yang sudah ada.
+
+Urutan runtime: transform allowlist -> cast -> konversi satuan -> pembulatan -> batas
+precision/scale -> DQ. Pilihan pembulatan `HALF_UP` (tie menjauhi nol), `HALF_EVEN`
+(tie ke digit genap), `DOWN` (menuju nol). Nilai raw tetap tersimpan; output hasil
+konversi dipakai dry-run dan pemuatan. `on_error` hanya REJECT_ROW. Default DQ
+merupakan nilai target sehingga tidak dikonversi lagi; null tetap null jika nullable.
+Parameter tidak valid ditolak dengan validasi schema sebelum konfigurasi disimpan.
+
+`numeric_scale` memerlukan `numeric_precision`; precision tanpa scale berarti scale 0.
+Dengan unit_conversion, scale numeric harus sama dengan output_scale. Runtime memakai
+pembulatan numeric HALF_UP yang sesuai numeric PostgreSQL, lalu menolak overflow,
+termasuk overflow akibat pembulatan. `varchar_length` diperiksa berdasarkan jumlah
+karakter; nilai terlalu panjang tidak dipotong. Kegagalan batas tipe masuk quarantine
+TYPE_OR_NULL_ERROR. DDL tetap CREATE_ONLY_OR_IDENTICAL: mengubah ukuran kolom yang
+sudah terdeploy tetap memerlukan migrasi yang direview, bukan ALTER otomatis.
+
+XLSX tab `02 Struktur Kolom` menyediakan U numeric_precision, V numeric_scale,
+W varchar_length, X date_format, Y number_locale, Z unit_conversion_json. Kolom Z
+menerima objek JSON di atas atau `null`; formula tetap ditolak. Export/import JSON,
+YAML, dan XLSX mempertahankan parameter yang sama. GET /configurations/parameter-catalog
+menyediakan parameter_schema konversi dan operasi convert_unit. Operasi tersebut
+hanya dikonfigurasi melalui columns.unit_conversion, bukan transformation_codes.
+
+
+### Timezone runtime BE-12
+
+Kolom `timestamptz` mendukung `source_timezone` opsional, misalnya `Asia/Jakarta`.
+Nama wajib dikenali database IANA runtime; dependency tzdata dicatat pada requirements.
+Timestamp ISO tanpa offset memakai zona tersebut, lalu dinormalisasi ke UTC sebelum
+DQ dan load. Contoh `2026-09-09T01:30:00` dengan Asia/Jakarta menghasilkan
+`2026-09-08T18:30:00+00:00`. Input dengan offset eksplisit selalu memakai offset input,
+meskipun source_timezone terisi. Semua hasil timestamptz dinormalisasi ke UTC.
+
+Waktu lokal ambigu (DST overlap) atau tidak ada (DST gap) ditolak ke quarantine
+TYPE_OR_NULL_ERROR; perbaiki sumber menggunakan offset eksplisit. Runtime tidak
+menebak fold atau menggeser waktu secara otomatis. Tanpa source_timezone, input
+naive untuk timestamptz tetap ditolak. `timestamp` biasa mempertahankan waktu lokal
+dan tetap menolak offset; source_timezone hanya berlaku untuk timestamptz dan tidak
+boleh dipakai bersama parse_date_id, yang membuang bagian waktu. Default DQ adalah
+nilai target: untuk timestamptz wajib ber-offset dan tidak ditafsirkan ulang dengan
+source_timezone. Rule max_age_days membandingkan instant UTC hasil normalisasi.
+
+XLSX tab 02 kolom AA (`source_timezone`) mendukung export, edit, dan import dengan
+validasi server. JSON/YAML dan artifact konfigurasi mempertahankan field yang sama;
+perubahan field mengikuti revision/approval/dependency hash konfigurasi existing.
+Tidak ada migrasi model/database. Timezone scheduler, query relatif, dan presentasi
+zona waktu output bukan bagian parameter ini; konversi tanggal saja juga belum
+menggunakan timezone. API parameter-catalog menandai scope source_timezone secara
+eksplisit. Mengubah versi timezone database pada deployment perlu validasi ulang
+aturan zona historis yang dipakai; versi konfigurasi belum menyimpan versi tzdb.
+
+
+### Currency conversion BE-12
+
+`columns[].currency_conversion` mendukung kurs tetap eksplisit per revisi konfigurasi
+untuk kolom numeric non-key. Contoh berikut menggunakan kurs sintetis untuk demo,
+bukan kutipan kurs pasar:
+
+```json
+{"from_currency":"USD","to_currency":"IDR","rate":"12345.5","rate_date":"2026-09-09","rate_reference":"synthetic-demo-rate","output_scale":2,"rounding":"HALF_UP","on_error":"REJECT_ROW"}
+```
+
+Arti rate: satu unit from_currency menghasilkan rate unit to_currency. Input `100`
+pada contoh menghasilkan `1234550.00`. Allowlist awal IDR/USD/EUR/SGD/JPY/THB; pasangan
+harus berbeda. Rate wajib finite positif, rate_date wajib tanggal valid, dan
+rate_reference wajib terisi. Metadata ini menyatakan kurs yang dipilih pengguna;
+server tidak memverifikasi kebenaran kutipan, menghubungi provider, atau menentukan
+kurs dari tanggal transaksi. Semua baris kolom tersebut diasumsikan menggunakan
+from_currency yang sama. Kurs per baris/periode dan sumber bermata uang campuran
+belum didukung. Rate_date merupakan tanggal referensi kurs, bukan filter tanggal
+baris atau batas kedaluwarsa batch.
+
+Urutan runtime: transform -> cast -> kalikan rate -> pembulatan -> precision/scale
+-> DQ. HALF_UP, HALF_EVEN, DOWN memakai Decimal, tanpa float arithmetic. Nilai raw
+tersimpan, output dipakai dry-run/load. Default DQ adalah nilai target sehingga tidak
+dikalikan kurs lagi. Null tetap null bila nullable. Currency tidak boleh digabung
+unit_conversion pada kolom yang sama, dan numeric_scale (jika precision disetel)
+harus sama dengan output_scale. Overflow masuk TYPE_OR_NULL_ERROR dan quarantine.
+
+Rate, tanggal, referensi, dan pembulatan tersimpan dalam artifact/JSON/YAML konfigurasi
+dan mengikuti revision/approval/dependency hash existing. Perubahan kurs harus
+melalui perubahan konfigurasi; apply tidak mengambil kurs live. XLSX tab 02 kolom AB
+(`currency_conversion_json`) dapat diekspor, diedit, dan diimpor; isi objek JSON atau
+`null`. Catalog API menyediakan parameter_schema dan operasi convert_currency;
+konfigurasinya hanya melalui columns.currency_conversion, bukan transformation_codes.
+Tidak ada model/migrasi database baru. Kurs dinamis/provider, triangulasi, dan
+pemilihan historical rate otomatis tetap unsupported.
+
+Contoh konfigurasi demo lengkap tersedia di `examples/be12-currency-configuration.json`.
+Baris ID=DEMO-1, Tanggal=2026-09-09T01:30:00, Cabang=Jakarta, Total=100
+menghasilkan timestamp UTC 2026-09-08T18:30:00+00:00 dan net_amount=1234550.00.
+Contoh memakai kurs sintetis dan timezone Asia/Jakarta.
