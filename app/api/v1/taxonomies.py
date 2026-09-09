@@ -15,6 +15,7 @@ from app.models.taxonomy import Taxonomy, TaxonomyColumnBinding, TaxonomyTerm, T
 from app.repositories.base import TenantRepository, record
 from app.schemas.master import MasterRevisionRequest
 from app.schemas.taxonomy import (
+    TaxonomyAIRecommendRequest,
     TaxonomyAmbiguityQuestionRequest,
     TaxonomyColumnBindingCreate,
     TaxonomyCreate,
@@ -33,6 +34,13 @@ from app.services.taxonomy_version_service import TaxonomyVersionService, archiv
 router = APIRouter(prefix="/taxonomies", tags=["Taxonomy"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
+
+
+@router.post("/{taxonomy_id}/recommend-terms-ai", dependencies=edit)
+async def recommend_terms_ai(taxonomy_id: UUID, data: TaxonomyAIRecommendRequest, session: Session, user: CurrentUser):
+    from app.services.taxonomy_ai_service import recommend_taxonomy
+
+    return success(await recommend_taxonomy(session, user, taxonomy_id, data))
 
 
 @router.post("", dependencies=edit, status_code=201)

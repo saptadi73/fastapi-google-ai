@@ -658,5 +658,12 @@
         "is_active": true
       }
     ]
+  },
+  "TaxonomyAIRecommendRequest": {
+    "taxonomy_version": 2,
+    "values": [
+      "teh tawar"
+    ],
+    "limit": 3
   }
 }

@@ -1,7 +1,7 @@
 # Handoff frontend BE-13: taxonomy, bertahap
 
 Acuan kode workspace: 9 September 2026. **Tahap 1–4 di bawah dapat mulai diintegrasikan;
-acceptance keseluruhan BE-13 masih menunggu saran AI generatif. BE-14 belum dimulai.**
+Tahap 5 menambahkan saran AI generatif; verifikasi provider/deployment tujuan masih diperlukan. BE-14 belum dimulai.**
 Migrasi registry/version sudah diuji pada database test, belum merupakan bukti deployment
 ke environment frontend. Backend tujuan harus memiliki migrasi sampai `9b07c8d6e5fa`
 dan kode worker terbaru sebelum pengujian bersama.
@@ -210,3 +210,35 @@ publikasi menandai referensi lama perlu diperbarui, dan round-trip XLSX menjaga 
 Label catalog kemampuan umum bukan satu-satunya penentu kesiapan taxonomy. Cocokkan
 kontrak ini dengan OpenAPI dan deployment backend tujuan. Tidak perlu menunggu BE-14
 untuk mengerjakan tahap 1–4; tahan klaim saran AI generatif sampai kontraknya tersedia.
+
+
+## Tahap 5 ? saran AI generatif sesuai permintaan
+
+Tambahkan tombol Minta saran AI pada editor kategori/pertanyaan TAXONOMY_INVALID.
+Panggil POST `/taxonomies/{taxonomy_id}/recommend-terms-ai` dengan body `recommend_terms_ai`
+pada file payload. Hanya editor; taxonomy_version wajib versi aktif. Maksimal 50 nilai
+nonblank (masing-masing sampai 500 karakter), limit kandidat 1-10. Backend mengirim nilai
+kategori yang dipilih dan taxonomy aktif ke provider, tanpa mengambil raw row import lain.
+Jangan memanggil endpoint otomatis setiap ketikan atau mengirim field sensitif lain.
+
+Tampilkan recommendations[].input_index/value/candidates dan provenance ai_model,
+prompt_version serta recommendation_kind=GENERATIVE. candidates[].term memuat data term
+registry; confidence adalah estimasi model, bukan probabilitas terkalibrasi. Kandidat
+kosong berarti tidak ada saran yang didukung. Selalu minta konfirmasi pengguna.
+
+Untuk pertanyaan TAXONOMY_INVALID, setelah konfirmasi kirim term.code sebagai corrected_value
+melalui APPLY_CORRECTION. SELECT_RECORD tetap hanya untuk kandidat yang sudah ada di
+pertanyaan; ID AI tidak menambah daftar kandidat pertanyaan. Endpoint ini tidak membuat
+term/alias/binding dan tidak memberikan approval. Alias baru tetap draft/publikasi versi.
+
+Tangani OPENAI_NOT_CONFIGURED/AI_UPSTREAM_FAILED (503), AI_CONFIGURATION_INVALID atau
+TAXONOMY_AI_RESULT_INVALID (422), TAXONOMY_AI_SCOPE_LIMIT (422), TAXONOMY_VERSION_STALE
+(409), serta kuota/budget existing (429). Jangan mengubah kegagalan menjadi sukses kosong.
+Boleh tampilkan tombol saran kemiripan existing sebagai pilihan terpisah dengan label jelas.
+
+Backend memakai OPENAI_MODEL_ETL_CONFIG dan kebijakan provider existing. Implementasi
+HTTP/DB diuji dengan respons provider terkontrol; kualitas saran dan kredensial model nyata
+harus diverifikasi pada environment tujuan. Rincian: [API Reference](API_REFERENCE.md#saran-taxonomy-generatif-be-13).
+
+**Selesai tahap 5:** saran hanya dipakai setelah konfirmasi, penolakan/stale/limit ditampilkan,
+koreksi tetap diverifikasi backend, dan kegagalan AI tidak melewati approval import.

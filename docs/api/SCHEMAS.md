@@ -348,6 +348,14 @@ Body: [MasterRevisionRequest](#masterrevisionrequest).
 |---|---|---|---|
 | `binding_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/taxonomies/{taxonomy_id}/recommend-terms-ai
+
+Body: [TaxonomyAIRecommendRequest](#taxonomyairecommendrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `taxonomy_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/taxonomies
 
 Body: —.
@@ -2222,6 +2230,26 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "description": "Satu baris per transaksi penjualan",
   "credential_ref": "default",
   "sync_schedule": "0 */6 * * *"
+}
+```
+
+### TaxonomyAIRecommendRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `taxonomy_version` | Ya | `integer` | — | {"minimum":1.0} |
+| `values` | Ya | `array<string>` | — | {"maxItems":50,"minItems":1} |
+| `limit` | Tidak | `integer` | 3 | {"maximum":10.0,"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "taxonomy_version": 2,
+  "values": [
+    "teh tawar"
+  ],
+  "limit": 3
 }
 ```
 

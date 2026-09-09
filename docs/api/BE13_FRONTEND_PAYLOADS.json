@@ -239,5 +239,17 @@
     "body": {
       "revision_no": 2
     }
+  },
+  "recommend_terms_ai": {
+    "method": "POST",
+    "path": "/taxonomies/{taxonomy_id}/recommend-terms-ai",
+    "model": "TaxonomyAIRecommendRequest",
+    "body": {
+      "taxonomy_version": 2,
+      "values": [
+        "teh tawar"
+      ],
+      "limit": 3
+    }
   }
 }

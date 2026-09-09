@@ -30,6 +30,14 @@ def test_recommendation_limit_is_bounded():
         TaxonomyRecommendRequest(values=["Minuman"], limit=11)
 
 
+@pytest.mark.parametrize("values", [[" "], ["x" * 501], ["x"] * 51])
+def test_ai_recommendation_input_limits(values):
+    from app.schemas.taxonomy import TaxonomyAIRecommendRequest
+
+    with pytest.raises(ValidationError):
+        TaxonomyAIRecommendRequest(taxonomy_version=1, values=values)
+
+
 def test_binding_revision_defaults_to_zero_for_create():
     item = TaxonomyColumnBindingCreate(
         source_column="category", taxonomy_id="00000000-0000-0000-0000-000000000001", taxonomy_version=1

@@ -223,7 +223,7 @@ Selesai per field/fitur jika konfigurasi benar-benar memengaruhi runtime dan exp
 
 Handoff frontend: [panduan bertahap BE-13](FRONTEND_BE13.md) dan
 [payload per aksi](api/BE13_FRONTEND_PAYLOADS.json). Tahap 1-4 dapat mulai diintegrasikan
-sesuai deployment backend tujuan; saran AI generatif tetap pekerjaan terbuka.
+sesuai deployment backend tujuan. Tahap 5 saran AI generatif tersedia; provider/model nyata belum diverifikasi.
 
 Perbaikan schema registry (9 September 2026): model taxonomy kini memetakan metadata
 existing, approval tersimpan, dan migrasi `8a96b7c5d4ef` menyelaraskan index/unique/FK
@@ -236,14 +236,14 @@ serta lifecycle taxonomy lanjutan tetap terpisah dari perbaikan ini.
 
 Prasyarat: BE-08, BE-11, dan kamus parameter BE-12.
 
-Status tinjauan 9 September 2026: **belum memenuhi acceptance BE-13, BE-14 belum dimulai**.
+Status tinjauan 9 September 2026: **cakupan kode BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi, BE-14 belum dimulai**.
 Guard lifecycle, dependency hash, validasi final-write, revision binding, dan pertanyaan
 ambigu telah diperbaiki. [Temuan, kontrak frontend, dan pekerjaan terbuka](REVIEW_BE13.md).
 
 - [~] Buat registry taxonomy/version/hierarchy dan term, terpisah dari identitas record master; create/list term, hierarchy, dan approval immutable tersedia. Draft/revisi/publikasi atomik berikutnya dan snapshot immutable tersedia; sejarah sebelum migrasi tidak direkonstruksi.
 - [x] Sediakan binding taxonomy ke kolom sumber dengan optimistic revision dan approval/rejection.
 - [x] Sediakan resolver term exact/alias/kandidat/ambigu dengan flag `requires_question`.
-- [~] Tambahkan usulan AI, approval mapping, alias terkontrol, serta pertanyaan untuk nilai ambigu (resolver, ranking rekomendasi, dan pertanyaan otomatis worker tersedia; rekomendasi generatif masih terbuka, alias dikelola melalui draft/publikasi versi taxonomy).
+- [~] Tambahkan usulan AI, approval mapping, alias terkontrol, serta pertanyaan untuk nilai ambigu (resolver, ranking rekomendasi, dan pertanyaan otomatis worker tersedia; endpoint rekomendasi generatif tersedia dan memerlukan konfirmasi; verifikasi provider nyata masih terbuka, alias dikelola melalui draft/publikasi versi taxonomy).
 - [~] Validasi taxonomy berbasis mapping kolom dan invalidasi dependency tersedia pada preview/approval/apply/ETL legacy. Literal rule DQ `in_taxonomy` serta normalisasi/pertanyaan otomatis worker tersedia. Rule memerlukan mapping approved, tidak menerima WARN; nilai asing/ambigu menjadi blocker.
 - [~] Field taxonomy tersedia pada mapping kolom ETL (`taxonomy_id`, `taxonomy_version`, `taxonomy_required`) dan dipertahankan di JSON konfigurasi. Editor/render/parse binding taxonomy tab 04 kolom U-W tersedia, dengan identitas signed dan validasi. Editor term registry tetap melalui API.
 - [~] Uji hierarki, kode tidak ditemukan, mapping konflik, versioning, dan isolasi tenant: tes HTTP/PostgreSQL untuk parent, immutable approval, stale dependency, pertanyaan, concurrent binding, serta isolasi tenant/batch tersedia. Tes publikasi lintas versi, migration backfill, normalisasi canonical dan workbook taxonomy ditambahkan pada lanjutan ini.

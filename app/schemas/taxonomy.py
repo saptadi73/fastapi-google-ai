@@ -48,6 +48,32 @@ class TaxonomyRecommendRequest(StrictModel):
     limit: int = Field(default=3, ge=1, le=10)
 
 
+class TaxonomyAIRecommendRequest(StrictModel):
+    taxonomy_version: int = Field(ge=1)
+    values: list[str] = Field(min_length=1, max_length=50)
+    limit: int = Field(default=3, ge=1, le=10)
+
+    @model_validator(mode="after")
+    def bounded_values(self):
+        if any(not value.strip() or len(value) > 500 for value in self.values):
+            raise ValueError("Each category value must contain 1-500 characters")
+        return self
+
+
+class TaxonomyAICandidate(StrictModel):
+    term_id: UUID
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class TaxonomyAIItem(StrictModel):
+    input_index: int = Field(ge=0, le=49)
+    candidates: list[TaxonomyAICandidate] = Field(max_length=10)
+
+
+class TaxonomyAIResult(StrictModel):
+    recommendations: list[TaxonomyAIItem] = Field(max_length=50)
+
+
 class TaxonomyVersionCreate(StrictModel):
     base_version: int = Field(ge=1)
 

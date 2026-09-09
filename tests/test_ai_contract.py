@@ -10,7 +10,8 @@ from app.schemas.configuration import ETLConfiguration
 from app.services import openai_service
 
 
-async def test_responses_api_contract_and_usage(monkeypatch, config_data):
+@pytest.mark.parametrize("purpose", ["ETL_CONFIG", "TAXONOMY_RECOMMEND"])
+async def test_responses_api_contract_and_usage(monkeypatch, config_data, purpose):
     settings = get_settings()
     monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)("test-placeholder"))
     monkeypatch.setattr(settings, "openai_model_etl_config", "approved-model-test")
@@ -60,7 +61,7 @@ async def test_responses_api_contract_and_usage(monkeypatch, config_data):
     monkeypatch.setattr(openai_service, "SessionFactory", Ledger)
     user = SimpleNamespace(id=str(uuid4()), tenant_id=str(uuid4()))
     value, metadata = await openai_service.OpenAIService().generate(
-        user, "ETL_CONFIG", "masked profile", ETLConfiguration
+        user, purpose, "masked profile", ETLConfiguration
     )
     assert value == parsed and metadata["ai_model"] == "approved-model-test"
     arguments = parse.call_args.kwargs
@@ -69,7 +70,9 @@ async def test_responses_api_contract_and_usage(monkeypatch, config_data):
     assert arguments["input"][1]["content"] == "masked profile"
     assert calls[0]["max_retries"] == 0
     assert ledger[0].input_tokens == 100 and ledger[0].cached_tokens == 20
+    assert ledger[0].purpose == purpose
+    assert metadata["prompt_version"] == ("taxonomy_recommend_v1.md" if purpose == "TAXONOMY_RECOMMEND" else "etl_configuration_v1.md")
     parse.return_value = SimpleNamespace(output_parsed=None, id="refused", usage=None)
     with pytest.raises(AppError):
-        await openai_service.OpenAIService().generate(user, "ETL_CONFIG", "masked profile", ETLConfiguration)
+        await openai_service.OpenAIService().generate(user, purpose, "masked profile", ETLConfiguration)
     assert ledger[-1].status == "FAILED"

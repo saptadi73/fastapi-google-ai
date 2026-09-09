@@ -1,8 +1,8 @@
 # Hasil tinjauan BE-13 — 9 September 2026
 
-**Keputusan: belum memenuhi acceptance BE-13; BE-14 belum dimulai.** Registry,
+**Status: cakupan kode BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi. BE-14 belum dimulai.** Registry,
 versioning, normalisasi runtime/worker, pertanyaan otomatis dan workbook sudah tersedia;
-saran AI generatif masih terbuka. Untuk integrasi bertahap gunakan
+saran AI generatif tersedia melalui endpoint terpisah. Untuk integrasi bertahap gunakan
 [handoff frontend BE-13](FRONTEND_BE13.md) dan [contoh payload](api/BE13_FRONTEND_PAYLOADS.json). Pemeriksaan ini mencakup kode endpoint, service
 import/ETL, schema konfigurasi, renderer/parser XLSX, dan pengujian HTTP/PostgreSQL.
 
@@ -53,11 +53,18 @@ Migrasi hanya diterapkan pada database test; production belum diubah.
   dari taxonomy dan tenant yang sama. Alias tetap bagian draft taxonomy, bukan alias
   global yang dibuat otomatis dari jawaban pengguna.
 
-## Pekerjaan yang masih menghalangi acceptance
+## Verifikasi yang tersisa sebelum acceptance environment
 
-1. **Saran AI generatif.** recommend-terms masih memakai SequenceMatcher, bukan
-   provider generatif. Kandidat otomatis worker berasal dari exact/alias taxonomy
-   approved, bukan usulan AI. Integrasi provider beserta pengujian tetap terbuka.
+Endpoint recommend-terms-ai sudah terhubung provider generatif dengan output terstruktur,
+kuota, ledger, pembatasan kandidat aktif dan pemeriksaan freshness. Endpoint recommend-terms
+lama tetap kemiripan teks. Pengujian HTTP/PostgreSQL memakai provider fixture; belum ada
+panggilan provider berbayar nyata dalam lanjutan ini. Verifikasi kredensial/model, kualitas
+saran pada domain pengguna, serta deployment API/worker diperlukan di environment tujuan.
+
+Kontrak frontend: [tahap 5](FRONTEND_BE13.md#tahap-5--saran-ai-generatif-sesuai-permintaan).
+Saran hanya advisory; konfirmasi menggunakan koreksi import existing atau draft taxonomy.
+Tidak ada perubahan schema database pada fitur AI ini. Implementasi memakai wrapper
+Responses API existing dan [Structured Outputs resmi OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs).
 
 ## Lanjutan: worker dan rule in_taxonomy
 
@@ -141,3 +148,9 @@ PostgreSQL dan compiler rule lulus; 1 tes worker collision dan 1 tes XLSX in_tax
 lulus terpisah. Regresi non-integrasi tanpa workbook: 210 lulus. Angka tersebut mencakup
 run yang overlap, bukan jumlah unik. Ruff file perubahan dan exporter --check 150
 operasi lulus. Tidak ada migrasi database baru pada lanjutan worker/rule ini.
+
+Bukti lanjutan AI generatif: 9 tes awal (7 HTTP/PostgreSQL dengan provider fixture dan
+2 kontrak SDK/ledger) lulus; 2 kasus tambahan kandidat kosong/confidence invalid lulus.
+Regresi non-integrasi tanpa workbook: 214 lulus. Ruff file perubahan, exporter --check
+151 operasi, dan 20 contoh payload frontend beserta route/model lulus. Tidak ada panggilan
+provider berbayar nyata atau perubahan database production pada pengujian ini.

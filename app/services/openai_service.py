@@ -13,10 +13,11 @@ from app.models.audit import AIUsage
 class OpenAIService:
     async def generate(self, user, purpose, context, schema):
         s = get_settings()
-        model = s.openai_model_etl_config if purpose == "ETL_CONFIG" else s.openai_model_nl2sql
+        model = s.openai_model_etl_config if purpose in ("ETL_CONFIG", "TAXONOMY_RECOMMEND") else s.openai_model_nl2sql
         if not s.openai_api_key.get_secret_value() or not model:
             raise AppError("OPENAI_NOT_CONFIGURED", "Isi OPENAI_API_KEY dan OPENAI_MODEL_* pada .env.", 503)
-        template = "etl_configuration_v1.md" if purpose == "ETL_CONFIG" else "nl2sql_v1.md"
+        template = ("taxonomy_recommend_v1.md" if purpose == "TAXONOMY_RECOMMEND" else
+                    "etl_configuration_v1.md" if purpose == "ETL_CONFIG" else "nl2sql_v1.md")
         prompt = (ROOT / "app/prompts" / template).read_text(encoding="utf-8")
         start = time.monotonic()
         # A separate committed ledger persists usage even if downstream validation fails.
