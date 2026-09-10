@@ -919,6 +919,15 @@ class ImportReviewService:
         await connection.run_sync(lambda sync: check_storage(sync, table))
         version_rows, identical = None, set()
         period_closures = []
+        unchanged_rows = set()
+        if review.dependencies["dataset_kind"] == "MASTER" and not definition.policy.effective_dating:
+            # Rebuild the approved plan only after acquiring the per-master lock.
+            # A valid signed token alone does not prove target/staging freshness.
+            current_preview = await self.read_preview(review_id)
+            if any(current_preview["summary"][key] for key in ("duplicate", "key_conflict", "invalid")):
+                raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki konflik yang belum diselesaikan.", 409)
+            unchanged_rows = {change["source_row"] for change in current_preview["changes"]
+                              if change["outcome"] == "UNCHANGED"}
         if review.dependencies["dataset_kind"] == "MASTER" and definition.policy.effective_dating:
             from app.services.effective_dating_service import validate_versions
 
@@ -951,6 +960,8 @@ class ImportReviewService:
                   import_review_id=str(review.id), **self.json_value({k: v for k, v in closure.items() if k != "record_id"}))
         loaded = 0
         for index, row in enumerate(rows):
+            if row.source_row in unchanged_rows:
+                continue
             values = version_rows[index] if version_rows is not None else {**row.transformed_data, **row.corrected_data}
             if version_rows is not None and tuple(values[k] for k in keys) in identical:
                 continue
@@ -972,7 +983,10 @@ class ImportReviewService:
                 loaded += await append_row(self.session, table, values, config)
                 continue
             if keys and version_rows is None:
-                stmt = stmt.on_conflict_do_update(index_elements=["_tenant_id", *keys], set_={k: stmt.excluded[k] for k in values if k not in ("_tenant_id", *keys, "_record_id")})
+                updates = {k: stmt.excluded[k] for k in values if k not in ("_tenant_id", *keys, "_record_id")}
+                if review.dependencies["dataset_kind"] == "MASTER":
+                    updates.update(_revision_no=table.c._revision_no + 1, _updated_at=text("now()"))
+                stmt = stmt.on_conflict_do_update(index_elements=["_tenant_id", *keys], set_=updates)
             await self.session.execute(stmt)
             loaded += 1
         self.move(review, ImportAction.COMPLETE, worker=True)

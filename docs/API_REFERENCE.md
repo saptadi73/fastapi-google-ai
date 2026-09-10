@@ -1446,6 +1446,12 @@ kedaluwarsa, editor dapat membuat POST preview ulang hanya jika rencana approved
 Preview approved format lama/yang berubah perlu revalidate dan approval ulang sesuai workflow.
 Tidak ada migrasi database; preview baru ditandai preview_format=2 pada checkpoint.
 
+Hardening BE-07: apply master tanpa effective dating memeriksa ulang preview approved
+setelah memperoleh lock master. Perubahan target/staging ditolak `IMPORT_PREVIEW_STALE`
+(409); preview format lama ditolak `IMPORT_PREVIEW_REQUIRED` (409). UPDATE mempertahankan
+UUID dan menaikkan revision record; UNCHANGED mempertahankan lineage/revision dan tidak
+menambah `rows_applied`. Lihat [bukti transaksi dan batasan](MASTER_APPLY_HARDENING_BE07.md).
+
 
 Perbaikan pendamping alur dua akun: apply NON_MASTER mengembalikan tipe tanggal/numerik
 JSON staging ke tipe target sebelum UPSERT, tanpa menjalankan ulang transformasi/conversion
