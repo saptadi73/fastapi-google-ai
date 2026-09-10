@@ -81,6 +81,9 @@ async def test_apply_revalidates_after_lock_and_skips_identical(definition, monk
                              checkpoint={"preview_revision": 1, "preview_hash": "hash"})
     rows = [SimpleNamespace(source_row=2, transformed_data=row(), corrected_data={})]
     service._preview_context = AsyncMock(return_value=(review, None, rows))
+    monkeypatch.setattr(module, "reference_context", AsyncMock(return_value={}))
+    service.read_preview = AsyncMock(return_value={"blocking_codes": [], "requires_source_confirmation": False,
+                                                  "changes": []})
     service.role = Mock()
     service.move = Mock()
     service.response = Mock(return_value={})
@@ -327,6 +330,11 @@ def closure_service(definition, monkeypatch):
                              checkpoint={"preview_revision": 1, "preview_hash": "hash", "close_open_periods": True,
                                          "effective_plan_hash": version_plan_hash([rows[0].transformed_data], stored)})
     service._preview_context = AsyncMock(return_value=(review, SimpleNamespace(columns=[]), rows))
+    monkeypatch.setattr(module, "reference_context", AsyncMock(return_value={}))
+    service.read_preview = AsyncMock(return_value={"blocking_codes": [], "requires_source_confirmation": False,
+                                                  "changes": []})
+    stored[0]["_source_sheet_id"] = review.source_sheet_id
+    review.checkpoint["effective_plan_hash"] = version_plan_hash([rows[0].transformed_data], stored)
     service.role = Mock()
     service.move = Mock()
     service.response = Mock(return_value={})
@@ -399,14 +407,16 @@ async def test_revalidate_approved_batch_discards_closure_approval(closure_servi
 
     service, review, rows, stored, result, events = closure_service
     review.generation = 1
-    review.checkpoint.update(approved_by="reviewer", approval_comment="approved", periods_to_close=1)
+    review.checkpoint.update(approved_by="reviewer", approval_comment="approved", periods_to_close=1,
+                             source_conflicts_approved_hash="old-confirmation")
     service.locked = AsyncMock(return_value=review)
     service.is_current = AsyncMock(return_value=True)
     service.queue = AsyncMock()
     service.move = ImportReviewService.move.__get__(service, ImportReviewService)
     await service.action(review.id, SimpleNamespace(revision_no=1, comment="review again"), ImportAction.REVALIDATE)
     assert review.status == "VALIDATING" and review.generation == 2
-    assert all(key not in review.checkpoint for key in ("preview_hash", "approved_by", "close_open_periods", "effective_plan_hash"))
+    assert all(key not in review.checkpoint for key in (
+        "preview_hash", "approved_by", "close_open_periods", "effective_plan_hash", "source_conflicts_approved_hash"))
     service.queue.assert_awaited_once()
 
 
@@ -431,6 +441,7 @@ async def test_closure_preview_approval_apply_with_real_token(closure_service, m
     from app.services.workbook_service import decode
 
     service, review, rows, stored, result, events = closure_service
+    del service.read_preview  # Exercise the real policy/preview gate in this service-flow test.
     monkeypatch.setattr(module, "decode", decode)
     review.status = "READY_FOR_APPROVAL"
     review.created_by = str(uuid4())

@@ -1,7 +1,6 @@
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from difflib import SequenceMatcher
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -15,7 +14,7 @@ from app.domain.import_workflow import ImportAction, ImportStatus, next_import_s
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
 from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
-from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
+from app.models.master import MasterDefinition, MasterSourceBinding
 from app.models.source import DataSource, SourceSheet
 from app.models.taxonomy import Taxonomy, TaxonomyTerm
 from app.repositories.base import TenantRepository, record
@@ -35,6 +34,12 @@ from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService, check_storage
 from app.services.openai_service import OpenAIService
 from app.services.profiling_service import digest
+from app.services.reference_service import (
+    reference_context,
+    reference_hash,
+    resolve_value,
+    validate_reference_rows,
+)
 from app.services.taxonomy_validation_service import (
     canonicalize_rows,
     context_hash,
@@ -187,6 +192,9 @@ class ImportReviewService:
             )
         dependencies["configuration_hash"] = digest(config)
         parsed = ETLConfiguration.model_validate(config)
+        references = await reference_context(self.session, self.user, sheet.id, parsed)
+        if references:
+            dependencies["reference_hash"] = reference_hash(references)
         if any(c.taxonomy_id for c in parsed.columns):
             dependencies["taxonomy_runtime_version"] = 2
             dependencies["taxonomy_hash"] = context_hash(await taxonomy_context(
@@ -634,6 +642,8 @@ class ImportReviewService:
                 review.checkpoint = {k: v for k, v in review.checkpoint.items() if k not in (
                     "preview_hash", "preview_revision", "preview_blockers", "approved_by", "approval_comment",
                     "close_open_periods", "effective_plan_hash", "periods_to_close",
+                    "source_conflicts_approved_hash",
+                    "reference_preview_hash",
                 )}
             if review.status not in ("NEEDS_INPUT", "FAILED", "STALE_REVIEW"):
                 raise AppError("IMPORT_STATE_CONFLICT", "Batch belum dapat dilanjutkan.", 409)
@@ -703,8 +713,43 @@ class ImportReviewService:
         return await self.preview(review_id, SimpleNamespace(revision_no=review.revision_no,
             close_open_periods=review.checkpoint.get("close_open_periods", False)), _read_only=True)
 
+    async def check_import_authority(self, definition, master_id):
+        authority = definition.policy.authoritative_source_sheet_id
+        if authority is None:
+            return
+        binding = await self.session.scalar(self.repo.query(MasterSourceBinding).where(
+            MasterSourceBinding.source_sheet_id == str(authority),
+            MasterSourceBinding.master_definition_id == str(master_id),
+            MasterSourceBinding.status == "APPROVED",
+        ).with_for_update().execution_options(populate_existing=True))
+        sheet = await self.session.scalar(self.repo.query(SourceSheet).where(
+            SourceSheet.id == str(authority)).with_for_update().execution_options(populate_existing=True))
+        master = await self.repo.get(MasterDefinition, master_id)
+        source = await self.session.scalar(self.repo.query(DataSource).where(
+            DataSource.id == sheet.source_id).with_for_update().execution_options(populate_existing=True)) if sheet else None
+        if (not binding or not sheet or not source or not sheet.enabled or source.paused
+                or sheet.dataset_kind != "MASTER" or sheet.classification_status != "CONFIRMED"
+                or binding.classification_revision != sheet.classification_revision
+                or binding.fingerprint != sheet.last_fingerprint
+                or binding.master_version != master.approved_version):
+            raise AppError("MASTER_AUTHORITY_INVALID", "Sumber otoritatif memerlukan tab aktif dan binding master approved terbaru.", 409)
+
+    @staticmethod
+    def source_policy_change(policy, sheet_id, previous):
+        if policy.source_conflict_policy == "AUTHORITATIVE_SOURCE":
+            return "FORBIDDEN" if str(sheet_id) != str(policy.authoritative_source_sheet_id) else None
+        if str(previous.get("_source_sheet_id")) != str(sheet_id):
+            return "REQUIRE_REVIEW"
+        return None
+
     async def preview(self, review_id, data, *, _read_only=False):
         review, config, rows = await self._preview_context(review_id, data.revision_no)
+        references = await reference_context(self.session, self.user, review.source_sheet_id, config)
+        for evidence in review.checkpoint.get("reference_resolutions", {}).values():
+            current = references.get(evidence["source_column"])
+            if not current or current["hash"] != evidence["hash"]:
+                raise AppError("REFERENCE_RESOLUTION_STALE", "Master/alias berubah; lakukan resolusi referensi ulang.", 409)
+        validate_reference_rows(references, rows)
         pinned_revision = review.checkpoint.get("preview_revision")
         if _read_only:
             if not review.checkpoint.get("preview_hash") or review.checkpoint.get("preview_format") != 2:
@@ -723,6 +768,7 @@ class ImportReviewService:
             _, definition, target = await MasterStorageService(self.session, self.user).target(
                 review.dependencies["master_id"]
             )
+            await self.check_import_authority(definition, review.dependencies["master_id"])
         else:
             from app.services.schema_compiler_service import compile_table
 
@@ -770,8 +816,7 @@ class ImportReviewService:
                 select(target.c._row_hash).where(target.c._tenant_id == self.user.tenant_id)
             )).all())
         seen_keys = set()
-        master_policy = review.dependencies.get("policy", {}).get("master") or {}
-        allow_insert = master_policy.get("new_record_policy") == "PROPOSE_INSERT"
+        source_conflicts = []
         for index, row in enumerate(rows):
             after = self.json_value(version_candidates[index]) if version_candidates is not None else {**row.transformed_data, **row.corrected_data}
             if not after:
@@ -793,16 +838,42 @@ class ImportReviewService:
             if key is not None:
                 seen_keys.add(key)
             before = existing.get(key) if key is not None else None
+            reason = None
             if before is None:
-                outcome = "INSERT" if allow_insert or review.dependencies["dataset_kind"] != "MASTER" else "INSERT_PROPOSED"
+                outcome = "INSERT"
+                if definition:
+                    outcome = "INSERT_PROPOSED"
+                    if definition.policy.new_record_policy == "UPDATE_ONLY":
+                        outcome, reason = "INVALID", "MASTER_INSERT_FORBIDDEN"
             else:
                 comparable = {k: before.get(k) for k in after}
                 outcome = "UNCHANGED" if key in identical_versions or comparable == after else "UPDATE"
-            changes.append({"source_row": row.source_row, "outcome": outcome, "before": before, "after": after})
+                if definition and outcome == "UPDATE":
+                    conflict = self.source_policy_change(definition.policy, review.source_sheet_id, before)
+                    if conflict == "FORBIDDEN":
+                        outcome, reason = "KEY_CONFLICT", "MASTER_SOURCE_FORBIDDEN"
+                    elif conflict:
+                        source_conflicts.append({"source_row": row.source_row, "record_id": before["_record_id"]})
+            change = {"source_row": row.source_row, "outcome": outcome, "before": before, "after": after}
+            if reason:
+                change["reason_code"] = reason
+            changes.append(change)
+        if definition and period_closures:
+            by_id = {record["_record_id"]: record for record in existing.values()}
+            for closure in period_closures:
+                conflict = self.source_policy_change(
+                    definition.policy, review.source_sheet_id, by_id[closure["record_id"]])
+                if conflict == "FORBIDDEN":
+                    raise AppError("MASTER_SOURCE_FORBIDDEN", "Hanya sumber otoritatif boleh menutup periode master.", 409)
+                if conflict:
+                    source_conflicts.append({"record_id": closure["record_id"], "action": "CLOSE_PERIOD"})
         hash_revision = pinned_revision if _read_only or review.status == "APPROVED" else review.revision_no
         preview_hash = digest({"review_id": str(review.id), "revision_no": hash_revision, "changes": changes,
                                "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash,
-                               "period_closures": self.json_value(period_closures)})
+                               "period_closures": self.json_value(period_closures),
+                               **({"reference_hash": reference_hash(references)} if references else {}),
+                               **({"master_policy": definition.policy.model_dump(mode="json"),
+                                   "source_conflicts": source_conflicts} if definition else {})})
         if (_read_only or review.status == "APPROVED") and preview_hash != review.checkpoint.get("preview_hash"):
             raise AppError("IMPORT_PREVIEW_STALE", "Rencana berubah setelah approval; revalidate dan minta approval ulang.", 409)
         preview_token = None if _read_only else token(
@@ -813,6 +884,7 @@ class ImportReviewService:
         preview_blockers = sorted({c["outcome"] for c in changes if c["outcome"] in ("DUPLICATE", "KEY_CONFLICT", "INVALID")})
         if not _read_only:
             review.checkpoint = {**review.checkpoint, "preview_format": 2, "preview_hash": preview_hash, "preview_revision": hash_revision, "preview_blockers": preview_blockers, "close_open_periods": close_open_periods, "effective_plan_hash": effective_plan_hash, "periods_to_close": len(period_closures)}
+            review.checkpoint = {**review.checkpoint, "reference_preview_hash": reference_hash(references)}
         result = {
             "review": self.response(review),
             "target": target.fullname,
@@ -828,6 +900,9 @@ class ImportReviewService:
                 "unchanged": sum(c["outcome"] == "UNCHANGED" for c in changes),
             },
             "preview_hash": preview_hash,
+            "source_conflicts": source_conflicts,
+            "requires_source_confirmation": bool(source_conflicts),
+            "blocking_codes": preview_blockers,
             "can_approve": not any(c["outcome"] in ("DUPLICATE", "KEY_CONFLICT", "INVALID") for c in changes),
         }
         if _read_only:
@@ -870,8 +945,16 @@ class ImportReviewService:
             raise AppError("IMPORT_PREVIEW_REQUIRED", "Buat preview batch terlebih dahulu.", 409)
         if getattr(data, "preview_hash", None) is not None and data.preview_hash != review.checkpoint["preview_hash"]:
             raise AppError("IMPORT_PREVIEW_STALE", "Hash berbeda dari preview yang ditinjau reviewer.", 409)
-        if review.checkpoint.get("preview_format") == 2:
-            await self.read_preview(review_id)
+        current_preview = None
+        if review.checkpoint.get("preview_format") == 2 or review.dependencies["dataset_kind"] == "MASTER":
+            current_preview = await self.read_preview(review_id)
+            if current_preview["blocking_codes"]:
+                raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview melanggar kebijakan master atau memiliki konflik data.", 409)
+            if current_preview["requires_source_confirmation"] and (
+                not getattr(data, "accept_source_conflicts", False)
+                or not getattr(data, "preview_hash", None) or not data.comment.strip()
+            ):
+                raise AppError("IMPORT_SOURCE_CONFIRMATION_REQUIRED", "Konfirmasi konflik sumber dengan preview_hash dan alasan reviewer.", 409)
         if review.dependencies.get("taxonomy_hash"):
             config = ETLConfiguration.model_validate(review.configuration_json)
             context = await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
@@ -885,6 +968,10 @@ class ImportReviewService:
             raise AppError("SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun reviewer lain.", 403)
         self.move(review, ImportAction.APPROVE)
         review.checkpoint = {**review.checkpoint, "approved_by": str(self.user.id), "approval_comment": data.comment}
+        if current_preview and current_preview["requires_source_confirmation"]:
+            review.checkpoint = {**review.checkpoint, "source_conflicts_approved_hash": current_preview["preview_hash"]}
+            audit(self.session, self.user, "import.source_conflicts_approved", review.id,
+                  preview_hash=current_preview["preview_hash"], conflicts=current_preview["source_conflicts"], reason=data.comment)
         audit(self.session, self.user, "import.approved", review.id, comment=data.comment)
         return self.response(review)
 
@@ -920,12 +1007,18 @@ class ImportReviewService:
         version_rows, identical = None, set()
         period_closures = []
         unchanged_rows = set()
-        if review.dependencies["dataset_kind"] == "MASTER" and not definition.policy.effective_dating:
+        references = await reference_context(self.session, self.user, review.source_sheet_id, config)
+        if reference_hash(references) != review.checkpoint.get("reference_preview_hash"):
+            raise AppError("REFERENCE_RESOLUTION_STALE", "Dependency referensi berubah setelah preview.", 409)
+        if review.dependencies["dataset_kind"] == "MASTER" or references:
             # Rebuild the approved plan only after acquiring the per-master lock.
             # A valid signed token alone does not prove target/staging freshness.
             current_preview = await self.read_preview(review_id)
-            if any(current_preview["summary"][key] for key in ("duplicate", "key_conflict", "invalid")):
+            if current_preview["blocking_codes"]:
                 raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki konflik yang belum diselesaikan.", 409)
+            if (current_preview["requires_source_confirmation"]
+                    and review.checkpoint.get("source_conflicts_approved_hash") != current_preview["preview_hash"]):
+                raise AppError("IMPORT_SOURCE_CONFIRMATION_REQUIRED", "Konflik sumber belum disetujui untuk preview ini.", 409)
             unchanged_rows = {change["source_row"] for change in current_preview["changes"]
                               if change["outcome"] == "UNCHANGED"}
         if review.dependencies["dataset_kind"] == "MASTER" and definition.policy.effective_dating:
@@ -995,72 +1088,47 @@ class ImportReviewService:
         return {"review": self.response(review), "rows_applied": loaded, "periods_closed": len(period_closures), "status": review.status}
 
     async def resolve_reference(self, review_id, data):
-        self.role()
-        review = await self.repo.get(ImportReview, review_id)
+        writing = data.staging_row_id is not None
+        self.role(edit=writing)
+        review = await self.locked(review_id)
         if review.revision_no != data.revision_no:
             raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
-        master, definition, table = await MasterStorageService(self.session, self.user).target(
-            data.master_definition_id
-        )
-        connection = await self.session.connection()
-        await connection.run_sync(lambda sync: check_storage(sync, table))
-        value = data.value.strip()
-        if data.source_column:
-            binding = await self.session.scalar(self.repo.query(MasterColumnBinding).where(
-                MasterColumnBinding.source_column == data.source_column,
-                MasterColumnBinding.master_definition_id == master.id,
-                MasterColumnBinding.status == "APPROVED",
-            ))
-            if binding:
-                record_id = next((rid for alias, rid in binding.aliases_json.items() if alias.casefold() == value.casefold()), None)
-                if record_id:
-                    aliased = (await self.session.execute(select(table).where(
-                        table.c._tenant_id == self.user.tenant_id, table.c._record_id == record_id
-                    ).limit(1))).mappings().first()
-                    if aliased:
-                        staging_updated = False
-                        if data.staging_row_id and data.target_column:
-                            staging = await self.session.scalar(self.repo.query(ImportReviewRow).where(
-                                ImportReviewRow.id == str(data.staging_row_id), ImportReviewRow.import_review_id == review.id
-                            ).with_for_update())
-                            if staging is None:
-                                raise AppError("IMPORT_STAGING_MISSING", "Staging batch tidak tersedia.", 409)
-                            staging.corrected_data = {**staging.corrected_data, data.target_column: str(record_id)}
-                            staging_updated = True
-                            audit(self.session, self.user, "import.reference_resolved", staging.id, master_id=master.id, target_column=data.target_column, resolution="ALIAS")
-                        return {"status": "ALIAS", "master_id": master.id, "record": self.json_value(dict(aliased)), "staging_updated": staging_updated}
-        predicates = [table.c[key] == value for key in definition.business_key]
-        query = select(table).where(table.c._tenant_id == self.user.tenant_id)
-        if len(definition.business_key) == 1:
-            query = query.where(predicates[0])
-        else:
-            query = query.where(text(" AND ".join(f'"{key}" = :value' for key in definition.business_key))).params(value=value)
-        exact = (await self.session.execute(query.limit(2))).mappings().all()
-        if len(exact) == 1:
-            record_value = self.json_value(dict(exact[0]))
-            if data.staging_row_id and data.target_column:
-                staging = await self.session.scalar(self.repo.query(ImportReviewRow).where(
-                    ImportReviewRow.id == str(data.staging_row_id), ImportReviewRow.import_review_id == review.id
-                ).with_for_update())
-                if staging is None:
-                    raise AppError("IMPORT_STAGING_MISSING", "Staging batch tidak tersedia.", 409)
-                staging.corrected_data = {**staging.corrected_data, data.target_column: str(record_value["_record_id"])}
-                audit(self.session, self.user, "import.reference_resolved", staging.id, master_id=master.id, target_column=data.target_column)
-            return {"status": "EXACT", "master_id": master.id, "record": record_value, "staging_updated": bool(data.staging_row_id and data.target_column)}
-        label = definition.label_field
-        pattern = "%" + value.replace("%", "\\%").replace("_", "\\_") + "%"
-        candidates = (await self.session.execute(
-            select(table).where(table.c._tenant_id == self.user.tenant_id, table.c[label].ilike(pattern, escape="\\")).limit(6)
-        )).mappings().all()
-        candidate_items = []
-        for row in candidates:
-            item = self.json_value(dict(row))
-            label_value = str(item.get(label, ""))
-            item["match_score"] = round(SequenceMatcher(None, value.casefold(), label_value.casefold()).ratio(), 4)
-            candidate_items.append(item)
-        candidate_items.sort(key=lambda item: item["match_score"], reverse=True)
-        status = "AMBIGUOUS" if len(candidate_items) > 1 else "NOT_FOUND" if not candidate_items else "CANDIDATE"
-        return {"status": status, "master_id": master.id, "candidates": candidate_items, "requires_question": status in ("AMBIGUOUS", "NOT_FOUND")}
+        if writing and review.status not in ("NEEDS_INPUT", "READY_FOR_APPROVAL", "FAILED"):
+            raise AppError("IMPORT_STATE_CONFLICT", "Staging batch approved/terminal tidak dapat diubah.", 409)
+        if not await self.is_current(review):
+            raise AppError("IMPORT_STALE_REVIEW", "Dependency batch berubah; revalidate batch.", 409)
+        config = ETLConfiguration.model_validate(review.configuration_json)
+        context = await reference_context(self.session, self.user, review.source_sheet_id, config)
+        item = context.get(data.source_column)
+        if not item or str(item["binding"].master_definition_id) != str(data.master_definition_id):
+            raise AppError("REFERENCE_BINDING_REQUIRED", "Binding approved tidak cocok dengan tab/kolom/master batch.", 409)
+        staging = None
+        if writing:
+            if item["column"].target_column != data.target_column:
+                raise AppError("REFERENCE_MAPPING_INVALID", "Kolom target tidak sesuai binding konfigurasi.", 422)
+            staging = await self.session.scalar(self.repo.query(ImportReviewRow).where(
+                ImportReviewRow.id == str(data.staging_row_id), ImportReviewRow.import_review_id == review.id
+            ).with_for_update().execution_options(populate_existing=True))
+            if staging is None:
+                raise AppError("IMPORT_STAGING_MISSING", "Staging batch tidak tersedia.", 409)
+        result = resolve_value(item, data.value, self.user)
+        result.update(master_id=str(data.master_definition_id), staging_updated=False, revision_no=review.revision_no)
+        if writing and result["status"] in ("EXACT", "ALIAS", "EMPTY"):
+            before = {**staging.transformed_data, **staging.corrected_data}.get(data.target_column)
+            resolved = str(result["record"]["_record_id"]) if result.get("record") else None
+            staging.corrected_data = {**staging.corrected_data, data.target_column: resolved}
+            evidence = {**review.checkpoint.get("reference_resolutions", {}),
+                        str(staging.id) + ":" + data.target_column: {"source_column": data.source_column, "hash": item["hash"]}}
+            review.checkpoint = {k: v for k, v in review.checkpoint.items() if k not in (
+                "preview_hash", "preview_revision", "preview_blockers", "reference_preview_hash",
+                "source_conflicts_approved_hash", "approved_by", "approval_comment")}
+            review.checkpoint = {**review.checkpoint, "reference_resolutions": evidence}
+            review.revision_no += 1
+            audit(self.session, self.user, "import.reference_resolved", staging.id,
+                  master_id=str(data.master_definition_id), target_column=data.target_column,
+                  resolution=result["status"], before=before, after=resolved, binding_hash=item["hash"])
+            result.update(staging_updated=True, revision_no=review.revision_no)
+        return self.json_value(result)
 
     async def work(self, job):
         review = await self.locked(job.payload["import_review_id"])

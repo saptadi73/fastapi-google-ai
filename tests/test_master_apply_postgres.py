@@ -1,5 +1,6 @@
 """BE-07 transactions on PostgreSQL; upstream freshness/provider review is seeded."""
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -14,7 +15,7 @@ from app.models.audit import AuditEvent
 from app.models.auth import Tenant, User
 from app.models.etl import Snapshot
 from app.models.import_review import ImportReview, ImportReviewRow
-from app.models.master import MasterDefinition
+from app.models.master import MasterDefinition, MasterSourceBinding
 from app.models.source import DataSource, SourceSheet
 from app.schemas.import_review import ImportReviewPreviewRequest
 from app.schemas.master import MasterSchema
@@ -54,29 +55,38 @@ async def master(monkeypatch):
                             spreadsheet_id="fixture", owner_user_id=editor.id)
         session.add(source)
         await session.flush()
-        sheet = SourceSheet(tenant_id=tenant_id, source_id=source.id, sheet_id=1, sheet_name="Products")
-        session.add(sheet)
+        sheets = [SourceSheet(tenant_id=tenant_id, source_id=source.id, sheet_id=n, sheet_name=f"Products {n}",
+                              dataset_kind="MASTER", classification_status="CONFIRMED", last_fingerprint="fixture",
+                              classification_confirmed_by=editor.id,
+                              classification_confirmed_at=datetime.now(timezone.utc)) for n in (1, 2)]
+        sheet = sheets[0]
+        session.add_all(sheets)
         await session.flush()
-        snapshot = Snapshot(tenant_id=tenant_id, source_id=source.id, source_sheet_id=sheet.id,
-                            content_hash="fixture", row_count=1, values=[])
-        session.add(snapshot)
+        snapshots = [Snapshot(tenant_id=tenant_id, source_id=source.id, source_sheet_id=item.id,
+                              content_hash="fixture", row_count=1, values=[]) for item in sheets]
+        session.add_all(snapshots)
         session.add(MasterDefinition(
             id=master_id, tenant_id=tenant_id, code="products", name="Products", created_by=editor.id,
             definition_json=definition.model_dump(mode="json"),
             approved_definition_json=definition.model_dump(mode="json"), approved_version=1, status="APPROVED"))
         await session.flush()
+        for bound_sheet in sheets:
+            session.add(MasterSourceBinding(tenant_id=tenant_id, source_sheet_id=bound_sheet.id,
+                        master_definition_id=master_id, master_version=1, classification_revision=1,
+                        status="APPROVED", columns_json=config["columns"], fingerprint="fixture",
+                        snapshot_hash="fixture", created_by=editor.id, approved_by=approver.id))
         await (await session.connection()).run_sync(table.create)
         await session.execute(table.insert().values(
             _tenant_id=tenant_id, _record_id=record_id, _source_sheet_id=sheet.id,
             _source_row=2, _source_snapshot_hash="original", code="001", label="Original"))
 
-    async def prepare(values=None, approve=True):
+    async def prepare(values=None, approve=True, source_index=0, confirm=False):
         if values is None:
             values = [{"code": "001", "label": "Updated"}, {"code": "002", "label": "New"}]
         async with SessionFactory() as session, session.begin():
             review = ImportReview(
-                tenant_id=tenant_id, source_id=source.id, source_sheet_id=sheet.id,
-                snapshot_id=snapshot.id, created_by=editor.id, idempotency_key=uuid4().hex,
+                tenant_id=tenant_id, source_id=source.id, source_sheet_id=sheets[source_index].id,
+                snapshot_id=snapshots[source_index].id, created_by=editor.id, idempotency_key=uuid4().hex,
                 status="READY_FOR_APPROVAL", configuration_json=config,
                 dependencies={"dataset_kind": "MASTER", "master_id": master_id,
                               "snapshot_hash": "fixture", "policy": {"master": definition.policy.model_dump(mode="json")}})
@@ -90,7 +100,8 @@ async def master(monkeypatch):
                 review.id, ImportReviewPreviewRequest(revision_no=1))
             if approve:
                 await ImportReviewService(session, approver).approve(
-                    review.id, SimpleNamespace(revision_no=1, comment="Reviewed"))
+                    review.id, SimpleNamespace(revision_no=1, comment="Reviewed", preview_hash=preview["preview_hash"],
+                                               accept_source_conflicts=confirm))
             return review.id, SimpleNamespace(revision_no=2 if approve else 1,
                                              preview_token=preview["preview_token"]), preview
 
@@ -107,13 +118,23 @@ async def master(monkeypatch):
                 AuditEvent.tenant_id == tenant_id, AuditEvent.event == "import.applied"))).all()
             return rows, review, audits
 
+    async def policy(**changes):
+        data = definition.model_dump(mode="json")
+        data["policy"].update(changes)
+        updated = MasterSchema.model_validate(data)
+        definition.policy = updated.policy
+        async with SessionFactory() as session, session.begin():
+            record = await session.get(MasterDefinition, master_id)
+            record.approved_definition_json = updated.model_dump(mode="json")
+
     try:
         yield SimpleNamespace(prepare=prepare, apply=apply, state=state, table=table,
-                              tenant_id=tenant_id, editor=editor, approver=approver, record_id=record_id)
+                              tenant_id=tenant_id, editor=editor, approver=approver, record_id=record_id,
+                              policy=policy, sheets=sheets, master_id=master_id)
     finally:
         async with SessionFactory() as session, session.begin():
             await (await session.connection()).run_sync(table.drop)
-            for model in (AuditEvent, ImportReviewRow, ImportReview, MasterDefinition,
+            for model in (AuditEvent, ImportReviewRow, ImportReview, MasterSourceBinding, MasterDefinition,
                           Snapshot, SourceSheet, DataSource, User):
                 await session.execute(delete(model).where(model.tenant_id == tenant_id))
             await session.execute(delete(Tenant).where(Tenant.id == tenant_id))

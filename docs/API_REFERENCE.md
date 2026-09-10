@@ -367,7 +367,12 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | GET | `/import-reviews/{review_id}/preview` | S | Tanpa body | 200 | Preview editor tervalidasi ulang, masked_fields, read_only; tanpa token apply |
 | POST | `/import-reviews/{review_id}/approve` | R | ImportReviewApproveRequest | 200 | review APPROVED |
 | POST | `/import-reviews/{review_id}/apply` | E | ImportReviewApplyRequest | 200 | review SUCCEEDED, rows_applied |
-| POST | `/import-reviews/{review_id}/resolve-reference` | S | ImportReferenceResolveRequest | 200 | ALIAS, EXACT, CANDIDATE, AMBIGUOUS, atau NOT_FOUND; EXACT dapat mengisi staging secara eksplisit |
+| POST | `/import-reviews/{review_id}/resolve-reference` | S | ImportReferenceResolveRequest | 200 | Binding tab/kolom approved wajib; EXACT/ALIAS/EMPTY dapat mengisi staging oleh editor; kandidat tidak dipilih otomatis |
+
+BE-08 mewajibkan `source_column`, pasangan `staging_row_id`/`target_column` untuk write,
+dan target konfigurasi UUID. Write menaikkan revision batch; APPROVED/terminal tidak
+dapat diedit. Alias/master yang berubah membuat batch/preview lama stale. Detail
+payload, masking, optional, lifecycle binding, dan error: [referensi BE-08](MASTER_REFERENCES_BE08.md).
 
 Urutan untuk frontend: tunggu batch bebas dari `blocking_codes`, panggil `preview`, tampilkan before/after per baris, minta approval reviewer, kemudian kirim token preview yang sama ke `apply`. Checkpoint AI menyimpan `ai_coverage`, `ai_reviewed_rows`, `ai_masked_fields`, dan `ai_metadata`; field PII MEDIUM/HIGH dikirim sebagai `[REDACTED]`. Jika revision, snapshot, konfigurasi, atau target berubah, backend mengembalikan `409 IMPORT_PREVIEW_STALE` dan frontend harus membuat preview baru. Apply memakai UPSERT berdasarkan business key dan seluruh baris diproses dalam transaksi request.
 
@@ -1451,6 +1456,18 @@ setelah memperoleh lock master. Perubahan target/staging ditolak `IMPORT_PREVIEW
 (409); preview format lama ditolak `IMPORT_PREVIEW_REQUIRED` (409). UPDATE mempertahankan
 UUID dan menaikkan revision record; UNCHANGED mempertahankan lineage/revision dan tidak
 menambah `rows_applied`. Lihat [bukti transaksi dan batasan](MASTER_APPLY_HARDENING_BE07.md).
+
+Lanjutan BE-07: pemeriksaan ini kini juga berlaku untuk master effective dating.
+Kode baru PROPOSE_INSERT tampil sebagai INSERT_PROPOSED; UPDATE_ONLY menghasilkan
+INVALID dengan reason_code MASTER_INSERT_FORBIDDEN dan menahan seluruh batch.
+Preview menambahkan `blocking_codes`, `source_conflicts`, dan
+`requires_source_confirmation`. Konflik REQUIRE_REVIEW memerlukan body approve
+`accept_source_conflicts: true`, `preview_hash` terbaru, dan `comment` berisi alasan;
+tanpanya 409 IMPORT_SOURCE_CONFIRMATION_REQUIRED. Flag default false dan tidak
+menambah hak akses. AUTHORITATIVE_SOURCE melarang sumber lain mengubah record existing,
+termasuk penutupan periode; konfirmasi reviewer tidak mengabaikan policy tersebut.
+Hash preview master lama menjadi stale dan memerlukan review ulang. Payload lengkap,
+error, audit, kompatibilitas, dan batasan: [policy master BE-07](MASTER_IMPORT_POLICY_BE07.md).
 
 
 Perbaikan pendamping alur dua akun: apply NON_MASTER mengembalikan tipe tanggal/numerik

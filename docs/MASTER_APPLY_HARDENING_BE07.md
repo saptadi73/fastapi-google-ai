@@ -1,5 +1,9 @@
 # Hardening transaksi master BE-07
 
+Lanjutan: [policy insert dan konflik sumber](MASTER_IMPORT_POLICY_BE07.md) menutup
+pekerjaan policy yang masih terbuka pada catatan historis di bawah, dan memperluas
+recheck preview ke master effective dating.
+
 Perubahan 10 September 2026 memperbaiki apply master tanpa effective dating. Sebelumnya,
 token diperiksa terhadap checkpoint, tetapi perubahan target atau staging setelah approval
 tidak dibandingkan kembali dengan rencana approved. Dua batch approved dapat bergiliran

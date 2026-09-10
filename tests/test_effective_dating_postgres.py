@@ -20,7 +20,7 @@ from app.models.audit import AuditEvent
 from app.models.auth import Tenant, User
 from app.models.etl import Snapshot
 from app.models.import_review import ImportReview, ImportReviewRow
-from app.models.master import MasterDefinition
+from app.models.master import MasterDefinition, MasterSourceBinding
 from app.models.source import DataSource, SourceSheet
 from app.schemas.import_review import ImportReviewPreviewRequest
 from app.schemas.master import MasterSchema
@@ -84,7 +84,7 @@ async def history(monkeypatch):
             _source_row=2, _source_snapshot_hash="original", code="001",
             starts=date(2026, 1, 1), ends=None, price=Decimal("10")))
 
-    async def prepare(start="2026-02-01", price="20", close=True):
+    async def prepare(start="2026-02-01", price="20", close=True, confirm=False):
         async with SessionFactory() as session, session.begin():
             review = ImportReview(
                 tenant_id=tenant_id, source_id=source.id, source_sheet_id=sheet.id,
@@ -101,7 +101,8 @@ async def history(monkeypatch):
             preview = await ImportReviewService(session, editor).preview(
                 review.id, ImportReviewPreviewRequest(revision_no=1, close_open_periods=close))
             await ImportReviewService(session, approver).approve(
-                review.id, SimpleNamespace(revision_no=1, comment="Reviewed period closure"))
+                review.id, SimpleNamespace(revision_no=1, comment="Reviewed period closure",
+                                           accept_source_conflicts=confirm, preview_hash=preview["preview_hash"]))
             return review.id, SimpleNamespace(revision_no=2, preview_token=preview["preview_token"])
 
     async def apply(prepared):
@@ -124,7 +125,7 @@ async def history(monkeypatch):
         async with SessionFactory() as session, session.begin():
             connection = await session.connection()
             await connection.run_sync(table.drop)
-            for model in (AuditEvent, ImportReviewRow, ImportReview, MasterDefinition,
+            for model in (AuditEvent, ImportReviewRow, ImportReview, MasterSourceBinding, MasterDefinition,
                           Snapshot, SourceSheet, DataSource, User):
                 await session.execute(delete(model).where(model.tenant_id == tenant_id))
             await session.execute(delete(Tenant).where(Tenant.id == tenant_id))

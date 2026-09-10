@@ -2,14 +2,14 @@ from difflib import SequenceMatcher
 from types import SimpleNamespace
 from uuid import UUID
 
-from sqlalchemy import Text, cast, or_, text
+from sqlalchemy import Text, cast, or_, select, text
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.base import now
-from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.configuration import Configuration
+from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.source import SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.repositories.source_repository import SourceRepository
@@ -482,30 +482,39 @@ class MasterService:
 
     async def save_column_binding(self, sheet_id, data):
         self.require_role(EDIT_ROLES)
-        await self.repo.get(SourceSheet, sheet_id)
-        master = await self.repo.get(MasterDefinition, data.master_definition_id)
-        if master.status != "APPROVED" or master.approved_version != data.master_version:
+        # Serialize first creation as well as edits of a column binding.
+        await ClassificationService(self.session, self.user).locked_sheet(sheet_id)
+        master = await self.lock_master(data.master_definition_id)
+        if not master.is_active or master.status != "APPROVED" or master.approved_version != data.master_version:
             raise AppError("MASTER_VERSION_UNAVAILABLE", "Master harus aktif dan versi approved sesuai.", 409)
         definition = MasterSchema.model_validate(master.approved_definition_json)
         if data.master_field not in {field.name for field in definition.fields}:
             raise AppError("MASTER_FIELD_INVALID", "Field tujuan tidak tersedia pada master.", 422)
         try:
+            normalized_aliases = set()
             for alias, record_id in data.aliases.items():
-                if not alias.strip() or UUID(str(record_id)) is None:
+                normalized = alias.strip().casefold()
+                if not normalized or normalized in normalized_aliases or UUID(str(record_id)) is None:
                     raise ValueError
+                normalized_aliases.add(normalized)
         except (TypeError, ValueError):
             raise AppError("MASTER_ALIAS_INVALID", "Alias harus memetakan ke UUID record master yang valid.", 422) from None
+        if data.normalization != "TRIM_CASEFOLD":
+            raise AppError("REFERENCE_NORMALIZATION_UNSUPPORTED", "Normalisasi referensi belum didukung.", 422)
+        await self.check_alias_records(master.id, data.aliases)
         binding = await self.session.scalar(self.repo.query(MasterColumnBinding).where(
             MasterColumnBinding.source_sheet_id == str(sheet_id),
             MasterColumnBinding.source_column == data.source_column,
-        ).with_for_update())
+        ).with_for_update().execution_options(populate_existing=True))
         if data.revision_no != (binding.revision_no if binding else 0):
             raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Revisi binding berubah; muat ulang.", 409)
         values = data.model_dump(exclude={"revision_no", "aliases"})
         values["aliases_json"] = data.aliases
         values["created_by"] = self.user.id
+        values.update(status="DRAFT", approved_by=None, approved_at=None)
         if binding:
-            for key, value in values.items(): setattr(binding, key, value)
+            for key, value in values.items():
+                setattr(binding, key, value)
             binding.revision_no += 1
         else:
             binding = await self.repo.add(MasterColumnBinding, source_sheet_id=str(sheet_id), **values)
@@ -515,14 +524,22 @@ class MasterService:
     async def column_binding_decision(self, binding_id, data, approve=True):
         self.require_role(REVIEW_ROLES)
         binding = await self.repo.get(MasterColumnBinding, binding_id)
+        await ClassificationService(self.session, self.user).locked_sheet(binding.source_sheet_id)
+        await self.session.refresh(binding, with_for_update=True)
+        master = await self.lock_master(binding.master_definition_id)
         if binding.revision_no != data.revision_no or binding.status != "DRAFT":
             raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Binding berubah atau bukan draft.", 409)
         if approve:
             if get_settings().require_separate_approver and binding.created_by == self.user.id:
                 raise AppError("SEPARATE_APPROVER_REQUIRED", "Approver harus berbeda dari editor binding.", 403)
-            master = await self.repo.get(MasterDefinition, binding.master_definition_id)
-            if master.status != "APPROVED" or master.approved_version != binding.master_version:
+            if not master.is_active or master.status != "APPROVED" or master.approved_version != binding.master_version:
                 raise AppError("MASTER_VERSION_UNAVAILABLE", "Versi master binding sudah tidak aktif.", 409)
+            definition = MasterSchema.model_validate(master.approved_definition_json)
+            if binding.master_field not in {field.name for field in definition.fields}:
+                raise AppError("MASTER_FIELD_INVALID", "Field binding tidak tersedia pada master.", 422)
+            if binding.normalization != "TRIM_CASEFOLD":
+                raise AppError("REFERENCE_NORMALIZATION_UNSUPPORTED", "Normalisasi referensi belum didukung.", 422)
+            await self.check_alias_records(master.id, binding.aliases_json)
             binding.approved_by, binding.approved_at = self.user.id, now()
             binding.status = "APPROVED"
         else:
@@ -530,6 +547,25 @@ class MasterService:
         binding.revision_no += 1
         audit(self.session, self.user, "master.column_binding_decided", binding.id, status=binding.status)
         return record(binding)
+
+    async def check_alias_records(self, master_id, aliases):
+        if not aliases:
+            return
+        from app.services.master_storage_service import MasterStorageService, check_storage
+
+        _, _, table = await MasterStorageService(self.session, self.user).target(master_id)
+        await (await self.session.connection()).run_sync(lambda sync: check_storage(sync, table))
+        try:
+            keys = [alias.strip().casefold() for alias in aliases]
+            if not all(keys) or len(keys) != len(set(keys)):
+                raise ValueError
+            wanted = {str(UUID(str(value))) for value in aliases.values()}
+        except (TypeError, ValueError):
+            raise AppError("MASTER_ALIAS_INVALID", "Alias/UUID tidak valid atau duplikat setelah normalisasi.", 422) from None
+        found = set(await self.session.scalars(select(table.c._record_id).where(
+            table.c._tenant_id == self.user.tenant_id, table.c._is_active.is_(True), table.c._record_id.in_(wanted))))
+        if wanted != found:
+            raise AppError("MASTER_ALIAS_INVALID", "Alias harus menunjuk UUID record aktif pada master dan tenant ini.", 422)
 
     async def dependency_plan(self):
         self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
@@ -616,6 +652,7 @@ class MasterService:
         }
 
     async def validate_reference_orphans(self):
+        from app.services.master_storage_service import check_storage
         self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
         rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
             MasterColumnBinding.status == "APPROVED"

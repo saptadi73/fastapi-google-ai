@@ -585,6 +585,7 @@
     "revision_no": 5,
     "master_definition_id": "55555555-5555-4555-8555-555555555555",
     "value": "SKU-001",
+    "source_column": "Kode Produk",
     "staging_row_id": "66666666-6666-4666-8666-666666666666",
     "target_column": "product_id"
   },

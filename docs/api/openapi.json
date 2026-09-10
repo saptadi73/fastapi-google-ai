@@ -15795,19 +15795,12 @@
           "value": {
             "type": "string",
             "maxLength": 500,
-            "minLength": 1,
             "title": "Value"
           },
           "source_column": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 200
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Source Column"
           },
           "staging_row_id": {
@@ -15840,7 +15833,8 @@
         "required": [
           "revision_no",
           "master_definition_id",
-          "value"
+          "value",
+          "source_column"
         ],
         "title": "ImportReferenceResolveRequest"
       },
@@ -15909,6 +15903,11 @@
               }
             ],
             "title": "Preview Hash"
+          },
+          "accept_source_conflicts": {
+            "type": "boolean",
+            "title": "Accept Source Conflicts",
+            "default": false
           }
         },
         "additionalProperties": false,

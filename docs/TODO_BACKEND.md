@@ -107,15 +107,22 @@ Selesai jika ambiguitas memiliki pertanyaan yang bisa dijawab dan diaudit, bukan
 Prasyarat: BE-04–BE-06.
 
 - [x] Bangun diff INSERT, INSERT_PROPOSED, UPDATE, UNCHANGED, DUPLICATE, KEY_CONFLICT, dan INVALID beserta before/after.
-- [~] Kontrak `UPDATE_ONLY`/`PROPOSE_INSERT` dan KEEP tersedia; audit 10 September menemukan larangan insert UPDATE_ONLY belum ditegakkan pada apply. Penandaan proposal dan guard policy masih perlu diperbaiki.
+- [x] Tegakkan UPDATE_ONLY pada preview/approval/apply, tampilkan INSERT_PROPOSED untuk PROPOSE_INSERT, dan pertahankan record hilang (KEEP).
 - [x] Ikat preview/approval ke snapshot dan revision target master; periksa ulang sebelum commit.
 - [x] Implementasikan UPSERT atomik, lock/concurrency control, idempotency, dan lineage sumber setiap perubahan.
 - [x] Terapkan gate approval dan pertanyaan wajib pada endpoint apply serta worker, termasuk saat dipanggil langsung.
 - [x] Tambahkan advisory transaction lock per master/tab pada apply untuk mencegah penulisan paralel.
 - [x] Uji dua import master bersamaan, key kosong/duplikat, retry, dan kegagalan tengah transaksi dengan rollback PostgreSQL.
-- [ ] Uji kebijakan konflik antar sumber REQUIRE_REVIEW/AUTHORITATIVE_SOURCE.
+- [x] Uji REQUIRE_REVIEW dengan konfirmasi reviewer terikat hash/alasan/audit serta AUTHORITATIVE_SOURCE dengan binding approved dan isolasi tenant, termasuk penutupan periode.
 
-Status BE-07: implementasi inti preview/approval/apply, policy record hilang, dan konflik key tersedia. Hardening 10 September 2026 menambahkan pemeriksaan ulang preview master tanpa effective dating setelah lock, increment revision record pada UPDATE, dan skip UNCHANGED. Sepuluh tes PostgreSQL baru membuktikan konkurensi dengan `pg_blocking_pids`, penolakan target/staging stale, key kosong/duplikat, rollback UPDATE sebelum INSERT gagal, retry, UUID/lineage, serta KEEP. Kebijakan konflik antar sumber tetap TERBUKA. Freshness upstream/provider di-seed pada suite ini; bukan bukti BE-10/BE-11 atau production. Detail: [hardening transaksi BE-07](MASTER_APPLY_HARDENING_BE07.md).
+Status BE-07: preview/approval/apply, policy insert, konflik sumber, record hilang, dan konflik key tersedia pada kode/test. Hardening 10 September 2026 memeriksa ulang preview setelah lock, menaikkan revision UPDATE, dan melewati UNCHANGED. Tes PostgreSQL membuktikan konkurensi dengan `pg_blocking_pids`, penolakan target/staging stale, key kosong/duplikat, rollback UPDATE sebelum INSERT gagal, retry, UUID/lineage, serta KEEP. Freshness upstream/provider di-seed pada suite ini; bukan bukti BE-10/BE-11 atau production. Detail: [hardening transaksi BE-07](MASTER_APPLY_HARDENING_BE07.md).
+
+Lanjutan policy 10 September: celah UPDATE_ONLY dan konflik sumber di atas sudah
+ditutup. Recheck preview kini mencakup effective dating. Konflik sumber memerlukan
+konfirmasi eksplisit dengan hash/alasan dan audit; sumber non-otoritatif tidak dapat
+menimpa/menutup periode. Binding authority aktif/approved, versi, fingerprint,
+klasifikasi, serta tenant diperiksa ulang. Verifikasi: **36 tes PostgreSQL dan 225
+tes non-integrasi lulus**, Ruff dan exporter 152 operasi lulus. [Kontrak frontend dan bukti](MASTER_IMPORT_POLICY_BE07.md).
 
 ### BE-08 — Binding kolom dan resolusi referensi master
 
@@ -127,9 +134,9 @@ Prasyarat: BE-03, BE-06, dan BE-07.
 - [x] Resolusi nilai menghasilkan exact/alias/fuzzy candidate dan menandai `requires_question` untuk nilai ambigu/tidak ditemukan.
 - [x] Simpan UUID master hasil resolusi ke staging sambil mempertahankan nilai asli; fallback ke nama tampilan ditolak.
 - [x] Implementasikan alias berscope tenant/master/kolom, dengan approval dan revision; pencabutan alias masih memerlukan perubahan binding draft.
-- [ ] Uji referensi tidak ditemukan, ambigu, master nonaktif, relasi opsional, serta perubahan alias/master setelah preview.
+- [x] Uji referensi tidak ditemukan, ambigu, master/record nonaktif, relasi opsional, serta perubahan alias/master setelah preview dan approval pada PostgreSQL.
 
-Status BE-08: resolver, registry binding kolom, approval binding, alias approved, penyimpanan UUID exact/alias ke staging, dan rekomendasi binding tersedia. Pengujian perubahan dependency masih terbuka. Confidence AI tidak otomatis menggabungkan entitas berbeda.
+Status BE-08: resolver dan hardening dependency selesai pada cakupan kode/test. Alias terikat tenant/tab/kolom/master, edit binding mencabut approval, record nonaktif ditolak, dan UUID staging divalidasi ulang pada preview/approval/apply. Capture/is_current asli mendeteksi perubahan alias/record. Kontrak source_column wajib, revision staging, masking, error, dan batasan ada di [hardening BE-08](MASTER_REFERENCES_BE08.md). Confidence AI tidak otomatis menggabungkan entitas berbeda; FK fisik dan alur lengkap tetap BE-09/BE-11.
 
 ### BE-09 — Foreign key fisik dan urutan dependency
 
@@ -314,8 +321,9 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 | BE-04 | Selesai di kode/test | Target per master, UUID stabil, constraint, storage deployment, pencarian/masking; import belum aktif |
 | BE-05 | Selesai di kode/test | Snapshot/policy tetap, idempotency, checkpoint, temuan, cancel/revalidate/resume dan recovery; AI/apply belum aktif |
 | BE-06 | Selesai di kode/test | Staging, pertanyaan/keputusan berversi, koreksi, kandidat allowlist, proposal registry approved; import/apply belum aktif |
-| BE-07 | Transaksi master diperkuat | 10 tes PostgreSQL baru; recheck preview setelah lock, revision UPDATE, skip UNCHANGED, rollback/retry; policy insert dan konflik sumber masih terbuka |
-| BE-08 sampai BE-11 | Berikutnya; belum mulai | Referensi/FK, review AI, dan integrasi alur lengkap |
+| BE-07 | Selesai pada kode/test yang dicakup | Recheck preview setelah lock, revision UPDATE, skip UNCHANGED, rollback/retry; guard insert dan konflik sumber selesai. Provider/end-to-end/production tetap tahap terpisah |
+| BE-08 | Selesai pada cakupan kode/test | Resolver berscope, lifecycle alias, validasi UUID, dependency freshness; lihat hardening BE-08 |
+| BE-09 sampai BE-11 | Masih parsial sesuai checklist | Hardening FK PostgreSQL, review AI, dan acceptance alur lengkap |
 | BE-12 | Sebagian selesai | DQ, precision/varchar, locale angka, unit, timezone sumber, currency kurs tetap; lihat [handoff frontend](FRONTEND_BE12.md). Effective dating lanjutan, multi-target, dan schema evolution masih pending |
 | BE-13 sampai BE-15 | Bertahap | Taxonomy/semantic memiliki implementasi parsial sesuai checklist; parameter operasional lanjutan belum selesai |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |

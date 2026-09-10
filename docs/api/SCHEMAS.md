@@ -1537,8 +1537,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `master_definition_id` | Ya | `string (uuid)` | — | — |
-| `value` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
-| `source_column` | Tidak | `string / null` | — | — |
+| `value` | Ya | `string` | — | {"maxLength":500} |
+| `source_column` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
 | `staging_row_id` | Tidak | `string (uuid) / null` | — | — |
 | `target_column` | Tidak | `string / null` | — | — |
 
@@ -1549,6 +1549,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "revision_no": 5,
   "master_definition_id": "55555555-5555-4555-8555-555555555555",
   "value": "SKU-001",
+  "source_column": "Kode Produk",
   "staging_row_id": "66666666-6666-4666-8666-666666666666",
   "target_column": "product_id"
 }
@@ -1593,6 +1594,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `comment` | Tidak | `string` | "" | {"maxLength":2000} |
 | `preview_hash` | Tidak | `string / null` | — | — |
+| `accept_source_conflicts` | Tidak | `boolean` | false | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
