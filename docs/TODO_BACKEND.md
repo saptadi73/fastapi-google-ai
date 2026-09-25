@@ -262,9 +262,10 @@ Selesai jika nilai kategori dinormalisasi melalui aturan approved tanpa mengubah
 
 Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 
-- [ ] Lengkapi metadata bisnis produk, default periode, unit, sinonim, dan lifecycle approval metrik.
-- [~] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi (aggregation dan kolom metric kini divalidasi; expression AST lanjutan belum).
-- [ ] Tambahkan query template berparameter dan periode relatif, timezone, output type, priority, serta ambiguity policy.
+- [~] Lengkapi metadata bisnis produk, default periode, unit, sinonim, dan lifecycle approval metrik. Tahap 1: edit name/description; tahap 2: unit/sinonim katalog; tahap 6: definisi bisnis/unit/sinonim dalam konfigurasi reviewed dan workbook C/D/K; tahap 7: periode default UTC dengan override filter, conflict guard, frontend dan workbook I/J. Registry approval metrik terpisah masih terbuka. Kontrak: [frontend BE14](FRONTEND_BE14.md).
+- [~] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi (aggregation/kolom, PRESERVE/ZERO_RESULT, serta filter tetap bertipe melalui aggregate FILTER tersedia dalam konfigurasi reviewed, frontend, dan workbook tab 11 H/M; expression arithmetic AST lanjutan belum).
+- [~] Tambahkan query template berparameter dan periode relatif, timezone, output type, priority, serta ambiguity policy. Tahap 5 BE14 meminta pilihan eksplisit untuk template ambigu (backend + Chat frontend), memeriksa ulang akses/versi; parameter, periode, timezone/output dan priority masih terbuka.
+- [x] Tambahkan spesifikasi visualisasi allowlist pada QueryPlan dan saved query: table, KPI, bar, line, area, pie/donut, combo, scatter, heatmap; validasi field output, renderer Dashboard/Chat, override manual, dan isolasi SQL/cache tersedia pada tahap 9.
 - [ ] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda.
 - [ ] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join.
 - [ ] Aktifkan field lanjutan tab 10–13 setelah compiler dan validasinya siap.

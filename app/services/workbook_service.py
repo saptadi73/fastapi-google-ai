@@ -38,7 +38,7 @@ EDITABLE = {
     "05 Data Quality": (5, 104, {3, 5, 6, 7, 8, 9, 10, 11, 15, 16}),
     "06 Target Database": (5, 104, {6}),
     "10 Data Product Catalog": (5, 5, {1, 11, 15}),
-    "11 Metric Definitions": (5, 204, {1, 2, 6, 7, 16}),
+    "11 Metric Definitions": (5, 204, {1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 16}),
 }
 
 
@@ -204,8 +204,15 @@ def render(config, source, sheet):
         for col, val in {
             1: metric["code"],
             2: metric["label"],
+            3: metric.get("description", ""),
+            4: json.dumps(metric.get("synonyms", []), ensure_ascii=False),
             6: metric["column"],
             7: metric["aggregation"],
+            8: json.dumps(metric.get("filters", []), ensure_ascii=False),
+            9: (metric.get("default_period") or {}).get("dimension"),
+            10: (metric.get("default_period") or {}).get("days"),
+            11: metric.get("unit"),
+            13: metric["null_handling"],
             16: "Aktif",
         }.items():
             put(book["11 Metric Definitions"], i, col, val)
@@ -255,6 +262,10 @@ def render(config, source, sheet):
         "Draft aplikasi: edit sel kuning. Mapping taxonomy ada di tab 04 kolom U-W. Sheet 07, 08, 12, 13 belum dapat diimport. Status Excel tidak memberi approval."
     )
     book[TAXONOMY]["A2"] = "U: UUID taxonomy, V: versi, W: wajib Ya/Tidak. Binding tetap perlu approval melalui aplikasi."
+    book["11 Metric Definitions"]["A2"] = (
+        "C: definisi bisnis; D: sinonim JSON; H: filter JSON; I: dimensi tanggal; J: hari default; K: unit; M: null_handling "
+        "PRESERVE atau ZERO_RESULT. Approval tetap melalui aplikasi."
+    )
     for col, width in {"U": 40, "V": 22, "W": 22, "X": 22}.items():
         book[TAXONOMY].column_dimensions[col].width = width
     book["00 Petunjuk"]["E6"] = "=COUNTIF('03 Aturan Cleansing'!$I$5:$I$1004,\"Ya\")"
@@ -267,6 +278,10 @@ def export_workbook(config, source, sheet, snapshot):
         **identities(config, snapshot),
         "readonly_hash": digest(readonly_values(book)),
         "tabs": book.sheetnames,
+        "metric_null_editor": 1,
+        "metric_metadata_editor": 1,
+        "metric_default_period_editor": 1,
+        "metric_filter_editor": 1,
     }
     ws = book.create_sheet(META)
     ws.append(["format", "etl-review-v1"])
@@ -461,18 +476,74 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
         semantic["code"] = value("10 Data Product Catalog", 5, 1)
         semantic["dimensions"] = json.loads(value("10 Data Product Catalog", 5, 11))
         semantic["allowed_roles"] = json.loads(value("10 Data Product Catalog", 5, 15))
+        metric_policies = {m["code"]: m.get("null_handling", "PRESERVE") for m in semantic["metrics"]}
+        metric_metadata = {
+            m["code"]: {
+                "description": m.get("description", ""),
+                "synonyms": m.get("synonyms", []),
+                "unit": m.get("unit"),
+            }
+            for m in semantic["metrics"]
+        }
+        metric_periods = {m["code"]: m.get("default_period") for m in semantic["metrics"]}
+        metric_filters = {m["code"]: m.get("filters", []) for m in semantic["metrics"]}
         semantic["metrics"] = []
+        metric_null_editor = claims.get("metric_null_editor") == 1
+        metric_metadata_editor = claims.get("metric_metadata_editor") == 1
+        metric_period_editor = claims.get("metric_default_period_editor") == 1
+        metric_filter_editor = claims.get("metric_filter_editor") == 1
         for row in range(5, 205):
             tab = "11 Metric Definitions"
-            if not any(value(tab, row, col) != "" for col in (1, 2, 6, 7, 16)):
+            code = value(tab, row, 1)
+            null_policy = value(tab, row, 13)
+            if not metric_null_editor and null_policy != "":
+                raise ValueError("Unduh workbook terbaru untuk mengedit null handling metrik")
+            metadata_values = [value(tab, row, col) for col in (3, 4, 11)]
+            if not metric_metadata_editor and any(item != "" for item in metadata_values):
+                raise ValueError("Unduh workbook terbaru untuk mengedit metadata metrik")
+            period_values = [value(tab, row, col) for col in (9, 10)]
+            if not metric_period_editor and any(item != "" for item in period_values):
+                raise ValueError("Unduh workbook terbaru untuk mengedit default periode metrik")
+            raw_filters = value(tab, row, 8)
+            if not metric_filter_editor and raw_filters != "":
+                raise ValueError("Unduh workbook terbaru untuk mengedit filter metrik")
+            if not any(value(tab, row, col) != "" for col in (1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 16)):
                 continue
             if active(tab, row, 16, "Aktif", "Nonaktif"):
+                previous_metadata = metric_metadata.get(code, {})
+                if metric_metadata_editor:
+                    raw_synonyms = value(tab, row, 4, "[]") or "[]"
+                    synonyms = json.loads(raw_synonyms) if isinstance(raw_synonyms, str) else raw_synonyms
+                    current_metadata = {
+                        "description": value(tab, row, 3),
+                        "synonyms": synonyms,
+                        "unit": value(tab, row, 11) or None,
+                    }
+                else:
+                    current_metadata = previous_metadata
+                if metric_period_editor:
+                    current_period = (
+                        {"dimension": value(tab, row, 9), "days": value(tab, row, 10)}
+                        if any(item != "" for item in period_values)
+                        else None
+                    )
+                else:
+                    current_period = metric_periods.get(code)
+                current_filters = (
+                    json.loads(raw_filters or "[]")
+                    if metric_filter_editor
+                    else metric_filters.get(code, [])
+                )
                 semantic["metrics"].append(
                     {
-                        "code": value(tab, row, 1),
+                        "code": code,
                         "label": value(tab, row, 2),
                         "column": value(tab, row, 6),
                         "aggregation": value(tab, row, 7),
+                        "null_handling": (null_policy or "PRESERVE") if metric_null_editor else metric_policies.get(value(tab, row, 1), "PRESERVE"),
+                        "default_period": current_period,
+                        "filters": current_filters,
+                        **current_metadata,
                     }
                 )
         remaining = []

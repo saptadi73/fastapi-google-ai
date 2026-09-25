@@ -1893,6 +1893,13 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `label_field` | Ya | `string` | — | — |
 | `policy` | Ya | `MasterImportPolicy` | — | — |
 
+### MetricDefaultPeriod
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `dimension` | Ya | `string` | — | {"maxLength":63} |
+| `days` | Ya | `integer` | — | {"maximum":3660.0,"minimum":1.0} |
+
 ### MetricDefinition
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -1900,7 +1907,29 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
 | `column` | Ya | `string` | — | — |
 | `aggregation` | Ya | `enum ["sum","count","avg","min","max","count_distinct"]` | — | — |
-| `label` | Tidak | `string` | "" | — |
+| `label` | Tidak | `string` | "" | {"maxLength":200} |
+| `description` | Tidak | `string` | "" | {"maxLength":1000} |
+| `synonyms` | Tidak | `array<string>` | [] | {"maxItems":20} |
+| `unit` | Tidak | `string / null` | — | — |
+| `default_period` | Tidak | `MetricDefaultPeriod / null` | — | — |
+| `filters` | Tidak | `array<MetricFilter>` | [] | {"maxItems":10} |
+| `null_handling` | Tidak | `enum ["PRESERVE","ZERO_RESULT"]` | "PRESERVE" | — |
+
+### MetricFilter
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `field` | Ya | `string` | — | {"maxLength":63} |
+| `operator` | Ya | `enum ["eq","in","between","gte","lte","gt","lt"]` | — | — |
+| `value` | Ya | `string / integer / number / boolean / array<string / integer / number>` | — | — |
+
+### MetricMetadataUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `unit` | Tidak | `string / null` | — | — |
+| `synonyms` | Tidak | `array<string>` | [] | {"maxItems":20} |
 
 ### NewMasterRecordPolicy
 
@@ -1928,6 +1957,10 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `allowed_roles` | Tidak | `array<Role> / null` | — | — |
 | `status` | Tidak | `enum ["ACTIVE","SUSPENDED"] / null` | — | — |
+| `name` | Tidak | `string / null` | — | — |
+| `description` | Tidak | `string / null` | — | — |
+| `expected_version` | Tidak | `integer / null` | — | — |
+| `metric_metadata` | Tidak | `array<MetricMetadataUpdate> / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -1976,6 +2009,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `time_grain` | Tidak | `enum ["none","day","week","month","quarter","year"]` | "none" | — |
 | `limit` | Tidak | `integer` | 100 | {"maximum":1000.0,"minimum":1.0} |
 | `offset` | Tidak | `integer` | 0 | {"maximum":100000.0,"minimum":0.0} |
+| `visualization` | Tidak | `VisualizationSpec / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -2516,6 +2550,24 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   }
 }
 ```
+
+### VisualizationSeries
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `field` | Ya | `string` | — | {"maxLength":63} |
+| `type` | Tidak | `enum ["bar","line","area"]` | "bar" | — |
+| `axis` | Tidak | `enum ["left","right"]` | "left" | — |
+
+### VisualizationSpec
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `type` | Ya | `enum ["table","kpi","bar","line","area","pie","donut","combo","scatter","heatmap"]` | — | — |
+| `title` | Tidak | `string` | "" | {"maxLength":200} |
+| `x_field` | Tidak | `string / null` | — | — |
+| `y_field` | Tidak | `string / null` | — | — |
+| `series` | Tidak | `array<VisualizationSeries>` | [] | {"maxItems":10} |
 
 ### WorkbookApplyRequest
 

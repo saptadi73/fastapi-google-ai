@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from app.core.exceptions import AppError
-from app.models.semantic import QueryRequest, SavedQuery
+from app.models.semantic import QueryRequest
 from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.nl2sql import AIQueryPlan
 from app.schemas.semantic import QueryPlan
@@ -22,18 +22,17 @@ class NL2SQLService:
         selected = None
         if request.saved_query_code:
             selected = await catalog.saved(request.saved_query_code)
+            if request.data_product_code and selected.data_product_code != request.data_product_code:
+                raise AppError("SAVED_QUERY_PRODUCT_MISMATCH", "Template bukan milik produk yang dipilih.", 422)
             route = "SAVED_QUERY"
         else:
-            templates = await self.repo.list(
-                SavedQuery, limit=1000, conditions=(SavedQuery.status == "ACTIVE",)
-            )
-            matched = [
-                t
-                for t in templates
-                if self.user.role in t.allowed_roles
-                and normalize_intent(request.question) in t.examples
-                and (not request.data_product_code or t.data_product_code == request.data_product_code)
-            ]
+            matched = await self.repo.matching_templates(normalize_intent(request.question), self.user,
+                                                        request.data_product_code)
+            if len(matched) > 1:
+                return await self.clarification(request,
+                    "Beberapa template cocok. Pilih template yang dimaksud atau persempit produk/pertanyaan.",
+                    candidates=[{"code": item.code, "data_product_code": item.data_product_code} for item in matched[:20]],
+                    candidates_more=len(matched) > 20)
             if len(matched) == 1:
                 selected = await catalog.saved(matched[0].code)
                 route = "INTENT_TEMPLATE"
@@ -84,7 +83,7 @@ class NL2SQLService:
         result["meta"].update(query_id=log.id, route=route, openai_called=route == "OPENAI")
         return result
 
-    async def clarification(self, request, question):
+    async def clarification(self, request, question, *, candidates=None, candidates_more=False):
         log = await self.repo.add(
             QueryRequest,
             user_id=self.user.id,
@@ -95,5 +94,7 @@ class NL2SQLService:
         )
         return {
             "rows": [],
-            "meta": {"query_id": log.id, "clarification_required": True, "question": question},
+            "meta": {"query_id": log.id, "clarification_required": True, "question": question,
+                     **({"template_candidates": candidates, "template_candidates_more": candidates_more,
+                         "route": "CLARIFICATION", "openai_called": False} if candidates is not None else {})},
         }

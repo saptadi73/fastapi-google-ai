@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -162,11 +162,52 @@ class QualityRule(StrictModel):
         return self
 
 
+class MetricDefaultPeriod(StrictModel):
+    dimension: str = Field(max_length=63)
+    days: int = Field(ge=1, le=3660)
+
+
+class MetricFilter(StrictModel):
+    field: str = Field(max_length=63)
+    operator: Literal["eq", "in", "between", "gte", "lte", "gt", "lt"]
+    value: str | int | float | bool | list[str | int | float]
+
+    @model_validator(mode="after")
+    def valid_value(self):
+        if self.operator in ("in", "between"):
+            if not isinstance(self.value, list) or not 1 <= len(self.value) <= 100:
+                raise ValueError("in/between require a non-empty list of at most 100 values")
+            if self.operator == "between" and len(self.value) != 2:
+                raise ValueError("between requires exactly two values")
+        elif isinstance(self.value, list):
+            raise ValueError("This operator requires a scalar")
+        return self
+
+
 class MetricDefinition(StrictModel):
     code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
     column: str
     aggregation: Literal["sum", "count", "avg", "min", "max", "count_distinct"]
-    label: str = ""
+    label: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=1000)
+    synonyms: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=20
+    )
+    unit: str | None = Field(default=None, max_length=40)
+    default_period: MetricDefaultPeriod | None = None
+    filters: list[MetricFilter] = Field(default_factory=list, max_length=10)
+    null_handling: Literal["PRESERVE", "ZERO_RESULT"] = "PRESERVE"
+
+    @model_validator(mode="after")
+    def normalize_metadata(self):
+        self.label = " ".join(self.label.split())
+        self.description = " ".join(self.description.split())
+        if self.unit is not None:
+            self.unit = self.unit.strip() or None
+        self.synonyms = [" ".join(value.split()) for value in self.synonyms]
+        if len({value.casefold() for value in self.synonyms}) != len(self.synonyms):
+            raise ValueError("Metric synonyms must be unique ignoring case")
+        return self
 
 
 class SemanticDefinition(StrictModel):
@@ -195,6 +236,8 @@ class ETLConfiguration(StrictModel):
 
     @model_validator(mode="after")
     def valid_mapping(self):
+        from app.services.etl_compiler_service import cast_value
+
         names = [c.target_column for c in self.columns]
         sources = [c.source_column for c in self.columns]
         if len(names) != len(set(names)) or len(sources) != len(set(sources)):
@@ -212,9 +255,40 @@ class ETLConfiguration(StrictModel):
         metric_names = [m.code for m in self.semantic.metrics]
         if len(set(metric_names)) != len(metric_names) or set(metric_names) & set(names):
             raise ValueError("Metric codes must be unique and distinct from column names")
+        metric_terms: dict[str, str] = {}
         for m in self.semantic.metrics:
+            for term in (m.code, m.label, *m.synonyms):
+                normalized = " ".join(term.casefold().split())
+                if not normalized:
+                    continue
+                owner = metric_terms.setdefault(normalized, m.code)
+                if owner != m.code:
+                    raise ValueError("Metric labels and synonyms must not identify another metric")
             if m.column not in public:
                 raise ValueError("Metrics must reference non-sensitive columns")
+            if any(item.field not in public for item in m.filters):
+                raise ValueError("Metric filters must reference non-sensitive mapped columns")
+            for item in m.filters:
+                values = item.value if isinstance(item.value, list) else [item.value]
+                try:
+                    for filter_value in values:
+                        cast_value(filter_value, public[item.field].target_type)
+                except (ValueError, TypeError, ArithmeticError):
+                    raise ValueError("Metric filter value does not match the mapped column type") from None
+            if m.default_period is not None:
+                period_column = public.get(m.default_period.dimension)
+                if (
+                    m.default_period.dimension not in self.semantic.dimensions
+                    or period_column is None
+                    or period_column.target_type not in ("date", "timestamp", "timestamptz")
+                ):
+                    raise ValueError("Metric default period requires a temporal semantic dimension")
+            if (
+                m.null_handling == "ZERO_RESULT"
+                and m.aggregation not in ("count", "count_distinct")
+                and public[m.column].target_type not in ("integer", "bigint", "numeric")
+            ):
+                raise ValueError("ZERO_RESULT requires a numeric aggregate result")
             if m.aggregation in ("sum", "avg") and public[m.column].target_type not in (
                 "integer",
                 "bigint",

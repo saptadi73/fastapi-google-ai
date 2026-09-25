@@ -1,8 +1,10 @@
 import hashlib
 import json
 import time
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.encoders import jsonable_encoder
+from pydantic import ValidationError
 from redis.asyncio import Redis
 from sqlalchemy import Column, MetaData, Table, Uuid, and_, func, select, text
 from sqlalchemy.dialects import postgresql
@@ -11,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import make_engine
 from app.core.exceptions import AppError
 from app.repositories.semantic_repository import SemanticRepository
+from app.schemas.configuration import MetricFilter
 from app.services.audit_service import audit
 from app.services.etl_compiler_service import cast_value
 from app.services.profiling_service import digest
@@ -18,7 +21,7 @@ from app.services.schema_compiler_service import TYPE_MAP
 from app.services.sql_guard_service import validate_readonly_sql
 
 
-def cache_key(user, product, plan):
+def cache_key(user, product, plan, default_period=None):
     return "query:" + digest(
         [
             user.tenant_id,
@@ -27,12 +30,33 @@ def cache_key(user, product, plan):
             product.code,
             product.version,
             product.freshness_version,
-            plan.model_dump(mode="json"),
+            plan.model_dump(mode="json", exclude={"visualization"}),
+            default_period,
         ]
     )
 
 
-def build_query(product, user, plan):
+def resolve_default_period(product, plan, today=None):
+    today = today or datetime.now(timezone.utc).date()
+    explicit = {item.field for item in plan.filters}
+    periods = {}
+    for code in plan.metrics:
+        period = next((m.get("default_period") for m in product.metrics if m["code"] == code), None)
+        if period and period["dimension"] not in explicit:
+            periods[(period["dimension"], period["days"])] = period
+    if len(periods) > 1:
+        raise AppError(
+            "QUERY_DEFAULT_PERIOD_CONFLICT",
+            "Metrik terpilih memiliki periode default berbeda; tambahkan filter tanggal eksplisit.",
+            422,
+        )
+    if not periods:
+        return None
+    period = next(iter(periods.values()))
+    return {**period, "start": (today - timedelta(days=period["days"] - 1)).isoformat(), "end": today.isoformat()}
+
+
+def build_query(product, user, plan, *, today=None):
     columns = {c["target_column"]: c for c in product.columns}
     table = Table(
         product.view_name,
@@ -41,13 +65,64 @@ def build_query(product, user, plan):
         *(Column(name, TYPE_MAP[c["target_type"]]()) for name, c in columns.items()),
         schema="semantic",
     )
+
+    def convert(field, value):
+        if field not in columns:
+            raise AppError("QUERY_INVALID", "Filter tidak tersedia.")
+        try:
+            return cast_value(value, columns[field]["target_type"])
+        except (ValueError, TypeError, ArithmeticError):
+            raise AppError("QUERY_INVALID", "Tipe nilai filter tidak valid.") from None
+
+    def predicate(item):
+        col = table.c[item.field]
+        if item.operator == "in":
+            return col.in_([convert(item.field, value) for value in item.value])
+        if item.operator == "between":
+            return col.between(convert(item.field, item.value[0]), convert(item.field, item.value[1]))
+        value = convert(item.field, item.value)
+        if value is None and item.operator != "eq":
+            raise AppError("QUERY_INVALID", "Null hanya didukung untuk operator eq.")
+        operations = {
+            "eq": lambda: col == value,
+            "gte": lambda: col >= value,
+            "lte": lambda: col <= value,
+            "gt": lambda: col > value,
+            "lt": lambda: col < value,
+        }
+        return operations[item.operator]()
+
     metrics = {m["code"]: m for m in product.metrics}
     allowed_aggregations = {"sum", "avg", "min", "max", "count", "count_distinct"}
     for code, metric in metrics.items():
         if metric.get("aggregation") not in allowed_aggregations or metric.get("column") not in columns:
             raise AppError("SEMANTIC_METRIC_INVALID", f"Definisi metric '{code}' tidak valid.")
+        policy = metric.get("null_handling", "PRESERVE")
+        if policy not in ("PRESERVE", "ZERO_RESULT") or (
+            policy == "ZERO_RESULT" and metric["aggregation"] not in ("count", "count_distinct")
+            and columns[metric["column"]]["target_type"] not in ("integer", "bigint", "numeric")
+        ):
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Null handling metric '{code}' tidak valid.")
+        period = metric.get("default_period")
+        if period is not None and (
+            not isinstance(period, dict)
+            or set(period) != {"dimension", "days"}
+            or period["dimension"] not in product.dimensions
+            or period["dimension"] not in columns
+            or columns[period["dimension"]]["target_type"] not in ("date", "timestamp", "timestamptz")
+            or not isinstance(period["days"], int)
+            or isinstance(period["days"], bool)
+            or not 1 <= period["days"] <= 3660
+        ):
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Default period metric '{code}' tidak valid.")
+        try:
+            metric_filters = [MetricFilter.model_validate(item) for item in metric.get("filters", [])]
+        except (ValidationError, TypeError):
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Filter metric '{code}' tidak valid.") from None
+        if any(item.field not in columns for item in metric_filters):
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Filter metric '{code}' tidak valid.")
         # Metric expressions are intentionally limited to a column plus an allowlisted aggregation.
-        if set(metric) - {"code", "name", "label", "column", "aggregation", "description", "unit", "default_period", "null_handling"}:
+        if set(metric) - {"code", "name", "label", "column", "aggregation", "description", "unit", "synonyms", "default_period", "filters", "null_handling"}:
             raise AppError("SEMANTIC_METRIC_INVALID", f"Expression metric '{code}' tidak diizinkan.")
     if len(set(plan.dimensions)) != len(plan.dimensions) or len(set(plan.metrics)) != len(plan.metrics):
         raise AppError("QUERY_INVALID", "Metric/dimension duplikat.")
@@ -71,40 +146,35 @@ def build_query(product, user, plan):
             expression = func.count(expression.distinct())
         else:
             expression = getattr(func, metric["aggregation"])(expression)
+        for metric_filter in metric.get("filters", []):
+            expression = expression.filter(predicate(MetricFilter.model_validate(metric_filter)))
+        if metric.get("null_handling", "PRESERVE") == "ZERO_RESULT":
+            expression = func.coalesce(expression, 0)
         selected.append(expression.label(name))
         outputs[name] = expression
     if not selected:
         raise AppError("QUERY_INVALID", "Pilih setidaknya satu dimension atau metric.")
     conditions = [table.c._tenant_id == user.tenant_id]
 
-    def convert(field, value):
-        if field not in columns:
-            raise AppError("QUERY_INVALID", "Filter tidak tersedia.")
-        try:
-            return cast_value(value, columns[field]["target_type"])
-        except (ValueError, TypeError, ArithmeticError):
-            raise AppError("QUERY_INVALID", "Tipe nilai filter tidak valid.") from None
-
     for f in plan.filters:
         if f.field not in product.dimensions:
             raise AppError("QUERY_INVALID", "Filter harus menggunakan dimension yang diizinkan.")
-        col = table.c[f.field]
-        if f.operator == "in":
-            conditions.append(col.in_([convert(f.field, v) for v in f.value]))
-        elif f.operator == "between":
-            conditions.append(col.between(convert(f.field, f.value[0]), convert(f.field, f.value[1])))
+        conditions.append(predicate(f))
+    default_period = resolve_default_period(product, plan, today)
+    if default_period:
+        field = default_period["dimension"]
+        col = table.c[field]
+        start = default_period["start"]
+        end = default_period["end"]
+        if columns[field]["target_type"] == "date":
+            conditions.extend((col >= date.fromisoformat(start), col <= date.fromisoformat(end)))
         else:
-            value = convert(f.field, f.value)
-            if value is None and f.operator != "eq":
-                raise AppError("QUERY_INVALID", "Null hanya didukung untuk operator eq.")
-            operations = {
-                "eq": lambda: col == value,
-                "gte": lambda: col >= value,
-                "lte": lambda: col <= value,
-                "gt": lambda: col > value,
-                "lt": lambda: col < value,
-            }
-            conditions.append(operations[f.operator]())
+            start_value = datetime.fromisoformat(start)
+            end_value = datetime.fromisoformat(end) + timedelta(days=1)
+            if columns[field]["target_type"] == "timestamptz":
+                start_value = start_value.replace(tzinfo=timezone.utc)
+                end_value = end_value.replace(tzinfo=timezone.utc)
+            conditions.extend((col >= start_value, col < end_value))
     # Scope is taken from the current database user, never from a model or token payload.
     for field, allowed in user.row_scope.get(product.code, {}).items():
         if field not in columns:
@@ -151,7 +221,9 @@ class QueryExecutionService:
 
     async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL"):
         product = await self.repo.product(product_code, self.user)
-        stmt = build_query(product, self.user, plan)
+        today = datetime.now(timezone.utc).date()
+        stmt = build_query(product, self.user, plan, today=today)
+        default_period = resolve_default_period(product, plan, today)
         sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         validate_readonly_sql(
             sql,
@@ -161,7 +233,7 @@ class QueryExecutionService:
         s = get_settings()
         if ai and not s.database_nl2sql_url.get_secret_value():
             raise AppError("NL2SQL_NOT_CONFIGURED", "Isi DATABASE_NL2SQL_URL dengan role read-only.", 503)
-        key = cache_key(self.user, product, plan)
+        key = cache_key(self.user, product, plan, default_period)
         redis = Redis.from_url(s.redis_url.get_secret_value(), socket_connect_timeout=0.3, socket_timeout=0.3)
         try:
             cached = await redis.get(key)
@@ -221,5 +293,7 @@ class QueryExecutionService:
                 "cached": cached_result,
                 "semantic_version": product.version,
                 "freshness_version": product.freshness_version,
+                "default_period_applied": default_period,
+                "visualization": plan.visualization.model_dump(mode="json") if plan.visualization else None,
             },
         }

@@ -29,6 +29,21 @@ def encode(raw):
     return base64.b64encode(raw).decode()
 
 
+def test_metric_null_policy_survives_workbook_roundtrip(workbook_context):
+    config = workbook_context[0].configuration_json
+    config["semantic"]["metrics"][0].update(
+        null_handling="ZERO_RESULT",
+        description="Nilai setelah diskon",
+        synonyms=["Pendapatan bersih"],
+        unit="IDR",
+        default_period={"dimension": "transaction_date", "days": 30},
+        filters=[{"field": "branch_name", "operator": "eq", "value": "Jakarta"}],
+    )
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert not result["errors"]
+    assert result["configuration"]["semantic"]["metrics"][0] == config["semantic"]["metrics"][0]
+
+
 def test_in_taxonomy_rule_roundtrip_and_reject_warning_only(workbook_context):
     config = workbook_context[0].configuration_json
     config["columns"][2].update(taxonomy_id="00000000-0000-0000-0000-000000000001", taxonomy_version=1,
@@ -64,6 +79,10 @@ def test_legacy_workbook_keeps_taxonomy_mapping_without_editor_marker(workbook_c
                   taxonomy_required=True)
     book = service.render(*workbook_context[:3])
     # Prior exports cleared tab 04 data and had no U-X editor headers.
+    for row in range(5, 205):
+        book["11 Metric Definitions"].cell(row, 13).value = None
+        for metric_column in (3, 4, 8, 11):
+            book["11 Metric Definitions"].cell(row, metric_column).value = None
     for row in book[service.TAXONOMY].iter_rows(min_row=4, min_col=21, max_col=24):
         for cell in row:
             cell.value = None

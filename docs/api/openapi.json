@@ -16417,6 +16417,28 @@
         ],
         "title": "MasterSchema"
       },
+      "MetricDefaultPeriod": {
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Dimension"
+          },
+          "days": {
+            "type": "integer",
+            "maximum": 3660.0,
+            "minimum": 1.0,
+            "title": "Days"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dimension",
+          "days"
+        ],
+        "title": "MetricDefaultPeriod"
+      },
       "MetricDefinition": {
         "properties": {
           "code": {
@@ -16442,8 +16464,64 @@
           },
           "label": {
             "type": "string",
+            "maxLength": 200,
             "title": "Label",
             "default": ""
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Description",
+            "default": ""
+          },
+          "synonyms": {
+            "items": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Synonyms"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "default_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricDefaultPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/MetricFilter"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Filters"
+          },
+          "null_handling": {
+            "type": "string",
+            "enum": [
+              "PRESERVE",
+              "ZERO_RESULT"
+            ],
+            "title": "Null Handling",
+            "default": "PRESERVE"
           }
         },
         "additionalProperties": false,
@@ -16454,6 +16532,106 @@
           "aggregation"
         ],
         "title": "MetricDefinition"
+      },
+      "MetricFilter": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Field"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "eq",
+              "in",
+              "between",
+              "gte",
+              "lte",
+              "gt",
+              "lt"
+            ],
+            "title": "Operator"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field",
+          "operator",
+          "value"
+        ],
+        "title": "MetricFilter"
+      },
+      "MetricMetadataUpdate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "title": "Code"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Synonyms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "MetricMetadataUpdate"
       },
       "NewMasterRecordPolicy": {
         "type": "string",
@@ -16518,6 +16696,59 @@
               }
             ],
             "title": "Status"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "metric_metadata": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MetricMetadataUpdate"
+                },
+                "type": "array",
+                "maxItems": 100,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric Metadata"
           }
         },
         "additionalProperties": false,
@@ -16782,6 +17013,16 @@
             "minimum": 0.0,
             "title": "Offset",
             "default": 0
+          },
+          "visualization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualizationSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -17769,6 +18010,104 @@
         "additionalProperties": false,
         "type": "object",
         "title": "UserUpdate"
+      },
+      "VisualizationSeries": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Field"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "bar",
+              "line",
+              "area"
+            ],
+            "title": "Type",
+            "default": "bar"
+          },
+          "axis": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Axis",
+            "default": "left"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field"
+        ],
+        "title": "VisualizationSeries"
+      },
+      "VisualizationSpec": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "table",
+              "kpi",
+              "bar",
+              "line",
+              "area",
+              "pie",
+              "donut",
+              "combo",
+              "scatter",
+              "heatmap"
+            ],
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "default": ""
+          },
+          "x_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Field"
+          },
+          "y_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 63
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Field"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/VisualizationSeries"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Series"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "VisualizationSpec"
       },
       "WorkbookApplyRequest": {
         "properties": {

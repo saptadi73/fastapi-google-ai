@@ -787,7 +787,7 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | POST | `/data-products/{code}/export` | Auth | QueryPlan | 200 | CSV tanpa envelope |
 | POST | `/saved-queries/{code}/run` | Auth | — | 200 | QueryRow[]; meta query |
 | GET | `/semantic/data-products` | Auth | — | 200 | Alias daftar DataProduct aktif yang diizinkan |
-| PATCH | `/semantic/data-products/{product_id}` | D | ProductUpdate | 200 | DataProduct |
+| PATCH | `/semantic/data-products/{product_id}` | D | ProductUpdate | 200 | DataProduct; name/description/metric_metadata memerlukan expected_version; PRODUCT_VERSION_CONFLICT 409, METRIC_NOT_FOUND/METRIC_SYNONYM_CONFLICT 422; lihat FRONTEND_BE14.md |
 | GET | `/semantic/metrics` | Auth | — | 200 | `[{data_product: code, ...MetricDefinition}]` |
 | GET | `/semantic/query-templates` | Auth | — | 200 | SavedQuery[] sesuai role; maksimal 100 |
 | POST | `/semantic/query-templates` | D | SavedQueryCreate | 201 | SavedQuery DRAFT |
@@ -843,8 +843,15 @@ Query metrics/dimensions berasal dari katalog produk, bukan label bebas. Maksima
 | Null | Hanya `eq` untuk filter scalar null |
 | `sort.field` | Harus muncul sebagai field output query |
 | `time_grain` | none/day/week/month/quarter/year; diterapkan pada dimensi bertipe tanggal/waktu |
+| `visualization` | Opsional; spec allowlist table/KPI/chart yang hanya merujuk output plan |
 
 Jika metrics dan dimensions kosong, server memilih seluruh dimensi produk. Bila tidak ada output yang dapat dipilih, QUERY_INVALID. Tidak ada raw SQL, join bebas, OR filter, HAVING, atau pencarian contains pada payload.
+
+Metrik dapat memiliki `default_period` berisi dimension temporal dan days 1..3660.
+Backend menerapkannya menurut tanggal UTC hanya ketika QueryPlan tidak memfilter
+dimension tersebut. Default terpakai dikembalikan sebagai `meta.default_period_applied`.
+Default berbeda pada beberapa metrik menghasilkan `QUERY_DEFAULT_PERIOD_CONFLICT`
+(422); kirim filter tanggal eksplisit untuk menyelesaikannya.
 
 Respons query lengkap:
 
@@ -1473,3 +1480,69 @@ error, audit, kompatibilitas, dan batasan: [policy master BE-07](MASTER_IMPORT_P
 Perbaikan pendamping alur dua akun: apply NON_MASTER mengembalikan tipe tanggal/numerik
 JSON staging ke tipe target sebelum UPSERT, tanpa menjalankan ulang transformasi/conversion
 sumber. Nilai tidak dapat dikonversi menghasilkan IMPORT_STAGING_VALUE_INVALID (422).
+
+
+### BE14: null handling metrik konfigurasi
+
+MetricDefinition menerima `null_handling` dengan enum PRESERVE (default) dan
+ZERO_RESULT. ZERO_RESULT membungkus hasil agregat numerik dengan COALESCE,
+bukan mengisi null input sebelum AVG. Konfigurasi tetap melewati review/approval
+dan deployment existing. Catalog lama tanpa field mempertahankan perilaku SQL.
+Payload, batas tipe, dan preservasi workbook:
+[Frontend BE14 tahap 3](FRONTEND_BE14.md#tahap-3-null-handling-metrik-melalui-konfigurasi-etl).
+
+
+### BE14: editor XLSX null handling
+
+Export workbook terbaru mengaktifkan `11 Metric Definitions!M5:M204` untuk
+PRESERVE/ZERO_RESULT; kosong berarti PRESERVE. Workbook lama mempertahankan policy
+existing dan harus diunduh ulang sebelum kolom M boleh diedit. Alur preview/apply
+tetap menyimpan draft tanpa approval otomatis.
+[Kontrak editor dan kompatibilitas](FRONTEND_BE14.md#tahap-4-editor-null-handling-di-xlsx).
+
+
+### BE14: ambiguitas template query
+
+NL2SQL mengembalikan clarification_required dengan template_candidates
+(code/data_product_code, maksimal 20) dan template_candidates_more ketika beberapa
+contoh template cocok. AI/query tidak dijalankan. Pilihan dikirim melalui
+saved_query_code pada QuestionRequest existing. Produk yang tidak cocok menghasilkan
+SAVED_QUERY_PRODUCT_MISMATCH (422); izin/status/versi diperiksa kembali.
+[Kontrak Chat tahap 5](FRONTEND_BE14.md#tahap-5-klarifikasi-template-yang-ambigu).
+
+
+### BE14: metadata metrik reviewed
+
+MetricDefinition menerima `description` (maksimal 1000), `unit` nullable (maksimal
+40), dan `synonyms` (maksimal 20 string masing-masing 100), selain label maksimal 200.
+Metadata dinormalisasi, konflik istilah antarmetrik ditolak, lalu mengikuti revision,
+review/approval, dan deployment konfigurasi existing. Workbook tab 11 mengaktifkan
+kolom C/D/K dengan marker signed dan preservasi format lama.
+[Kontrak frontend dan workbook tahap 6](FRONTEND_BE14.md#tahap-6-metadata-metrik-dalam-konfigurasi-dan-workbook).
+
+
+### BE14: default periode metrik
+
+MetricDefinition menerima `default_period: {dimension, days}` atau null. Dimension
+wajib temporal, publik, dan terdaftar sebagai semantic dimension; days 1..3660.
+Konfigurasi mengikuti review/deployment. Workbook tab 11 memakai I/J dan format lama
+dipreservasi menggunakan marker signed.
+[Kontrak tahap 7](FRONTEND_BE14.md#tahap-7-default-periode-metrik).
+
+
+### BE14: filter tetap metrik
+
+MetricDefinition menerima maksimal 10 `filters` terstruktur dengan field mapped publik,
+operator allowlist, serta value bertipe. Compiler memakai aggregate FILTER sehingga
+scope dan filter QueryPlan tetap berlaku. SQL mentah dan key tambahan ditolak. Workbook
+tab 11 kolom H memakai array JSON dengan kompatibilitas format lama.
+[Kontrak tahap 8](FRONTEND_BE14.md#tahap-8-filter-tetap-metrik).
+
+
+### BE14: visualisasi dinamis tervalidasi
+
+QueryPlan mendukung visualization untuk table, KPI, bar, line, area, pie, donut, combo,
+scatter, dan heatmap. Bentuk serta referensi field divalidasi terhadap metrics/dimensions
+terpilih. Spec dikembalikan pada meta dan tersimpan dalam saved query, tetapi tidak
+memengaruhi SQL atau cache key hasil. Opsi chart-library dan script bebas ditolak.
+[Kontrak tahap 9](FRONTEND_BE14.md#tahap-9-spesifikasi-visualisasi-tervalidasi).
