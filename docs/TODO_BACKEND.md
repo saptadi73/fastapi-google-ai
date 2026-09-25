@@ -1,6 +1,6 @@
 # TODO implementasi backend
 
-Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, diperbarui 8 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
+Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 25 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
 
 Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres. Centang item hanya setelah kode, migrasi yang diperlukan, pengujian, dan kontrak API selesai. Tandai tahap sedang dikerjakan pada catatan progres; jangan mencentang hanya karena desainnya sudah dibuat.
 
@@ -15,7 +15,7 @@ Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres.
 - [x] Semantic product dan structured query satu produk, termasuk saved query dasar.
 - [x] API Reference, contoh payload, dan exporter schema/OpenAPI.
 
-Verifikasi historis setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **117 operasi API**. Migrasi BE-06 `6d1305460956`, staging pertanyaan/keputusan, dan Alembic check diuji pada database test; integrasi provider nyata dan production belum dibuktikan oleh tes ini. Review **konfigurasi** yang tersedia belum sama dengan review **setiap batch data**; storage record master, batch/checkpoint, dan pertanyaan/keputusan staging tersedia, sedangkan pemuatan record masih pekerjaan di bawah.
+Verifikasi historis setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **117 operasi API**. Migrasi BE-06 `6d1305460956`, staging pertanyaan/keputusan, dan Alembic check diuji pada database test; integrasi provider nyata dan production belum dibuktikan oleh tes ini. Catatan ini dilanjutkan oleh BE-07: preview, approval, dan apply record master sekarang tersedia pada kode dan pengujian.
 
 ## Urutan implementasi
 
@@ -168,7 +168,7 @@ Prasyarat: BE-05, BE-06, dan BE-08.
 - [x] Perlakukan isi Sheet sebagai data tidak tepercaya pada konteks AI; output tetap divalidasi schema dan issue masuk pertanyaan. Pengujian provider nyata/injeksi masih diperlukan.
 - [x] Pastikan snapshot baru diperiksa walaupun fingerprint schema tetap sama; dependency check memakai snapshot hash, bukan fingerprint saja. Tercakup pada test snapshot replacement.
 
-Status BE-10: worker sudah memanggil review terstruktur ketika OpenAI dikonfigurasi, menyimpan coverage, metadata model/prompt, findings, blocker, masking field sensitif, chunk cache, dan pertanyaan per issue. Pengujian provider nyata/injeksi serta validasi snapshot baru dengan fingerprint schema sama masih terbuka. Label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
+Status BE-10: worker sudah memanggil review terstruktur ketika OpenAI dikonfigurasi, menyimpan coverage, metadata model/prompt, findings, blocker, masking field sensitif, chunk cache, dan pertanyaan per issue. Penggantian snapshot dengan fingerprint schema sama sudah dicakup; pengujian end-to-end provider/prompt injection nyata masih terbuka. Label “semua diperiksa AI” tidak dipakai untuk hasil sampling atau pengecualian.
 
 ### BE-11 — Integrasi alur lengkap dan migrasi data lama
 
@@ -230,8 +230,8 @@ Selesai per field/fitur jika konfigurasi benar-benar memengaruhi runtime dan exp
 ### BE-13 — Taxonomy dan mapping kategori
 
 Handoff frontend: [panduan bertahap BE-13](FRONTEND_BE13.md) dan
-[payload per aksi](api/BE13_FRONTEND_PAYLOADS.json). Tahap 1-4 dapat mulai diintegrasikan
-sesuai deployment backend tujuan. Tahap 5 saran AI generatif tersedia; provider/model nyata belum diverifikasi.
+[payload per aksi](api/BE13_FRONTEND_PAYLOADS.json). Tahap 1-5 sudah terhubung pada frontend;
+provider/model nyata dan acceptance pada deployment tujuan belum diverifikasi.
 
 Perbaikan schema registry (9 September 2026): model taxonomy kini memetakan metadata
 existing, approval tersimpan, dan migrasi `8a96b7c5d4ef` menyelaraskan index/unique/FK
@@ -244,7 +244,7 @@ serta lifecycle taxonomy lanjutan tetap terpisah dari perbaikan ini.
 
 Prasyarat: BE-08, BE-11, dan kamus parameter BE-12.
 
-Status tinjauan 9 September 2026: **cakupan kode BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi, BE-14 belum dimulai**.
+Status tinjauan 25 September 2026: **cakupan kode dan frontend BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi. BE-14 sudah berjalan sampai tahap 9**.
 Guard lifecycle, dependency hash, validasi final-write, revision binding, dan pertanyaan
 ambigu telah diperbaiki. [Temuan, kontrak frontend, dan pekerjaan terbuka](REVIEW_BE13.md).
 
@@ -268,10 +268,12 @@ Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 - [x] Tambahkan spesifikasi visualisasi allowlist pada QueryPlan dan saved query: table, KPI, bar, line, area, pie/donut, combo, scatter, heatmap; validasi field output, renderer Dashboard/Chat, override manual, dan isolasi SQL/cache tersedia pada tahap 9.
 - [ ] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda.
 - [ ] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join.
-- [ ] Aktifkan field lanjutan tab 10–13 setelah compiler dan validasinya siap.
+- [~] Aktifkan field lanjutan tab 10–13 setelah compiler dan validasinya siap. Tab 10/11 sudah aktif untuk metadata periode dan metrik yang didukung; tab 12/13 serta parameter lanjutan masih terbuka.
 - [ ] Uji total agregasi pada one-to-many, relasi ambigu, unauthorized join, filter waktu, dan saved query versi lama.
 
 Selesai jika laporan/join menghasilkan angka yang benar dan tidak memperluas akses data pengguna.
+
+Status tinjauan 25 September 2026: tahap 1–9 tersedia pada backend, frontend, dan dokumentasi. Verifikasi terakhir mencakup 66 tes backend terarah, renderer chart Dashboard/Chat, typecheck/build frontend, tes browser visualisasi dinamis, serta exporter **152 operasi API**. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, join multi-product, tab 12/13, dan acceptance provider/deployment nyata.
 
 ### BE-15 — Kebijakan AI dan operasional per dataset/task
 
@@ -303,6 +305,8 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 
 ## Checklist wajib pada setiap tahap
 
+Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya, bukan daftar status global yang harus dicentang sekaligus.
+
 - [ ] Model/migrasi dan strategi backfill/rollback ditinjau bila schema berubah.
 - [ ] Validasi server, izin role/tenant, revision, idempotency, dan failure handling sesuai dampak perubahan.
 - [ ] Pengujian perilaku sukses serta kasus gagal penting lulus di database test terpisah.
@@ -316,17 +320,21 @@ Selesai jika release checklist untuk lingkungan tujuan mempunyai bukti verifikas
 | Tahap | Status awal | Bukti penyelesaian / pekerjaan berikutnya |
 |---|---|---|
 | Fondasi review konfigurasi | Selesai di kode/test | [Panduan review ETL](PANDUAN_REVIEW_ETL.md); rollout aplikasi ada pada BE-16 |
-| BE-01 | Selesai: kontrak dasar | Keputusan pengguna, schema policy, guard lifecycle/role, dan tes; belum terhubung runtime import |
+| BE-01 | Selesai: kontrak dasar | Keputusan pengguna, schema policy, guard lifecycle/role, dan tes; enforcement runtime diteruskan oleh BE-02 |
 | BE-02 | Selesai di kode/test | Migrasi, GET/PUT klasifikasi, gate runtime dan worker; migrasi dilaporkan selesai oleh pengguna |
-| BE-03 | Selesai di kode/test | Registry berversi, candidate review, binding/dry-run/approval; belum memuat record master |
-| BE-04 | Selesai di kode/test | Target per master, UUID stabil, constraint, storage deployment, pencarian/masking; import belum aktif |
-| BE-05 | Selesai di kode/test | Snapshot/policy tetap, idempotency, checkpoint, temuan, cancel/revalidate/resume dan recovery; AI/apply belum aktif |
-| BE-06 | Selesai di kode/test | Staging, pertanyaan/keputusan berversi, koreksi, kandidat allowlist, proposal registry approved; import/apply belum aktif |
+| BE-03 | Selesai di kode/test | Registry berversi, candidate review, binding/dry-run/approval; pemuatan record diteruskan dan tersedia melalui BE-07 |
+| BE-04 | Selesai di kode/test | Target per master, UUID stabil, constraint, storage deployment, pencarian/masking; alur import tersedia melalui BE-05–BE-07 |
+| BE-05 | Selesai di kode/test | Snapshot/policy tetap, idempotency, checkpoint, temuan, cancel/revalidate/resume dan recovery; review AI dan apply diteruskan oleh BE-07/BE-10 |
+| BE-06 | Selesai di kode/test | Staging, pertanyaan/keputusan berversi, koreksi, kandidat allowlist, proposal registry approved; apply tersedia melalui BE-07 |
 | BE-07 | Selesai pada kode/test yang dicakup | Recheck preview setelah lock, revision UPDATE, skip UNCHANGED, rollback/retry; guard insert dan konflik sumber selesai. Provider/end-to-end/production tetap tahap terpisah |
 | BE-08 | Selesai pada cakupan kode/test | Resolver berscope, lifecycle alias, validasi UUID, dependency freshness; lihat hardening BE-08 |
-| BE-09 sampai BE-11 | Masih parsial sesuai checklist | Hardening FK PostgreSQL, review AI, dan acceptance alur lengkap |
+| BE-09 | Sebagian besar tersedia | Dependency plan, load order, cycle/orphan/type guard, dan FK fisik tersedia; koreksi otomatis serta hardening DDL lintas kegagalan masih terbuka |
+| BE-10 | Tersedia pada cakupan kode/test | Review AI batch, coverage, masking, cache, findings/blocker, dan pertanyaan tersedia; acceptance provider/prompt injection nyata masih terbuka |
+| BE-11 | Sebagian selesai | `sync-review`, idempotency, dependency revalidation, dan preview migrasi tersedia; orkestrasi manual/terjadwal penuh, apply migrasi, dan E2E domain masih terbuka |
 | BE-12 | Sebagian selesai | DQ, precision/varchar, locale angka, unit, timezone sumber, currency kurs tetap; lihat [handoff frontend](FRONTEND_BE12.md). Effective dating lanjutan, multi-target, dan schema evolution masih pending |
-| BE-13 sampai BE-15 | Bertahap | Taxonomy/semantic memiliki implementasi parsial sesuai checklist; parameter operasional lanjutan belum selesai |
+| BE-13 | Tersedia di kode/frontend | Taxonomy, binding, resolver, rekomendasi dan integrasi UI tersedia; acceptance provider/deployment nyata masih terbuka |
+| BE-14 | Tahap 1–9 tersedia | Metadata semantic, periode default, metrik terfilter, ambiguity flow, dan visualisasi dinamis tersedia; approval metrik, AST lanjutan, template lengkap, serta join masih terbuka |
+| BE-15 | Belum dimulai | Kebijakan AI dan operasional per dataset/task masih mengikuti checklist |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 
 Referensi: [Spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), [cakupan template ETL](REVIEW_KONFIGURASI_ETL.md), [API Reference aktif](API_REFERENCE.md), [batasan implementasi](IMPLEMENTASI.md), dan [konfigurasi/rotasi kredensial](KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).

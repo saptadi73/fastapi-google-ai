@@ -1,8 +1,8 @@
 # API Reference untuk frontend
 
-Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **9 September 2026**.
+Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **25 September 2026**.
 
-Dokumen ini menjelaskan **145 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **152 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -1162,10 +1162,10 @@ Error Google seperti GOOGLE_NOT_CONFIGURED (503), SOURCE_ACCESS_DENIED (403), SO
 
 ### Keterbatasan yang perlu dipertahankan dalam UI
 
-1. Klasifikasi master/non-master per tab sudah tersedia pada BE-02. Master kanonis, FK antardataset, pertanyaan per sel, dan endpoint import-review **belum tersedia**. Lihat [spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md) sebagai rancangan terpisah, bukan endpoint aktif.
+1. Klasifikasi master/non-master, registry dan storage master kanonis, binding/FK, pertanyaan terstruktur, serta endpoint import-review sudah tersedia melalui BE-02–BE-10. Migrasi data lama penuh, acceptance end-to-end provider nyata, dan rollout production masih terbuka.
 2. `dataset_kind` hanya diterima oleh SheetClassificationUpdate. Payload lain tetap menolak field tambahan yang tidak ada di schema; master_definition_id diterima pada MasterBindingUpdate, bukan pada payload klasifikasi.
-3. AI ETL membuat draft dari metadata/profile; seluruh sampel disamarkan. Tidak ada pemeriksaan typo semua data otomatis saat sync.
-4. Query dibatasi satu data product, tanpa SQL bebas atau join dinamis. Foreign key master yang direncanakan tidak boleh ditampilkan sebagai fitur yang sudah berjalan.
+3. AI ETL konfigurasi membuat draft dari metadata/profile. Review AI per batch mendukung coverage, chunk cache, masking field sensitif, findings, blocker, dan pertanyaan; UI tidak boleh mengklaim semua baris diperiksa bila provider nonaktif, coverage hanya sampling, atau ada pengecualian.
+4. Query tetap dibatasi satu data product, tanpa SQL bebas atau join dinamis. FK master tersedia untuk integritas/import, tetapi belum menjadi izin join NL2SQL multi-product.
 5. Belum ada list seluruh NL2SQL request, edit/delete saved template, delete source/user, reset password user lain, atau endpoint daftar distinct dimensi.
 6. Approval source data/configuration bukan jaminan semua integrasi eksternal sudah siap. Tetap tampilkan status job dan error nyata.
 7. `submit-review` wajib menerima bukti review revision/snapshot dan memvalidasi draft. Approval ditolak tanpa submission terbaru; PATCH membatalkan bukti review. Deployment/rollback ditolak bila isi Google Sheet berbeda dari snapshot yang disetujui.
