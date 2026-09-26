@@ -1,6 +1,6 @@
 # TODO implementasi backend
 
-Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 25 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
+Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 26 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
 
 Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres. Centang item hanya setelah kode, migrasi yang diperlukan, pengujian, dan kontrak API selesai. Tandai tahap sedang dikerjakan pada catatan progres; jangan mencentang hanya karena desainnya sudah dibuat.
 
@@ -16,6 +16,15 @@ Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres.
 - [x] API Reference, contoh payload, dan exporter schema/OpenAPI.
 
 Verifikasi historis setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta exporter memverifikasi **117 operasi API**. Migrasi BE-06 `6d1305460956`, staging pertanyaan/keputusan, dan Alembic check diuji pada database test; integrasi provider nyata dan production belum dibuktikan oleh tes ini. Catatan ini dilanjutkan oleh BE-07: preview, approval, dan apply record master sekarang tersedia pada kode dan pengujian.
+
+## Sinkronisasi frontend
+
+Audit 26 September 2026 tersedia di [audit kesesuaian backend dan frontend](AUDIT_FRONTEND_BACKEND_2026-09-26.md).
+Frontend sudah mencakup BE-02 sampai BE-10, cakupan aktif BE-13, BE-14 tahap 1–9,
+serta endpoint aktif registry join BE-14 dan AI task policy BE-15. BE-11/BE-12 tetap
+mengikuti status parsial backend; editor `transform_parameters` BE-12 kini tersedia.
+Regresi frontend: **54 unit test dan 58 browser test lulus**; tes browser memakai mock
+API dan bukan acceptance deployment.
 
 ## Urutan implementasi
 
@@ -251,7 +260,7 @@ serta lifecycle taxonomy lanjutan tetap terpisah dari perbaikan ini.
 
 Prasyarat: BE-08, BE-11, dan kamus parameter BE-12.
 
-Status tinjauan 25 September 2026: **cakupan kode dan frontend BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi. BE-14 sudah berjalan sampai tahap 9**.
+Status tinjauan 26 September 2026: **cakupan kode dan frontend BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi. BE-14 sudah berjalan sampai tahap 9**.
 Guard lifecycle, dependency hash, validasi final-write, revision binding, dan pertanyaan
 ambigu telah diperbaiki. [Temuan, kontrak frontend, dan pekerjaan terbuka](REVIEW_BE13.md).
 
@@ -287,7 +296,7 @@ Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 
 Selesai jika laporan/join menghasilkan angka yang benar dan tidak memperluas akses data pengguna.
 
-Status tinjauan 25 September 2026: tahap 1–9 tersedia pada backend, frontend, dan dokumentasi. Verifikasi terakhir mencakup 66 tes backend terarah, renderer chart Dashboard/Chat, typecheck/build frontend, tes browser visualisasi dinamis, serta exporter **152 operasi API**. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, join multi-product, tab 12/13, dan acceptance provider/deployment nyata.
+Status tinjauan 26 September 2026: tahap 1–9 tersedia pada backend, frontend, dan dokumentasi. Verifikasi terakhir mencakup 66 tes backend terarah, renderer chart Dashboard/Chat, typecheck/build frontend, tes browser visualisasi dinamis, serta exporter **161 operasi API**. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, join multi-product, tab 12/13, dan acceptance provider/deployment nyata.
 
 Progres registry join BE-14 (26 September 2026): model/migrasi
 `platform.join_relationship`, endpoint list/create/edit/approve/reject, validasi
@@ -360,10 +369,10 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 | BE-09 | Sebagian besar tersedia | Dependency plan, load order, cycle/orphan/type guard, dan FK fisik tersedia; koreksi otomatis serta hardening DDL lintas kegagalan masih terbuka |
 | BE-10 | Tersedia pada cakupan kode/test | Review AI batch, coverage, masking, cache, findings/blocker, dan pertanyaan tersedia; acceptance provider/prompt injection nyata masih terbuka |
 | BE-11 | Sebagian selesai | `/sync-review` manual/terjadwal kini membuat batch setelah refresh snapshot dan reuse saat konten sama; orkestrasi approval/apply penuh, apply migrasi, dan E2E domain masih terbuka |
-| BE-12 | Sebagian selesai | DQ, precision/varchar, locale angka, unit, timezone sumber, currency kurs tetap; lihat [handoff frontend](FRONTEND_BE12.md). Effective dating lanjutan, multi-target, dan schema evolution masih pending |
+| BE-12 | Sebagian selesai | Backend dan frontend mendukung DQ, precision/varchar, locale angka, unit, timezone, currency, effective dating, APPEND policy, serta editor transform parameter statis; multi-target/schema evolution tetap pending backend |
 | BE-13 | Tersedia di kode/frontend | Taxonomy, binding, resolver, rekomendasi dan integrasi UI tersedia; acceptance provider/deployment nyata masih terbuka |
-| BE-14 | Tahap 1–9 tersedia | Metadata semantic, periode default, metrik terfilter, ambiguity flow, dan visualisasi dinamis tersedia; approval metrik, AST lanjutan, template lengkap, serta join masih terbuka |
-| BE-15 | Sebagian selesai | Registry task/prompt/model dan runtime policy approved tersedia; trigger, fallback, jadwal, watermark, retention, notifikasi, dan provider live masih terbuka |
+| BE-14 | Tahap 1–9 tersedia; registry join parsial | Frontend mencakup metadata semantic, periode, metrik, ambiguity flow, visualisasi dinamis, dan lifecycle registry join. Compiler multi-product, approval metrik, AST lanjutan, dan template lengkap masih terbuka |
+| BE-15 | Sebagian selesai | Backend dan frontend registry task/prompt/model serta lifecycle policy tersedia. Trigger, fallback, jadwal, watermark, retention, notifikasi, dan provider live masih terbuka |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 
 Referensi: [Spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), [cakupan template ETL](REVIEW_KONFIGURASI_ETL.md), [API Reference aktif](API_REFERENCE.md), [batasan implementasi](IMPLEMENTASI.md), dan [konfigurasi/rotasi kredensial](KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).
