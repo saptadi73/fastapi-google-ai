@@ -11,10 +11,8 @@ from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import AIConfigurationRequest
-from app.schemas.import_review import ImportReviewCreate
 from app.schemas.source import SheetClassificationUpdate, SheetUpdate, SourceCreate
 from app.services.classification_service import ClassificationService
-from app.services.import_review_service import ImportReviewService
 from app.services.job_service import enqueue
 from app.services.source_service import SourceService
 
@@ -89,25 +87,7 @@ async def sync(source_id: UUID, session: Session, user: CurrentUser):
 
 @router.post("/sources/{source_id}/sync-review", status_code=202, dependencies=edit)
 async def sync_review(source_id: UUID, session: Session, user: CurrentUser):
-    repo = SourceRepository(session, user.tenant_id)
-    sheets = await repo.sheets(source_id)
-    reviews = []
-    seen = set()
-    for sheet in sheets:
-        config_id = sheet.active_configuration_id if sheet.dataset_kind != "MASTER" else None
-        try:
-            result = await ImportReviewService(session, user).create(
-                ImportReviewCreate(source_sheet_id=sheet.id, configuration_id=config_id)
-            )
-            key = result.get("review", {}).get("id") if isinstance(result, dict) else None
-            if key and key in seen:
-                continue
-            if key:
-                seen.add(key)
-            reviews.append(result)
-        except AppError as exc:
-            reviews.append({"source_sheet_id": sheet.id, "status": "BLOCKED", "code": exc.code})
-    return success({"source_id": str(source_id), "reviews": reviews})
+    return success(await SourceService(session, user).sync_review(source_id))
 
 
 @router.get("/sources/{source_id}/master-migration-preview")

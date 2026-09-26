@@ -41,6 +41,16 @@ TRANSFORMS = {
 }
 
 
+def apply_transform_parameter(value, parameter):
+    if not isinstance(value, str):
+        return value
+    if parameter.operation == "prefix":
+        return parameter.value + value
+    if parameter.operation == "suffix":
+        return value + parameter.value
+    return value.replace(parameter.value, parameter.replacement or "")
+
+
 def local_timestamp_to_utc(value, timezone_name):
     zone = ZoneInfo(timezone_name)
     candidates = set()
@@ -155,12 +165,15 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
             i = positions[column.source_column]
             value = raw[i] if i < len(raw) else None
             try:
+                parameters = {item.operation: item for item in column.transform_parameters}
                 for transform in column.transformation_codes:
                     if value is not None:
                         if transform == "parse_date_id":
                             value = date_id(value, column.date_format)
                         elif transform == "parse_decimal_id":
                             value = decimal_id(value, column.number_locale or "ID")
+                        elif transform in parameters:
+                            value = apply_transform_parameter(value, parameters[transform])
                         else:
                             value = TRANSFORMS[transform](value)
                 used_default = (value is None or value == "") and column.target_column in defaults

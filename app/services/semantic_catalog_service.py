@@ -1,5 +1,5 @@
 from app.core.exceptions import AppError
-from app.models.semantic import DataProduct, SavedQuery
+from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.repositories.base import record
 from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.semantic import QueryPlan
@@ -45,6 +45,56 @@ class SemanticCatalogService:
         audit(self.session, self.user, "data_product.updated", product.id,
               changed_fields=sorted(changes), semantic_version=product.version)
         return record(product, exclude=("view_name",))
+
+    async def create_join_relationship(self, data):
+        left = await self.repo.product(data.left_product_code, self.user)
+        right = await self.repo.product(data.right_product_code, self.user)
+        if left.id == right.id:
+            raise AppError("JOIN_PRODUCT_INVALID", "Relationship harus menghubungkan dua product berbeda.", 422)
+        for product, column in ((left, data.left_column), (right, data.right_column)):
+            columns = {item["target_column"] for item in product.columns}
+            if column not in columns:
+                raise AppError("JOIN_COLUMN_INVALID", "Kolom relationship tidak tersedia pada product.", 422)
+        obj = await self.repo.add(
+            JoinRelationship, **data.model_dump(), created_by=self.user.id
+        )
+        audit(self.session, self.user, "join_relationship.created", obj.id)
+        return record(obj)
+
+    async def update_join_relationship(self, relationship_id, data):
+        obj = await self.repo.get(JoinRelationship, relationship_id, lock=True)
+        if obj.revision_no != data.revision_no or obj.status != "DRAFT":
+            raise AppError("JOIN_RELATIONSHIP_REVISION_CONFLICT", "Relationship berubah atau bukan draft.", 409)
+        left = await self.repo.product(data.left_product_code, self.user)
+        right = await self.repo.product(data.right_product_code, self.user)
+        if left.id == right.id:
+            raise AppError("JOIN_PRODUCT_INVALID", "Relationship harus menghubungkan dua product berbeda.", 422)
+        for product, column in ((left, data.left_column), (right, data.right_column)):
+            if column not in {item["target_column"] for item in product.columns}:
+                raise AppError("JOIN_COLUMN_INVALID", "Kolom relationship tidak tersedia pada product.", 422)
+        for key, value in data.model_dump(exclude={"revision_no"}).items():
+            setattr(obj, key, value)
+        obj.revision_no += 1
+        obj.approved_by = None
+        audit(self.session, self.user, "join_relationship.updated", obj.id, revision_no=obj.revision_no)
+        return record(obj)
+
+    async def approve_join_relationship(self, relationship_id, data):
+        obj = await self.repo.get(JoinRelationship, relationship_id, lock=True)
+        if obj.revision_no != data.revision_no or obj.status != "DRAFT":
+            raise AppError("JOIN_RELATIONSHIP_REVISION_CONFLICT", "Relationship berubah atau bukan draft.", 409)
+        obj.status, obj.approved_by = "APPROVED", self.user.id
+        obj.revision_no += 1
+        audit(self.session, self.user, "join_relationship.approved", obj.id, revision_no=obj.revision_no)
+        return record(obj)
+
+    async def reject_join_relationship(self, relationship_id, data):
+        obj = await self.repo.get(JoinRelationship, relationship_id, lock=True)
+        if obj.revision_no != data.revision_no or obj.status != "DRAFT":
+            raise AppError("JOIN_RELATIONSHIP_REVISION_CONFLICT", "Relationship berubah atau bukan draft.", 409)
+        obj.status, obj.revision_no = "REJECTED", obj.revision_no + 1
+        audit(self.session, self.user, "join_relationship.rejected", obj.id, revision_no=obj.revision_no)
+        return record(obj)
 
     async def validate_saved(self, template_id):
         obj = await self.repo.get(SavedQuery, template_id, lock=True)

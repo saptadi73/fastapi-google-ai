@@ -28,7 +28,7 @@ REVIEW = "14 Review"
 TAXONOMY = "04 Taxonomy Mapping"
 COLUMN_PARAMETERS = {
     "numeric_precision": 21, "numeric_scale": 22, "varchar_length": 23,
-    "date_format": 24, "number_locale": 25, "unit_conversion": 26, "source_timezone": 27, "currency_conversion": 28,
+    "date_format": 24, "number_locale": 25, "unit_conversion": 26, "source_timezone": 27, "currency_conversion": 28, "transform_parameters": 29,
 }
 # Only these cells are writable. Unsupported parameters and identifiers are signed.
 EDITABLE = {
@@ -147,7 +147,7 @@ def render(config, source, sheet):
             put(ws, i, col, val)
         for name, position in COLUMN_PARAMETERS.items():
             parameter = column[name]
-            put(ws, i, position, json.dumps(parameter, ensure_ascii=False) if name in ("unit_conversion", "currency_conversion") else parameter)
+            put(ws, i, position, json.dumps(parameter, ensure_ascii=False) if name in ("unit_conversion", "currency_conversion", "transform_parameters") else parameter)
         for position, parameter in {1: source.source_code, 2: column["source_column"],
                                     21: column["taxonomy_id"], 22: column["taxonomy_version"],
                                     23: "Ya" if column["taxonomy_required"] else "Tidak",
@@ -410,9 +410,9 @@ def parse_workbook(encoded, config, source, sheet, snapshot):
                 column[key] = active("02 Struktur Kolom", row, col, "Ya", "Tidak")
             for name, position in COLUMN_PARAMETERS.items():
                 parameter = value("02 Struktur Kolom", row, position)
-                column[name] = (json.loads(parameter) if parameter != "" else None) if name in ("unit_conversion", "currency_conversion") else (
+                column[name] = (json.loads(parameter) if parameter != "" else []) if name == "transform_parameters" else ((json.loads(parameter) if parameter != "" else None) if name in ("unit_conversion", "currency_conversion") else (
                     parameter if parameter != "" else None
-                )
+                ))
             column["target_column"] = value("06 Target Database", row, 6)
             if value(TAXONOMY, 4, 21) == "taxonomy_id":
                 column["taxonomy_id"] = value(TAXONOMY, row, 21) or None

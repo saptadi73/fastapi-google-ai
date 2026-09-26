@@ -5,8 +5,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.exceptions import AppError
-from app.models.semantic import DataProduct
-from app.schemas.semantic import ProductUpdate
+from app.models.semantic import DataProduct, JoinRelationship
+from app.schemas.semantic import JoinRelationshipCreate, JoinRelationshipUpdate, ProductUpdate
 from app.services.semantic_catalog_service import SemanticCatalogService
 
 
@@ -25,6 +25,51 @@ def test_metadata_schema_rejects_ambiguous_edits(payload):
 def test_metadata_clear_trim_and_legacy_access():
     assert ProductUpdate(name=" New ", description="", expected_version=1).name == "New"
     assert ProductUpdate(status="SUSPENDED").expected_version is None
+
+
+def test_join_relationship_contract_is_allowlisted():
+    relationship = JoinRelationshipCreate(
+        code="sales_products",
+        left_product_code="SALES",
+        left_column="product_id",
+        right_product_code="PRODUCTS",
+        right_column="id",
+        cardinality="MANY_TO_ONE",
+        join_type="LEFT",
+        duplicate_policy="REJECT_AMBIGUOUS",
+    )
+    assert relationship.cardinality == "MANY_TO_ONE"
+    with pytest.raises(ValidationError):
+        JoinRelationshipCreate(
+            code="bad",
+            left_product_code="SALES",
+            left_column="product_id",
+            right_product_code="PRODUCTS",
+            right_column="id",
+            cardinality="MANY_TO_MANY",
+        )
+
+
+@pytest.mark.asyncio
+async def test_join_relationship_draft_edit_increments_revision_and_clears_approval(monkeypatch):
+    session = Mock()
+    user = SimpleNamespace(tenant_id="tenant", id="editor", role="DATA_STEWARD")
+    relationship = SimpleNamespace(id="relationship", revision_no=2, status="DRAFT", approved_by="approver")
+    left = SimpleNamespace(id="left", columns=[{"target_column": "product_id"}])
+    right = SimpleNamespace(id="right", columns=[{"target_column": "id"}])
+    service = SemanticCatalogService(session, user)
+    service.repo.get = AsyncMock(return_value=relationship)
+    service.repo.product = AsyncMock(side_effect=[left, right])
+    monkeypatch.setattr("app.services.semantic_catalog_service.record", lambda value: vars(value).copy())
+    result = await service.update_join_relationship(
+        "relationship",
+        JoinRelationshipUpdate(
+            revision_no=2, left_product_code="SALES", left_column="product_id",
+            right_product_code="PRODUCTS", right_column="id", cardinality="MANY_TO_ONE",
+        ),
+    )
+    assert result["revision_no"] == 3 and result["approved_by"] is None
+    service.repo.get.assert_awaited_once_with(JoinRelationship, "relationship", lock=True)
 
 
 @pytest.mark.asyncio

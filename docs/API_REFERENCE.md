@@ -789,12 +789,21 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | GET | `/semantic/data-products` | Auth | — | 200 | Alias daftar DataProduct aktif yang diizinkan |
 | PATCH | `/semantic/data-products/{product_id}` | D | ProductUpdate | 200 | DataProduct; name/description/metric_metadata memerlukan expected_version; PRODUCT_VERSION_CONFLICT 409, METRIC_NOT_FOUND/METRIC_SYNONYM_CONFLICT 422; lihat FRONTEND_BE14.md |
 | GET | `/semantic/metrics` | Auth | — | 200 | `[{data_product: code, ...MetricDefinition}]` |
+| GET | `/semantic/join-relationships` | Auth | — | 200 | Registry relationship tenant-scoped |
+| POST | `/semantic/join-relationships` | D | JoinRelationshipCreate | 201 | Relationship DRAFT; validasi product/column/cardinality |
+| PATCH | `/semantic/join-relationships/{relationship_id}` | D | JoinRelationshipUpdate | 200 | Edit hanya DRAFT; revision wajib dan approval dicabut |
+| POST | `/semantic/join-relationships/{relationship_id}/approve` | D | JoinRelationshipAction | 200 | Relationship APPROVED; revision bertambah |
+| POST | `/semantic/join-relationships/{relationship_id}/reject` | D | JoinRelationshipAction | 200 | Relationship REJECTED; revision bertambah |
 | GET | `/semantic/query-templates` | Auth | — | 200 | SavedQuery[] sesuai role; maksimal 100 |
 | POST | `/semantic/query-templates` | D | SavedQueryCreate | 201 | SavedQuery DRAFT |
 | GET | `/semantic/intents` | Auth | — | 200 | Alias daftar query-templates |
 | POST | `/semantic/intents` | D | SavedQueryCreate | 201 | Alias create query-template |
 | POST | `/semantic/query-templates/{template_id}/validate` | D | — | 200 | SavedQuery VALIDATED |
 | POST | `/semantic/query-templates/{template_id}/activate` | D | — | 200 | SavedQuery ACTIVE |
+| GET | `/ai-task-policies` | Auth | — | 200 | Policy task AI tenant-scoped |
+| POST | `/ai-task-policies` | E | AITaskPolicyCreate | 201 | Policy DRAFT; model harus allowlist server |
+| POST | `/ai-task-policies/{policy_id}/approve` | R | AITaskPolicyAction | 200 | Policy APPROVED |
+| POST | `/ai-task-policies/{policy_id}/reject` | R | AITaskPolicyAction | 200 | Policy REJECTED |
 | GET | `/reports/sales/summary` | Auth | start_date, end_date wajib | 200 | QueryRow[] total sales |
 | GET | `/reports/sales/by-branch` | Auth | start_date, end_date wajib | 200 | QueryRow[] per branch |
 | GET | `/reports/sales/trend` | Auth | start_date, end_date wajib | 200 | QueryRow[] per bulan |

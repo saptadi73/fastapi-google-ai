@@ -63,6 +63,7 @@ bukan anggota `transformation_codes`. UI harus melakukan mapping berikut.
 | numeric_precision_scale | columns[i].numeric_precision dan numeric_scale | Dua integer terpisah |
 | date_format | columns[i].date_format | Pakai pola strptime, bukan literal default catalog `ISO-8601` |
 | source_timezone | columns[i].source_timezone | Nama zona IANA, bukan key `timezone` |
+| transform_parameters | columns[i].transform_parameters | Array allowlist `prefix`/`suffix`/`replace`; hanya text/varchar |
 | varchar_length | columns[i].varchar_length | Integer nullable |
 | unit_conversion | columns[i].unit_conversion | Objek nullable |
 | currency_conversion | columns[i].currency_conversion | Objek nullable |

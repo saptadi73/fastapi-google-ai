@@ -31,7 +31,8 @@ yang melihat editor. Request lama frontend tetap kompatibel; editor baru memerlu
 backend tahap ini terlebih dahulu. Tidak ada migrasi database.
 
 Tahap 1 belum mencakup unit/sinonim (ditambahkan pada tahap 2 di bawah), default periode, approval metrik, expression AST,
-template berparameter, atau join multi-product. BE14 masih berlangsung.
+template berparameter, atau query join multi-product. BE14 masih berlangsung. Registry join metadata
+tersedia melalui API semantic, tetapi belum menjadi izin eksekusi query.
 Tes service/schema dan browser memakai mock; bukan bukti konkurensi PostgreSQL nyata.
 
 ## Tahap 2: unit dan sinonim metrik
@@ -158,8 +159,9 @@ saved_query_code dan data_product_code berbeda produk, respons
 SAVED_QUERY_PRODUCT_MISMATCH (422), tanpa eksekusi. Satu template cocok tetap memakai
 INTENT_TEMPLATE; tidak ada kecocokan tetap mengikuti alur AI existing.
 
-Tidak ada migrasi atau endpoint baru. Periode relatif, parameter template, prioritas,
-expression AST, dan join multi-product masih terbuka. Tes service/SQL compilation dan
+Tidak ada migrasi atau endpoint baru pada tahap klarifikasi. Periode relatif, parameter template, prioritas,
+expression AST, dan query join multi-product masih terbuka. Registry relationship tersedia
+terpisah dari compiler. Tes service/SQL compilation dan
 browser menggunakan mock; bukan bukti integrasi PostgreSQL/provider nyata.
 
 ## Tahap 6: metadata metrik dalam konfigurasi dan workbook

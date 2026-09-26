@@ -666,9 +666,6 @@ class MasterService:
                 results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "TARGET_OR_MASTER_NOT_READY"})
                 continue
             definition = MasterSchema.model_validate(master.approved_definition_json)
-            if len(definition.business_key) != 1:
-                results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "COMPOSITE_KEY_REQUIRES_EXPLICIT_MAPPING"})
-                continue
             from app.services.schema_compiler_service import compile_master_table, compile_table
 
             target = compile_table(ETLConfiguration.model_validate(config.configuration_json), sheet.id)
@@ -678,7 +675,7 @@ class MasterService:
                 results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "TARGET_COLUMN_NOT_FOUND"})
                 continue
             target_type = target.c[target_column].type.__class__.__name__.lower()
-            master_type = master_table.c[definition.business_key[0]].type.__class__.__name__.lower()
+            master_type = master_table.c._record_id.type.__class__.__name__.lower()
             if target_type != master_type:
                 results.append({"binding_id": binding.id, "status": "BLOCKED", "reason": "REFERENCE_TYPE_MISMATCH", "target_type": target_type, "master_type": master_type})
                 continue
@@ -688,7 +685,7 @@ class MasterService:
             values = (await self.session.execute(select(target.c[target_column]).where(
                 target.c._tenant_id == self.user.tenant_id, target.c[target_column].is_not(None)
             ).distinct())).scalars().all()
-            known = set((await self.session.execute(select(master_table.c[definition.business_key[0]]).where(
+            known = set((await self.session.execute(select(master_table.c._record_id).where(
                 master_table.c._tenant_id == self.user.tenant_id, master_table.c._is_active.is_(True)
             ))).scalars().all())
             orphan_values = [value for value in values if value not in known]

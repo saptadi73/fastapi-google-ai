@@ -146,3 +146,29 @@ class SavedQueryCreate(StrictModel):
     plan: QueryPlan
     examples: list[str] = Field(default_factory=list, max_length=50)
     allowed_roles: list[Role] = [Role.ANALYST, Role.VIEWER, Role.PLATFORM_ADMIN]
+
+
+class JoinRelationshipCreate(StrictModel):
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    left_product_code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
+    left_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    right_product_code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
+    right_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    cardinality: Literal["ONE_TO_ONE", "MANY_TO_ONE", "ONE_TO_MANY"]
+    join_type: Literal["LEFT", "INNER"] = "LEFT"
+    duplicate_policy: Literal["REJECT_AMBIGUOUS", "AGGREGATE_RIGHT"] = "REJECT_AMBIGUOUS"
+
+
+class JoinRelationshipAction(StrictModel):
+    revision_no: int = Field(ge=1)
+
+
+class JoinRelationshipUpdate(StrictModel):
+    revision_no: int = Field(ge=1)
+    left_product_code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
+    left_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    right_product_code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
+    right_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    cardinality: Literal["ONE_TO_ONE", "MANY_TO_ONE", "ONE_TO_MANY"]
+    join_type: Literal["LEFT", "INNER"] = "LEFT"
+    duplicate_policy: Literal["REJECT_AMBIGUOUS", "AGGREGATE_RIGHT"] = "REJECT_AMBIGUOUS"

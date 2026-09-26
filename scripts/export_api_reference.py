@@ -50,6 +50,7 @@ def build_documents():
         "health",
         "common",
         "taxonomy",
+        "ai_policy",
     ):
         module = importlib.import_module("app.schemas." + name)
         for cls in vars(module).values():

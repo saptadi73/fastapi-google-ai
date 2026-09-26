@@ -38,6 +38,8 @@ async def execute_job(session, job):
         )
     if job.kind == "ETL":
         return await ETLExecutionService(session, user).run(job.source_id)
+    if job.kind == "SYNC_REVIEW":
+        return await SourceService(session, user).sync_review(job.source_id)
     if job.kind == "IMPORT_REVIEW":
         return await ImportReviewService(session, user).work(job)
     raise AppError("JOB_INVALID", "Jenis job tidak dikenal.")
@@ -119,7 +121,7 @@ async def schedule_sources():
                 continue
             pending = await session.scalar(
                 select(Job.id)
-                .where(Job.source_id == source.id, Job.kind == "ETL", Job.status.in_(["QUEUED", "RUNNING"]))
+                .where(Job.source_id == source.id, Job.kind.in_(["ETL", "SYNC_REVIEW"]), Job.status.in_(["QUEUED", "RUNNING"]))
                 .limit(1)
             )
             if not pending:
@@ -128,7 +130,7 @@ async def schedule_sources():
                         tenant_id=source.tenant_id,
                         source_id=source.id,
                         requested_by=source.owner_user_id,
-                        kind="ETL",
+                        kind="SYNC_REVIEW",
                         payload={},
                     )
                 )

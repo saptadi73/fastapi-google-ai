@@ -1,6 +1,6 @@
 # Hasil tinjauan BE-13 — 9 September 2026
 
-**Status: cakupan kode BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi. BE-14 belum dimulai.** Registry,
+**Status: cakupan kode BE-13 tersedia; acceptance provider/deployment tujuan belum diverifikasi. BE-14 sudah berjalan pada metadata semantic dan registry join, sedangkan query multi-product masih terbuka.** Registry,
 versioning, normalisasi runtime/worker, pertanyaan otomatis dan workbook sudah tersedia;
 saran AI generatif tersedia melalui endpoint terpisah. Untuk integrasi bertahap gunakan
 [handoff frontend BE-13](FRONTEND_BE13.md) dan [contoh payload](api/BE13_FRONTEND_PAYLOADS.json). Pemeriksaan ini mencakup kode endpoint, service

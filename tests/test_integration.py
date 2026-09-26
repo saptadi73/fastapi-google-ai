@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -17,10 +18,12 @@ from app.main import app
 from app.models import Base
 from app.models.auth import Tenant, User
 from app.models.configuration import Artifact, Configuration
+from app.models.etl import Job
+from app.models.import_review import ImportReview
 from app.models.master import MasterDefinition
-from app.models.source import SourceSheet
+from app.models.source import DataSource, SourceSheet
 from app.services.google_sheets_service import GoogleSheetsService
-from app.workers.runner import run_pending
+from app.workers.runner import run_pending, schedule_sources
 
 pytestmark = pytest.mark.integration
 
@@ -613,3 +616,57 @@ async def test_classification_optimistic_concurrency_and_database_constraints(co
             with pytest.raises(IntegrityError):
                 await session.execute(update(SourceSheet).where(SourceSheet.id == sheet_id).values(**values))
             await session.rollback()
+
+
+async def test_scheduled_sync_review_refreshes_and_reuses_batch(context, config_data):
+    ctx = context
+    source_id, _, config = await onboard(ctx, config_data)
+    await activate(ctx, config)
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(DataSource)
+            .where(DataSource.id == source_id)
+            .values(
+                status="ACTIVE",
+                sync_schedule="* * * * *",
+                last_scheduled_at=datetime.now(timezone.utc) - timedelta(days=1),
+            )
+        )
+
+    await schedule_sources()
+    async with SessionFactory() as session:
+        scheduled = await session.scalar(
+            select(Job)
+            .where(Job.source_id == source_id, Job.kind == "SYNC_REVIEW")
+            .order_by(Job.created_at.desc())
+        )
+        assert scheduled is not None and scheduled.status == "QUEUED"
+    await run_pending(ctx.tenant_id)
+    async with SessionFactory() as session:
+        completed = await session.get(Job, scheduled.id)
+        reviews = (await session.scalars(
+            select(ImportReview).where(ImportReview.source_id == source_id)
+        )).all()
+        assert completed.status == "SUCCEEDED", (completed.error_code, completed.error_message)
+        assert completed.result["reviews"][0]["reused"] is False
+        assert len(reviews) == 1
+
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(DataSource)
+            .where(DataSource.id == source_id)
+            .values(last_scheduled_at=datetime.now(timezone.utc) - timedelta(days=1))
+        )
+    await schedule_sources()
+    await run_pending(ctx.tenant_id)
+    await run_pending(ctx.tenant_id)
+    async with SessionFactory() as session:
+        reviews = (await session.scalars(
+            select(ImportReview).where(ImportReview.source_id == source_id)
+        )).all()
+        assert len(reviews) == 1
+        scheduled_jobs = (await session.scalars(
+            select(Job).where(Job.source_id == source_id, Job.kind == "SYNC_REVIEW")
+        )).all()
+        assert len(scheduled_jobs) == 2
+        assert scheduled_jobs[-1].result["reviews"][0]["reused"] is True

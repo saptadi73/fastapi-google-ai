@@ -37,6 +37,23 @@ class SavedQuery(TenantEntity, Base):
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
 
 
+class JoinRelationship(TenantEntity, Base):
+    __tablename__ = "join_relationship"
+    __table_args__ = (UniqueConstraint("tenant_id", "code"), {"schema": "platform"})
+    code: Mapped[str] = mapped_column(String(63))
+    left_product_code: Mapped[str] = mapped_column(String(63))
+    left_column: Mapped[str] = mapped_column(String(63))
+    right_product_code: Mapped[str] = mapped_column(String(63))
+    right_column: Mapped[str] = mapped_column(String(63))
+    cardinality: Mapped[str] = mapped_column(String(20))
+    join_type: Mapped[str] = mapped_column(String(20), default="LEFT")
+    duplicate_policy: Mapped[str] = mapped_column(String(30), default="REJECT_AMBIGUOUS")
+    revision_no: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")
+    created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
+    approved_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
+
+
 class QueryRequest(TenantEntity, Base):
     __tablename__ = "nl2sql_request_log"
     __table_args__ = {"schema": "platform"}

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_model_etl_config: str = ""
     openai_model_nl2sql: str = ""
+    openai_allowed_models: list[str] = []
     openai_store_responses: bool = False
     openai_timeout_seconds: int = 60
     openai_max_output_tokens: int = 12000

@@ -931,6 +931,38 @@ Body: [ProductUpdate](#productupdate).
 
 Body: —.
 
+### GET /api/v1/semantic/join-relationships
+
+Body: —.
+
+### POST /api/v1/semantic/join-relationships
+
+Body: [JoinRelationshipCreate](#joinrelationshipcreate).
+
+### PATCH /api/v1/semantic/join-relationships/{relationship_id}
+
+Body: [JoinRelationshipUpdate](#joinrelationshipupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `relationship_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/semantic/join-relationships/{relationship_id}/approve
+
+Body: [JoinRelationshipAction](#joinrelationshipaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `relationship_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/semantic/join-relationships/{relationship_id}/reject
+
+Body: [JoinRelationshipAction](#joinrelationshipaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `relationship_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/semantic/query-templates
 
 Body: —.
@@ -1107,6 +1139,30 @@ Body: —.
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
 
+### GET /api/v1/ai-task-policies
+
+Body: —.
+
+### POST /api/v1/ai-task-policies
+
+Body: [AITaskPolicyCreate](#aitaskpolicycreate).
+
+### POST /api/v1/ai-task-policies/{policy_id}/approve
+
+Body: [AITaskPolicyAction](#aitaskpolicyaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/ai-task-policies/{policy_id}/reject
+
+Body: [AITaskPolicyAction](#aitaskpolicyaction).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /health/live
 
 Body: —.
@@ -1141,6 +1197,46 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### AITaskPolicyAction
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `comment` | Tidak | `string` | "" | {"maxLength":2000} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "comment": "Policy dan model sudah diperiksa."
+}
+```
+
+### AITaskPolicyCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `purpose` | Ya | `enum ["ETL_CONFIG","TAXONOMY_RECOMMEND","NL2SQL"]` | — | — |
+| `prompt_version` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_.-]{0,79}$"} |
+| `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
+| `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "taxonomy_review",
+  "purpose": "TAXONOMY_RECOMMEND",
+  "prompt_version": "taxonomy_recommend_v1.md",
+  "model": "gpt-5-mini",
+  "allowed_models": [
+    "gpt-5-mini"
+  ]
+}
+```
+
 ### ColumnMapping
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -1152,7 +1248,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `nullable` | Tidak | `boolean` | true | — |
 | `is_business_key` | Tidak | `boolean` | false | — |
 | `is_primary_key` | Tidak | `boolean` | false | — |
-| `transformation_codes` | Tidak | `array<enum ["trim","normalize_whitespace","parse_date_id","parse_decimal_id","uppercase","lowercase","null_if_empty"]>` | [] | {"maxItems":10} |
+| `transformation_codes` | Tidak | `array<enum ["trim","normalize_whitespace","parse_date_id","parse_decimal_id","uppercase","lowercase","null_if_empty","prefix","suffix","replace"]>` | [] | {"maxItems":10} |
+| `transform_parameters` | Tidak | `array<TransformParameter>` | [] | {"maxItems":10} |
 | `pii_classification` | Tidak | `enum ["NONE","LOW","MEDIUM","HIGH"]` | "NONE" | — |
 | `confidence` | Tidak | `number` | 1 | {"maximum":1.0,"minimum":0.0} |
 | `reason` | Tidak | `string` | "" | — |
@@ -1641,6 +1738,76 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 ### ImportStatus
 
 `enum ["CLASSIFICATION_REQUIRED","MAPPING_REQUIRED","VALIDATING","AI_REVIEWING","NEEDS_INPUT","READY_FOR_APPROVAL","APPROVED","APPLYING","SUCCEEDED","FAILED","CANCELLED","STALE_REVIEW"]`
+
+### JoinRelationshipAction
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1
+}
+```
+
+### JoinRelationshipCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `left_product_code` | Ya | `string` | — | {"pattern":"^[A-Za-z][A-Za-z0-9_]{0,62}$"} |
+| `left_column` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `right_product_code` | Ya | `string` | — | {"pattern":"^[A-Za-z][A-Za-z0-9_]{0,62}$"} |
+| `right_column` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `cardinality` | Ya | `enum ["ONE_TO_ONE","MANY_TO_ONE","ONE_TO_MANY"]` | — | — |
+| `join_type` | Tidak | `enum ["LEFT","INNER"]` | "LEFT" | — |
+| `duplicate_policy` | Tidak | `enum ["REJECT_AMBIGUOUS","AGGREGATE_RIGHT"]` | "REJECT_AMBIGUOUS" | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "sales_products",
+  "left_product_code": "SALES",
+  "left_column": "product_id",
+  "right_product_code": "PRODUCTS",
+  "right_column": "id",
+  "cardinality": "MANY_TO_ONE",
+  "join_type": "LEFT",
+  "duplicate_policy": "REJECT_AMBIGUOUS"
+}
+```
+
+### JoinRelationshipUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `left_product_code` | Ya | `string` | — | {"pattern":"^[A-Za-z][A-Za-z0-9_]{0,62}$"} |
+| `left_column` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `right_product_code` | Ya | `string` | — | {"pattern":"^[A-Za-z][A-Za-z0-9_]{0,62}$"} |
+| `right_column` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `cardinality` | Ya | `enum ["ONE_TO_ONE","MANY_TO_ONE","ONE_TO_MANY"]` | — | — |
+| `join_type` | Tidak | `enum ["LEFT","INNER"]` | "LEFT" | — |
+| `duplicate_policy` | Tidak | `enum ["REJECT_AMBIGUOUS","AGGREGATE_RIGHT"]` | "REJECT_AMBIGUOUS" | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "left_product_code": "SALES",
+  "left_column": "product_id",
+  "right_product_code": "PRODUCTS",
+  "right_column": "id",
+  "cardinality": "MANY_TO_ONE",
+  "join_type": "LEFT",
+  "duplicate_policy": "REJECT_AMBIGUOUS"
+}
+```
 
 ### Liveness
 
@@ -2486,6 +2653,14 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   ]
 }
 ```
+
+### TransformParameter
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `operation` | Ya | `enum ["prefix","suffix","replace"]` | — | — |
+| `value` | Ya | `string` | — | {"maxLength":500} |
+| `replacement` | Tidak | `string / null` | — | — |
 
 ### UnitConversion
 

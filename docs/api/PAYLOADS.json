@@ -257,6 +257,29 @@
       "VIEWER"
     ]
   },
+  "JoinRelationshipCreate": {
+    "code": "sales_products",
+    "left_product_code": "SALES",
+    "left_column": "product_id",
+    "right_product_code": "PRODUCTS",
+    "right_column": "id",
+    "cardinality": "MANY_TO_ONE",
+    "join_type": "LEFT",
+    "duplicate_policy": "REJECT_AMBIGUOUS"
+  },
+  "JoinRelationshipAction": {
+    "revision_no": 1
+  },
+  "JoinRelationshipUpdate": {
+    "revision_no": 1,
+    "left_product_code": "SALES",
+    "left_column": "product_id",
+    "right_product_code": "PRODUCTS",
+    "right_column": "id",
+    "cardinality": "MANY_TO_ONE",
+    "join_type": "LEFT",
+    "duplicate_policy": "REJECT_AMBIGUOUS"
+  },
   "SavedQueryCreate": {
     "code": "sales_by_branch",
     "data_product_code": "SALES",
@@ -325,6 +348,17 @@
     "time_grain": "none",
     "limit": 100,
     "offset": 0
+  },
+  "AITaskPolicyCreate": {
+    "code": "taxonomy_review",
+    "purpose": "TAXONOMY_RECOMMEND",
+    "prompt_version": "taxonomy_recommend_v1.md",
+    "model": "gpt-5-mini",
+    "allowed_models": ["gpt-5-mini"]
+  },
+  "AITaskPolicyAction": {
+    "revision_no": 1,
+    "comment": "Policy dan model sudah diperiksa."
   },
   "QuestionRequest": {
     "question": "Berapa penjualan per cabang pada September 2026?",

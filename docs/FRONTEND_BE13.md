@@ -1,7 +1,7 @@
 # Handoff frontend BE-13: taxonomy, bertahap
 
 Acuan kode workspace: 9 September 2026. **Tahap 1–4 di bawah dapat mulai diintegrasikan;
-Tahap 5 menambahkan saran AI generatif; verifikasi provider/deployment tujuan masih diperlukan. BE-14 belum dimulai.**
+Tahap 5 menambahkan saran AI generatif; verifikasi provider/deployment tujuan masih diperlukan. BE-14 sudah memiliki registry join metadata, tetapi query multi-product belum diaktifkan.**
 Migrasi registry/version sudah diuji pada database test, belum merupakan bukti deployment
 ke environment frontend. Backend tujuan harus memiliki migrasi sampai `9b07c8d6e5fa`
 dan kode worker terbaru sebelum pengujian bersama.

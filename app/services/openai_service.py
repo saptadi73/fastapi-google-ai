@@ -7,7 +7,14 @@ from sqlalchemy import func, select, text
 from app.core.config import ROOT, get_settings
 from app.core.database import SessionFactory
 from app.core.exceptions import AppError
+from app.models.ai_policy import AITaskPolicy
 from app.models.audit import AIUsage
+
+PROMPT_PATHS = {
+    "ETL_CONFIG": "etl_configuration_v1.md",
+    "TAXONOMY_RECOMMEND": "taxonomy_recommend_v1.md",
+    "NL2SQL": "nl2sql_v1.md",
+}
 
 
 class OpenAIService:
@@ -16,12 +23,22 @@ class OpenAIService:
         model = s.openai_model_etl_config if purpose in ("ETL_CONFIG", "TAXONOMY_RECOMMEND") else s.openai_model_nl2sql
         if not s.openai_api_key.get_secret_value() or not model:
             raise AppError("OPENAI_NOT_CONFIGURED", "Isi OPENAI_API_KEY dan OPENAI_MODEL_* pada .env.", 503)
-        template = ("taxonomy_recommend_v1.md" if purpose == "TAXONOMY_RECOMMEND" else
-                    "etl_configuration_v1.md" if purpose == "ETL_CONFIG" else "nl2sql_v1.md")
+        template = PROMPT_PATHS.get(purpose, "nl2sql_v1.md")
         prompt = (ROOT / "app/prompts" / template).read_text(encoding="utf-8")
         start = time.monotonic()
         # A separate committed ledger persists usage even if downstream validation fails.
         async with SessionFactory() as usage_session, usage_session.begin():
+            policy = await usage_session.scalar(
+                select(AITaskPolicy).where(
+                    AITaskPolicy.tenant_id == user.tenant_id,
+                    AITaskPolicy.purpose == purpose,
+                    AITaskPolicy.status == "APPROVED",
+                ).order_by(AITaskPolicy.created_at.desc()).limit(1)
+            )
+            if policy is not None and hasattr(policy, "model"):
+                if policy.model not in policy.allowed_models or policy.prompt_version != PROMPT_PATHS.get(purpose):
+                    raise AppError("AI_TASK_POLICY_INVALID", "Policy AI tersimpan tidak valid.", 503)
+                model, template = policy.model, policy.prompt_version
             await usage_session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": "ai-quota:" + user.tenant_id}
             )

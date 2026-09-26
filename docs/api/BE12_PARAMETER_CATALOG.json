@@ -201,15 +201,18 @@
           "parse_decimal_id",
           "uppercase",
           "lowercase",
-          "null_if_empty"
+          "null_if_empty",
+          "prefix",
+          "suffix",
+          "replace"
         ]
       },
       {
         "name": "transform_parameters",
         "type": "object[]",
         "default": [],
-        "supported": false,
-        "reason": "BE-12 parameterized transform registry"
+        "supported": true,
+        "scope": "columns.transform_parameters; prefix/suffix/replace on text/varchar; no dynamic expressions"
       },
       {
         "name": "dq_threshold_percent",

@@ -44,6 +44,21 @@ def test_metric_null_policy_survives_workbook_roundtrip(workbook_context):
     assert result["configuration"]["semantic"]["metrics"][0] == config["semantic"]["metrics"][0]
 
 
+def test_parameterized_transform_roundtrip(workbook_context):
+    config = workbook_context[0].configuration_json
+    config["columns"][2].update(
+        transformation_codes=["prefix", "replace"],
+        transform_parameters=[
+            {"operation": "prefix", "value": "ID-"},
+            {"operation": "replace", "value": "Jakarta", "replacement": "JKT"},
+        ],
+    )
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert not result["errors"]
+    expected = ETLConfiguration.model_validate(config).model_dump(mode="json")
+    assert result["configuration"]["columns"][2]["transform_parameters"] == expected["columns"][2]["transform_parameters"]
+
+
 def test_in_taxonomy_rule_roundtrip_and_reject_warning_only(workbook_context):
     config = workbook_context[0].configuration_json
     config["columns"][2].update(taxonomy_id="00000000-0000-0000-0000-000000000001", taxonomy_version=1,

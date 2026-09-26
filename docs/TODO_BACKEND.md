@@ -151,9 +151,9 @@ Prasyarat: BE-04 dan BE-08.
 - [x] Validasi orphan/type sebelum memasang FK pada target yang sudah berisi data.
 - [x] Sediakan pemeriksaan orphan read-only pada target trusted terhadap business key master.
 - [x] Tangani retry deployment constraint yang sudah ada dengan hasil `reused`.
-- [ ] Uji penolakan FK orphan/lintas tenant langsung di PostgreSQL, dependensi bertingkat, siklus, dan kegagalan DDL.
+- [~] Uji penolakan FK orphan/lintas tenant langsung di PostgreSQL, enforcement FK, dan retry constraint sudah tersedia; coverage dependensi bertingkat/siklus serta kegagalan privilege/DDL lintas konfigurasi masih perlu ditambahkan.
 
-Status BE-09: dependency plan, load order, deteksi siklus, pemeriksaan orphan/type, dan deployment FK fisik tersedia; tindakan koreksi otomatis dan hardening DDL lintas kegagalan masih terbuka. FK fisik belum berarti query join NL2SQL diaktifkan.
+Status BE-09: dependency plan, load order, deteksi siklus, pemeriksaan orphan/type, dan deployment FK fisik tersedia. Validasi target kini menggunakan UUID hasil resolusi terhadap `_record_id` master; test PostgreSQL mencakup orphan, isolasi tenant, enforcement FK, dan retry constraint (`reused`). Coverage dependensi bertingkat/siklus dan hardening DDL lintas konfigurasi masih terbuka; query join NL2SQL tetap di luar cakupan BE-09.
 
 ### BE-10 — Review AI pada setiap snapshot baru
 
@@ -176,7 +176,7 @@ Prasyarat: BE-07–BE-10.
 
 - [x] Sediakan jalur `sync-review` yang membuat batch review per tab dan mengembalikan tab yang belum siap sebagai `BLOCKED`.
 - [x] Pertahankan idempotency batch saat sync-review diulang pada snapshot/configuration yang sama.
-- [ ] Hubungkan sync manual dan terjadwal sepenuhnya ke validasi deterministik, resolusi referensi, AI review, pertanyaan, approval, dan apply.
+- [~] Hubungkan sync manual dan terjadwal ke batch review: `/sync-review` manual dan scheduler kini refresh snapshot lalu membuat batch idempotent; approval/apply penuh dan jalur `/sync` legacy masih dipertahankan.
 - [x] Revalidasi batch ketika snapshot, konfigurasi, master, binding/alias, atau policy yang relevan berubah melalui dependency hash.
 - [x] Tandai response `/sync` sebagai `LEGACY_ETL` dan arahkan frontend ke `/sync-review`; kompatibilitas legacy tetap dipertahankan sementara migrasi penuh belum selesai.
 - [x] Siapkan preview migrasi target per tab ke master kanonis beserta binding dan validation gate; deduplikasi, mapping ID lama-baru, dan apply migrasi tetap memerlukan tahap berikutnya.
@@ -198,12 +198,12 @@ Status: dukungan runtime bertahap tersedia untuk numeric precision/scale, format
 - [x] Publikasikan allowlist transformasi runtime; DQ threshold dan konversi unit/currency eksplisit kini didukung. Transform expression/kondisi dinamis tetap unsupported.
 - [x] Inventaris effective dating policy master, unit conversion, multi-target, dan schema evolution; unit conversion massa/volume/panjang kini didukung, multi-target/schema evolution tetap unsupported.
 - [~] Lengkapi locale/timezone, entity/domain, dan unit/currency (timezone IANA sumber timestamptz tersedia, normalisasi UTC dan penolakan DST ambigu/gap; unit dan currency kurs tetap eksplisit tersedia); format tanggal, numeric precision/scale, locale angka, dan panjang varchar sudah didukung bertahap.
-- [x] Sediakan registry operasi allowlist beserta parameter schema dan `on_error`; eksekusi transform berparameter, kondisi, dan urutan dinamis tetap diblokir sampai compiler siap.
+- [~] Sediakan registry operasi allowlist beserta parameter schema dan `on_error`; transform `prefix`/`suffix`/`replace` berparameter untuk text/varchar kini didukung dan round-trip XLSX teruji. Expression dinamis, kondisi, dan urutan transform bebas tetap diblokir.
 - [~] Lengkapi DQ format/domain, threshold persen, severity/owner, max_age_days, serta default value dengan semantics yang disetujui (runtime format allowlist/domain allowed_values, threshold per rule, default bertipe, umur UTC, dan round-trip XLSX tersedia; severity/owner menjadi metadata, action_on_fail mengendalikan routing; notifikasi owner otomatis belum tersedia).
 - [~] Implementasikan versi/master bermasa berlaku: versi eksplisit immutable, key entitas + valid_from, validasi overlap preview/apply dan skip UNCHANGED tersedia. Penutupan periode terbuka tersedia melalui preview opt-in dan approval; rollback, dua apply bersamaan, retry, batas as_of, dan isolasi tenant telah diuji PostgreSQL. Koreksi bebas dan FK as-of masih terbuka. Lihat [panduan](EFFECTIVE_DATING_BE12.md).
 - [x] Implementasikan konversi satuan eksplisit untuk massa/volume/panjang, faktor tervalidasi dan pembulatan HALF_UP/HALF_EVEN/DOWN; alias ejaan dan satuan custom tetap unsupported; currency memakai parameter terpisah.
 - [x] Rancang split grain/multi-target, schema evolution, default/update condition, serta kebijakan append event identik. [Rancangan dan batas runtime](LOAD_POLICIES_BE12.md); payload multi-target/evolution/kondisi dinamis tetap unsupported.
-- [~] Tambahkan dukungan bertahap ke schema, compiler, dry-run, artifact, API, dan XLSX secara bersamaan; numeric/date/locale, DQ, unit/currency/timezone, dan policy APPEND tanpa key tersedia; unsupported tetap ditolak sampai runtime tersedia.
+- [~] Tambahkan dukungan bertahap ke schema, compiler, dry-run, artifact, API, dan XLSX secara bersamaan; numeric/date/locale, DQ, unit/currency/timezone, APPEND tanpa key, dan transform parameter allowlist tersedia. Multi-target, schema evolution, expression/kondisi dinamis, dan parameter lanjutan tetap ditolak.
 
 Progres DQ BE-12 (9 September 2026): format allowlist `UUID`/`ISO_DATE`/`ISO_DATETIME`, domain `allowed_values`, umur maksimum UTC, threshold per indeks rule (batas inklusif), default sebelum cast/nullability, dan metadata severity/owner telah terhubung compiler serta XLSX. Tab 05 memakai G/J/K/O/P untuk parameter tambahan. Tidak memerlukan migrasi database. Bukti: 23 tes DQ/ETL/XLSX lulus dalam pengujian terarah (19 tes awal + 4 kasus tambahan); 14 tes query security lulus setelah memperbaiki allowlist `label` metric. Ruff pada file perubahan tahap ini lulus; Ruff global masih memiliki 20 temuan di file lain. Exporter `--check` memverifikasi 145 operasi. Integrasi PostgreSQL/provider nyata belum dijalankan pada tahap ini. Severity/owner belum mengirim notifikasi atau assignment otomatis.
 
@@ -224,6 +224,13 @@ Progres hardening PostgreSQL BE-12 (9 September 2026): 7 tes integrasi baru memb
 Regresi setelah hardening: **200 tes non-integrasi lulus**, termasuk workbook XLSX (42 tes integrasi dikecualikan dari perintah regresi; 7 tes baru dijalankan terpisah di atas).
 
 Progres APPEND BE-12 (9 September 2026): `append_duplicate_policy` SKIP_IDENTICAL/REJECT_IDENTICAL khusus APPEND tanpa business/primary key terhubung schema, dry-run, preview/approval/apply, ETL legacy, catalog/artifact, serta XLSX 14 Review B8. Default null menyamakan apply batch dengan skip duplikat legacy; rows_applied menghitung INSERT aktual. Staging JSON dikembalikan ke tipe target tanpa transform ulang. Rancangan multi-target/schema evolution/update condition selesai didokumentasikan, runtime fitur tersebut tetap unsupported. Bukti: **208 tes non-integrasi, 6 tes PostgreSQL APPEND, dan 7 tes PostgreSQL effective dating lulus**; Ruff file kode perubahan dan exporter 145 operasi lulus. Tidak ada migrasi baru; database test menjalankan migrasi existing sampai head, sedangkan `alembic check` menemukan drift existing master_column_binding/taxonomy yang masih harus diperbaiki. [Kontrak, rancangan, dan batas bukti](LOAD_POLICIES_BE12.md).
+
+Progres transform parameter BE-12 (26 September 2026): operasi allowlist `prefix`,
+`suffix`, dan `replace` mendukung parameter statis pada kolom text/varchar. Kontrak
+menolak target non-text, parameter tanpa operation code, operation tanpa parameter,
+duplikasi, dan `replace` tanpa replacement. Runtime mengikuti urutan
+`transformation_codes`; catalog API dan workbook kolom AC ikut terhubung. Bukti:
+**6 tes terarah lulus**, termasuk runtime, kontrak invalid, dan round-trip XLSX.
 
 Selesai per field/fitur jika konfigurasi benar-benar memengaruhi runtime dan export–import tidak kehilangan maknanya. Pecah tahap ini menjadi PR per kemampuan, bukan satu perubahan besar.
 
@@ -258,6 +265,13 @@ ambigu telah diperbaiki. [Temuan, kontrak frontend, dan pekerjaan terbuka](REVIE
 
 Selesai jika nilai kategori dinormalisasi melalui aturan approved tanpa mengubah identitas master secara keliru.
 
+Progres BE-13 (26 September 2026): suite terarah taxonomy lulus **46 tes** mencakup
+publish lintas versi dan invalidasi binding lama, hierarchy/cycle/ancestor aktif,
+backfill snapshot migration dan tenant FK, canonical normalization, pertanyaan worker,
+AI recommendation contract, serta round-trip workbook taxonomy. Runtime BE-13 tetap
+memerlukan acceptance provider OpenAI/deployment tujuan; sejarah taxonomy sebelum
+migrasi snapshot tidak direkonstruksi.
+
 ### BE-14 — Semantic catalog, metrik, intent, dan join
 
 Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
@@ -266,20 +280,27 @@ Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 - [~] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi (aggregation/kolom, PRESERVE/ZERO_RESULT, serta filter tetap bertipe melalui aggregate FILTER tersedia dalam konfigurasi reviewed, frontend, dan workbook tab 11 H/M; expression arithmetic AST lanjutan belum).
 - [~] Tambahkan query template berparameter dan periode relatif, timezone, output type, priority, serta ambiguity policy. Tahap 5 BE14 meminta pilihan eksplisit untuk template ambigu (backend + Chat frontend), memeriksa ulang akses/versi; parameter, periode, timezone/output dan priority masih terbuka.
 - [x] Tambahkan spesifikasi visualisasi allowlist pada QueryPlan dan saved query: table, KPI, bar, line, area, pie/donut, combo, scatter, heatmap; validasi field output, renderer Dashboard/Chat, override manual, dan isolasi SQL/cache tersedia pada tahap 9.
-- [ ] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda.
+- [~] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda. Registry tenant-scoped dengan lifecycle DRAFT/APPROVED/REJECTED, optimistic revision, validasi product/column, join type, cardinality, dan duplicate policy sudah tersedia; query execution masih belum mengaktifkan JOIN.
 - [ ] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join.
 - [~] Aktifkan field lanjutan tab 10–13 setelah compiler dan validasinya siap. Tab 10/11 sudah aktif untuk metadata periode dan metrik yang didukung; tab 12/13 serta parameter lanjutan masih terbuka.
-- [ ] Uji total agregasi pada one-to-many, relasi ambigu, unauthorized join, filter waktu, dan saved query versi lama.
+- [~] Uji kontrak registry join dan validasi metadata sudah tersedia; pengujian agregasi one-to-many, relasi ambigu saat query, unauthorized join, filter waktu lintas product, dan saved query join masih menunggu compiler multi-product.
 
 Selesai jika laporan/join menghasilkan angka yang benar dan tidak memperluas akses data pengguna.
 
 Status tinjauan 25 September 2026: tahap 1–9 tersedia pada backend, frontend, dan dokumentasi. Verifikasi terakhir mencakup 66 tes backend terarah, renderer chart Dashboard/Chat, typecheck/build frontend, tes browser visualisasi dinamis, serta exporter **152 operasi API**. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, join multi-product, tab 12/13, dan acceptance provider/deployment nyata.
 
+Progres registry join BE-14 (26 September 2026): model/migrasi
+`platform.join_relationship`, endpoint list/create/edit/approve/reject, validasi
+tenant/product/column, cardinality `ONE_TO_ONE`/`MANY_TO_ONE`/`ONE_TO_MANY`,
+join type `LEFT`/`INNER`, dan duplicate policy sudah tersedia. Query compiler tetap
+single-product dan SQL guard tetap menolak JOIN sampai tenant scope, row scope, PII,
+dan kebijakan agregasi ganda memiliki implementasi serta test end-to-end.
+
 ### BE-15 — Kebijakan AI dan operasional per dataset/task
 
 Prasyarat: BE-10 dan BE-11; kontrak parameter mengikuti BE-12.
 
-- [ ] Buat registry task/prompt/version dan assignment model melalui allowlist server; jangan simpan API key dalam workbook.
+- [~] Buat registry task/prompt/version dan assignment model melalui allowlist server; registry tenant-scoped, approval, prompt mapping internal, dan runtime override OpenAI sudah tersedia. API key tetap hanya dari environment; edit policy, assignment per dataset, dan version history lanjutan masih terbuka.
 - [ ] Tambahkan trigger, threshold, masking, budget, dan fallback policy per task dengan approval/audit perubahan.
 - [ ] Tambahkan edit jadwal, timezone, dependency job, concurrency policy, dan incremental watermark yang commit hanya setelah load sukses.
 - [ ] Implementasikan retention snapshot/artifact/audit sesuai kebutuhan, statistik proses, dan notifikasi NEEDS_INPUT/FAILED.
@@ -287,6 +308,14 @@ Prasyarat: BE-10 dan BE-11; kontrak parameter mengikuti BE-12.
 - [ ] Aktifkan parameter tab 07/08 bertahap; uji jadwal, retry, perubahan policy, batas biaya, dan pergantian kredensial.
 
 Selesai jika operasi berulang dapat dikonfigurasi, diamati, dan dipulihkan tanpa menghilangkan bukti review.
+
+Progres BE-15 (26 September 2026): registry `platform.ai_task_policy` dan endpoint
+list/create/approve/reject tersedia untuk purpose `ETL_CONFIG`, `TAXONOMY_RECOMMEND`,
+dan `NL2SQL`. Prompt version hanya menerima file prompt yang dipetakan server;
+model harus termasuk allowlist server dari settings atau model purpose terkait.
+`OpenAIService` memakai policy APPROVED bila tersedia dan tetap mengambil API key dari
+environment, bukan workbook/database. Kontrak lengkap: [AI task policy BE-15](AI_TASK_POLICIES_BE15.md).
+Bukti: **4 tes terarah lulus**; provider nyata belum dipanggil.
 
 ### BE-16 — Kesiapan deployment production
 
@@ -330,11 +359,11 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 | BE-08 | Selesai pada cakupan kode/test | Resolver berscope, lifecycle alias, validasi UUID, dependency freshness; lihat hardening BE-08 |
 | BE-09 | Sebagian besar tersedia | Dependency plan, load order, cycle/orphan/type guard, dan FK fisik tersedia; koreksi otomatis serta hardening DDL lintas kegagalan masih terbuka |
 | BE-10 | Tersedia pada cakupan kode/test | Review AI batch, coverage, masking, cache, findings/blocker, dan pertanyaan tersedia; acceptance provider/prompt injection nyata masih terbuka |
-| BE-11 | Sebagian selesai | `sync-review`, idempotency, dependency revalidation, dan preview migrasi tersedia; orkestrasi manual/terjadwal penuh, apply migrasi, dan E2E domain masih terbuka |
+| BE-11 | Sebagian selesai | `/sync-review` manual/terjadwal kini membuat batch setelah refresh snapshot dan reuse saat konten sama; orkestrasi approval/apply penuh, apply migrasi, dan E2E domain masih terbuka |
 | BE-12 | Sebagian selesai | DQ, precision/varchar, locale angka, unit, timezone sumber, currency kurs tetap; lihat [handoff frontend](FRONTEND_BE12.md). Effective dating lanjutan, multi-target, dan schema evolution masih pending |
 | BE-13 | Tersedia di kode/frontend | Taxonomy, binding, resolver, rekomendasi dan integrasi UI tersedia; acceptance provider/deployment nyata masih terbuka |
 | BE-14 | Tahap 1–9 tersedia | Metadata semantic, periode default, metrik terfilter, ambiguity flow, dan visualisasi dinamis tersedia; approval metrik, AST lanjutan, template lengkap, serta join masih terbuka |
-| BE-15 | Belum dimulai | Kebijakan AI dan operasional per dataset/task masih mengikuti checklist |
+| BE-15 | Sebagian selesai | Registry task/prompt/model dan runtime policy approved tersedia; trigger, fallback, jadwal, watermark, retention, notifikasi, dan provider live masih terbuka |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 
 Referensi: [Spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), [cakupan template ETL](REVIEW_KONFIGURASI_ETL.md), [API Reference aktif](API_REFERENCE.md), [batasan implementasi](IMPLEMENTASI.md), dan [konfigurasi/rotasi kredensial](KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).

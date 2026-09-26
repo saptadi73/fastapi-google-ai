@@ -1,12 +1,16 @@
+from fastapi.encoders import jsonable_encoder
+
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.etl import Snapshot
 from app.models.source import DataSource, ProfilingRun, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
+from app.schemas.import_review import ImportReviewCreate
 from app.schemas.source import spreadsheet_id
 from app.services.audit_service import audit
 from app.services.google_sheets_service import GoogleSheetsService
+from app.services.import_review_service import ImportReviewService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
 
@@ -94,6 +98,21 @@ class SourceService:
         )
         audit(self.session, self.user, "source.profiled", source.id, drift=drift)
         return {"profiles": results, "schema_drift": drift}
+
+    async def sync_review(self, source_id):
+        await self.profile(source_id)
+        sheets = await self.repo.sheets(source_id)
+        reviews = []
+        for sheet in sheets:
+            config_id = sheet.active_configuration_id if sheet.dataset_kind != "MASTER" else None
+            try:
+                result = await ImportReviewService(self.session, self.user).create(
+                    ImportReviewCreate(source_sheet_id=sheet.id, configuration_id=config_id)
+                )
+                reviews.append(jsonable_encoder(result))
+            except AppError as exc:
+                reviews.append({"source_sheet_id": sheet.id, "status": "BLOCKED", "code": exc.code})
+        return {"source_id": str(source_id), "reviews": reviews}
 
     async def update_sheet(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)

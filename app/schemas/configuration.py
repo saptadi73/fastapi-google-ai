@@ -20,6 +20,9 @@ Transform = Literal[
     "uppercase",
     "lowercase",
     "null_if_empty",
+    "prefix",
+    "suffix",
+    "replace",
 ]
 
 
@@ -74,6 +77,20 @@ class CurrencyConversion(StrictModel):
         return self
 
 
+class TransformParameter(StrictModel):
+    operation: Literal["prefix", "suffix", "replace"]
+    value: str = Field(max_length=500)
+    replacement: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def valid_operation(self):
+        if self.operation == "replace" and self.replacement is None:
+            raise ValueError("replace requires replacement")
+        if self.operation != "replace" and self.replacement is not None:
+            raise ValueError("replacement is only valid for replace")
+        return self
+
+
 class ColumnMapping(StrictModel):
     source_column: str = Field(min_length=1, max_length=200)
     target_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
@@ -83,6 +100,7 @@ class ColumnMapping(StrictModel):
     is_business_key: bool = False
     is_primary_key: bool = False
     transformation_codes: list[Transform] = Field(default_factory=list, max_length=10)
+    transform_parameters: list[TransformParameter] = Field(default_factory=list, max_length=10)
     pii_classification: Literal["NONE", "LOW", "MEDIUM", "HIGH"] = "NONE"
     confidence: float = Field(default=1, ge=0, le=1)
     reason: str = ""
@@ -100,6 +118,16 @@ class ColumnMapping(StrictModel):
 
     @model_validator(mode="after")
     def valid_numeric_scale(self):
+        parameter_operations = [item.operation for item in self.transform_parameters]
+        parameterized = {"prefix", "suffix", "replace"}
+        if any(operation not in self.transformation_codes for operation in parameter_operations):
+            raise ValueError("transform_parameters must reference transformation_codes")
+        if any(operation in parameterized and operation not in parameter_operations for operation in self.transformation_codes):
+            raise ValueError("Parameterized transforms require transform_parameters")
+        if self.transform_parameters and self.target_type not in ("text", "varchar"):
+            raise ValueError("transform_parameters require a text/varchar target")
+        if len(parameter_operations) != len(set(parameter_operations)):
+            raise ValueError("Each parameterized transform may appear only once")
         if self.source_timezone is not None:
             if self.target_type != "timestamptz" or "parse_date_id" in self.transformation_codes:
                 raise ValueError("source_timezone requires timestamptz without parse_date_id")

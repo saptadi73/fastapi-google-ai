@@ -1,5 +1,6 @@
 from app.api.v1 import (
     admin_ai_usage,
+    ai_policies,
     auth,
     configurations,
     data_quality,
@@ -43,5 +44,6 @@ for child in (
     reports.router,
     nl2sql.router,
     admin_ai_usage.router,
+    ai_policies.router,
 ):
     router.include_router(child)

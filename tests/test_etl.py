@@ -21,6 +21,36 @@ def test_transforms():
         cast_value("2026-09-01T00:00:00", "timestamptz")
 
 
+def test_parameterized_text_transforms_are_allowlisted_and_ordered(config_data, sheet_values):
+    config_data["columns"][2].update(
+        transformation_codes=["trim", "prefix", "replace", "suffix"],
+        transform_parameters=[
+            {"operation": "prefix", "value": "ID-"},
+            {"operation": "replace", "value": "Jakarta", "replacement": "JKT"},
+            {"operation": "suffix", "value": "-OK"},
+        ],
+    )
+    config = ETLConfiguration.model_validate(config_data)
+    good, issues, _ = transform_rows(
+        sheet_values, SimpleNamespace(header_row=1, data_start_row=2), config
+    )
+    assert not issues
+    assert good[0][1]["branch_name"] == "ID-JKT-OK"
+
+
+@pytest.mark.parametrize("column_update", [
+    {"target_type": "numeric", "transformation_codes": ["prefix"],
+     "transform_parameters": [{"operation": "prefix", "value": "x"}]},
+    {"transformation_codes": ["prefix"], "transform_parameters": []},
+    {"transformation_codes": [], "transform_parameters": [{"operation": "prefix", "value": "x"}]},
+    {"transformation_codes": ["replace"], "transform_parameters": [{"operation": "replace", "value": "x"}]},
+])
+def test_parameterized_transform_contract_rejects_unsupported_shapes(config_data, column_update):
+    config_data["columns"][2].update(column_update)
+    with pytest.raises(ValidationError):
+        ETLConfiguration.model_validate(config_data)
+
+
 def test_keys_and_quarantine(config_data, sheet_values):
     config = ETLConfiguration.model_validate(config_data)
     sheet_values.append(sheet_values[1].copy())

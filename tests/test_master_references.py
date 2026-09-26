@@ -5,13 +5,15 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from test_master_apply_postgres import master as master
 
 from app.core.database import SessionFactory
 from app.core.exceptions import AppError
+from app.models.configuration import Configuration
 from app.models.etl import Snapshot
 from app.models.import_review import ImportReview, ImportReviewRow
-from app.models.master import MasterColumnBinding, MasterDefinition
+from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.schemas.configuration import ETLConfiguration
 from app.schemas.import_review import ImportReferenceResolveRequest, ImportReviewPreviewRequest
 from app.schemas.master import MasterColumnBindingCreate
@@ -34,6 +36,19 @@ async def reference(master):
     table = compile_table(config, sheet.id)
     async with SessionFactory() as session, session.begin():
         snapshot = await session.scalar(select(Snapshot).where(Snapshot.source_sheet_id == sheet.id))
+        stored_sheet = await session.get(type(sheet), sheet.id)
+        stored_sheet.dataset_kind = "NON_MASTER"
+        await session.execute(
+            MasterSourceBinding.__table__.delete().where(MasterSourceBinding.source_sheet_id == sheet.id)
+        )
+        configuration = Configuration(
+            tenant_id=master.tenant_id, source_id=sheet.source_id, source_sheet_id=sheet.id,
+            version_no=1, revision_no=1, status="ACTIVE", based_on_fingerprint="fixture",
+            configuration_json=config.model_dump(mode="json"), created_by=master.editor.id,
+        )
+        session.add(configuration)
+        await session.flush()
+        stored_sheet.active_configuration_id = configuration.id
         batch = ImportReview(tenant_id=master.tenant_id, source_id=sheet.source_id, source_sheet_id=sheet.id,
                              snapshot_id=snapshot.id, created_by=master.editor.id, idempotency_key=uuid4().hex,
                              status="READY_FOR_APPROVAL", configuration_json=config.model_dump(mode="json"),
@@ -93,6 +108,12 @@ async def reference(master):
         async with SessionFactory() as session, session.begin():
             await (await session.connection()).run_sync(table.drop)
             await session.execute(delete(MasterColumnBinding).where(MasterColumnBinding.tenant_id == master.tenant_id))
+            await session.execute(
+                type(sheet).__table__.update()
+                .where(type(sheet).id == sheet.id)
+                .values(active_configuration_id=None)
+            )
+            await session.execute(delete(Configuration).where(Configuration.tenant_id == master.tenant_id))
 
 
 async def test_exact_resolution_preserves_raw_and_loads_uuid(reference):
@@ -319,3 +340,36 @@ async def test_resolver_http_requires_binding_column_and_complete_staging_pair(r
         response = await client.post(path, json={**body, "staging_row_id": reference.row_id, "target_column": "product_id"})
         assert response.status_code == 200, response.text
         assert response.json()["data"]["record"]["_record_id"] == reference.record_id
+
+
+async def test_orphan_reference_blocks_foreign_key_deployment(reference):
+    await reference.bind()
+    await reference.resolve(write=True)
+    await reference.apply(await reference.preview(approve=True))
+    async with SessionFactory() as session, session.begin():
+        service = MasterService(session, reference.approver)
+        valid = await service.validate_reference_orphans()
+        assert valid["execution_ready"] and valid["items"][0]["status"] == "VALID"
+        await session.execute(reference.consumer.update().values(product_id=str(uuid4())))
+        invalid = await service.validate_reference_orphans()
+        assert invalid["items"][0]["status"] == "ORPHANS_FOUND"
+        with pytest.raises(AppError) as exc:
+            await service.deploy_foreign_keys()
+        assert exc.value.code == "REFERENCE_VALIDATION_REQUIRED"
+
+
+async def test_foreign_key_enforces_tenant_uuid_and_reuses_constraint(reference):
+    await reference.bind()
+    await reference.resolve(write=True)
+    await reference.apply(await reference.preview(approve=True))
+    async with SessionFactory() as session, session.begin():
+        service = MasterService(session, reference.approver)
+        first = await service.deploy_foreign_keys()
+        second = await service.deploy_foreign_keys()
+        assert not first["created"][0].get("reused", False)
+        assert second["created"][0]["reused"] is True
+        with pytest.raises(IntegrityError):
+            async with session.begin_nested():
+                await session.execute(reference.consumer.update().values(
+                    _tenant_id=str(uuid4()), product_id=reference.record_id
+                ))

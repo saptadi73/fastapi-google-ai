@@ -53,17 +53,17 @@ Tampilkan status setiap rekomendasi: belum diperiksa, diterima, diubah pengguna,
 | 00 Petunjuk | Bantuan, ringkasan progres, indikator kelengkapan | Perlu UI; formula workbook bukan validasi server |
 | 01 Sumber Sheet | Identitas file/tab dan pengaturan baca | Source/tab/range/header tersedia; timezone/locale/owner bisnis per dataset belum lengkap |
 | 02 Struktur Kolom | Tabel pemetaan dan arti bisnis | Mapping, tipe dasar, nullable, key, PII, confidence/reason tersedia; domain/entity/unit/currency/format detail belum lengkap |
-| 03 Aturan Cleansing | Tabel transform berurutan dengan contoh | Daftar transform terbatas tersedia; priority/condition/on_error/parameter bebas belum tersedia |
+| 03 Aturan Cleansing | Tabel transform berurutan dengan contoh | Daftar transform terbatas dan parameter `prefix`/`suffix`/`replace` tersedia; condition/on_error/parameter bebas belum tersedia |
 | 04 Taxonomy Mapping | Padanan nilai dan kategori baku | Registry taxonomy dan approval mapping belum tersedia |
 | 05 Data Quality | Form aturan dan hasil uji | not_null/unique/min/max/allowed_values tersedia; threshold persen, in_taxonomy, max_age_days, severity/owner belum lengkap |
 | 06 Target Database | Preview target/load dan panel teknis | Satu tabel trusted per tab, strategi load tersedia; multi-target, FK master, ekspresi/default/update_condition belum tersedia |
-| 07 OpenAI Config | Kebijakan AI, masking, pertanyaan ambigu | Model/prompt global dan draft AI tersedia; registry task/prompt, trigger/threshold per task belum tersedia |
+| 07 OpenAI Config | Kebijakan AI, masking, pertanyaan ambigu | Model/prompt global dan registry task/prompt/model approved tersedia; trigger/threshold per task belum tersedia |
 | 08 Operasional | Jadwal, sync, status job, audit | Cron UTC, antrean, pause/resume, audit tersedia; watermark incremental, timezone per job, notifikasi/retention per job belum tersedia |
 | 09 Kamus Parameter | Help text, validasi input, daftar enum | Perlu kamus pemetaan template ke schema API |
 | 10 Data Product Catalog | Ringkasan dataset untuk laporan | Product, dimensi, metric, allowed_roles tersedia; beberapa field bisnis/default periode belum tersedia |
 | 11 Metric Definitions | Editor definisi hitungan | Kolom, agregasi, code/label tersedia; expression/filter/null handling/unit/sinonim/approval metric terpisah belum tersedia |
 | 12 Intent Query Mapping | Contoh pertanyaan dan rencana query | Saved query dan pencocokan contoh teks tersedia; periode relatif dinamis/output type/priority/ambiguity policy belum lengkap |
-| 13 Join Relationships | Review relasi dan kardinalitas | Registry join allowlist dan query multi-product belum tersedia |
+| 13 Join Relationships | Review relasi dan kardinalitas | Registry join allowlist tenant-scoped tersedia; query multi-product dan enforcement akses tiap sisi belum tersedia |
 
 Template tidak dapat diperlakukan sebagai payload API saat ini. Contoh perbedaan yang harus ditangani adapter:
 
