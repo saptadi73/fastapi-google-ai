@@ -407,8 +407,8 @@ class QueryExecutionService:
         self.session, self.user = session, user
         self.repo = SemanticRepository(session, user.tenant_id)
 
-    async def compile(self, product_code, plan, *, today=None):
-        root = await self.repo.product(product_code, self.user)
+    async def compile(self, product_code, plan, *, today=None, action="QUERY"):
+        root = await self.repo.product(product_code, self.user, action=action)
         relationships, joined, included = [], [], {root.code}
         for code in plan.join_relationships:
             relationship = await self.repo.join_relationship(code)
@@ -418,7 +418,7 @@ class QueryExecutionService:
                     "Urutan relationship harus membentuk path dari produk utama.",
                     422,
                 )
-            product = await self.repo.product(relationship.right_product_code, self.user)
+            product = await self.repo.product(relationship.right_product_code, self.user, action=action)
             relationships.append(relationship)
             joined.append(product)
             included.add(product.code)
@@ -432,10 +432,10 @@ class QueryExecutionService:
             )
         return root, joined, relationships, build_query(root, self.user, plan, today=today), resolve_default_period(root, plan, today)
 
-    async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL"):
+    async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL", action="QUERY"):
         today = datetime.now(timezone.utc).date()
         product, joined, relationships, stmt, default_period = await self.compile(
-            product_code, plan, today=today
+            product_code, plan, today=today, action=action
         )
         sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         validate_readonly_sql(

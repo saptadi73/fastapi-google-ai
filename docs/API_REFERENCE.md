@@ -2,7 +2,7 @@
 
 Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **27 September 2026**.
 
-Dokumen ini menjelaskan **167 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **190 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -121,6 +121,31 @@ Role UI bukan hierarki bebas: misalnya `TECHNICAL_APPROVER` dapat approve tetapi
 | POST | `/users` | A | UserCreate | 201 | User public |
 | GET | `/users` | A | —; query offset/limit | 200 | User public[]; meta pagination |
 | PATCH | `/users/{user_id}` | A | UserUpdate | 200 | User public |
+| GET | `/access/registration-options` | E | — | 200 | Scope assignment aktif, PURPOSE aktif, user tenant eligible, sensitivitas |
+| GET | `/access/resources` | A | —; query resource_type wajib, search/offset/limit opsional | 200 | Resource tenant aktif: id, code, name, status; limit maksimum 100 |
+| GET | `/access/attributes` | A | —; query kind/include_inactive | 200 | AccessAttribute[] |
+| POST | `/access/attributes` | A | AccessAttributeCreate | 201 | AccessAttribute |
+| PATCH | `/access/attributes/{attribute_id}` | A | AccessAttributeUpdate | 200 | AccessAttribute |
+| GET | `/access/permission-bundles` | A | —; query include_inactive | 200 | PermissionBundle[] |
+| POST | `/access/permission-bundles` | A | PermissionBundleCreate | 201 | PermissionBundle |
+| PATCH | `/access/permission-bundles/{bundle_id}` | A | PermissionBundleUpdate | 200 | PermissionBundle |
+| GET | `/access/users/{user_id}/assignments` | A | —; query include_inactive | 200 | UserAssignment[] dengan attribute |
+| POST | `/access/users/{user_id}/assignments` | A | UserAssignmentCreate | 201 | UserAssignment dengan attribute |
+| POST | `/access/assignments/{assignment_id}/revoke` | A | AssignmentRevoke | 200 | UserAssignment yang dicabut |
+| GET | `/access/users/{user_id}/permission-grants` | A | —; query include_inactive | 200 | UserPermissionGrant[] dengan bundle |
+| POST | `/access/users/{user_id}/permission-grants` | A | PermissionGrantCreate | 201 | UserPermissionGrant dengan bundle |
+| POST | `/access/permission-grants/{grant_id}/revoke` | A | AssignmentRevoke | 200 | UserPermissionGrant yang dicabut |
+| GET | `/access/policies` | A | —; query include_revoked | 200 | AccessPolicy[] |
+| POST | `/access/policies` | A | AccessPolicyCreate | 201 | AccessPolicy DRAFT |
+| PATCH | `/access/policies/{policy_id}` | A | AccessPolicyUpdate | 200 | AccessPolicy DRAFT terbaru |
+| GET | `/access/policies/{policy_id}/bindings` | A | — | 200 | AccessPolicyBinding[] |
+| POST | `/access/policies/{policy_id}/bindings` | A | AccessPolicyBindingCreate | 201 | AccessPolicyBinding |
+| POST | `/access/policies/{policy_id}/submit` | A | AccessPolicyTransition | 200 | AccessPolicy IN_REVIEW |
+| POST | `/access/policies/{policy_id}/approve` | A | AccessPolicyTransition | 200 | AccessPolicy APPROVED |
+| POST | `/access/policies/{policy_id}/revoke` | A | AccessPolicyTransition | 200 | AccessPolicy REVOKED |
+| POST | `/access/evaluate` | Auth | AccessEvaluationRequest | 200 | Keputusan preview default-deny |
+| GET | `/access/users/{user_id}/effective` | A | —; query at opsional | 200 | Effective access user |
+| GET | `/access/me/effective` | Auth | —; query at opsional | 200 | Effective access akun aktif |
 
 ### Login, refresh, dan logout
 
@@ -196,13 +221,52 @@ Username 3–100 karakter, pola `^[a-zA-Z0-9_.@-]+$`. Password baru 12–256 kar
 
 PATCH hanya mendukung `role`, `is_active`, dan `row_scope`; bukan username, full_name, atau password. Field yang tidak dikirim/bernilai null dilewati. Map row_scope diganti utuh, bukan deep merge. Update mencabut token user tersebut. Admin tidak boleh menonaktifkan atau mengubah role dirinya sendiri (`SELF_LOCKOUT`). Tidak ada endpoint reset password user lain saat ini.
 
+### Assignment yurisdiksi dan policy BE16
+
+`AccessAttributeCreate` menerima jenis `DEPARTMENT`, `BUSINESS_DOMAIN`, `JURISDICTION`,
+`CLEARANCE`, atau `PURPOSE`. Kode dinormalisasi ke huruf besar dan unik per tenant + jenis. `parent_id`
+hanya boleh menunjuk atribut tenant dan jenis yang sama. PATCH memakai `revision`; revisi
+stale menghasilkan `409 STALE_REVISION`.
+
+Assignment menghubungkan user dan atribut dengan `valid_from` inklusif serta `valid_to`
+eksklusif/nullable. Periode aktif yang bertumpang tindih untuk pasangan user-atribut yang
+sama ditolak dengan `409 ASSIGNMENT_PERIOD_OVERLAP`. Revoke memakai revision, menyimpan
+actor/waktu, dan mencabut token user tersebut. Endpoint effective hanya memasukkan assignment
+berstatus aktif, atribut aktif, dan periode yang mencakup parameter `at`; default `at` adalah
+waktu server. Hasil effective-access berisi `user`, `as_of`, `actions`, `dimensions`,
+`assignments`, dan `permission_grants`. Keputusan policy, deny, serta masking tidak ada
+di respons effective-access umum; gunakan `POST /access/evaluate` untuk preview
+resource/aksi tertentu. Preview bukan izin semua endpoint backend.
+
+Permission bundle memakai aksi baku `DISCOVER`, `READ`, `QUERY`, `EXPORT`, `EDIT`,
+`APPROVE`, `OPERATE`, dan `ADMIN`. Kode bundle dinormalisasi ke huruf besar. Grant bundle
+memakai effective dating dan menolak periode tumpang tindih dengan
+`PERMISSION_GRANT_PERIOD_OVERLAP`. Admin tidak dapat mengubah grant miliknya sendiri
+(`SELF_ACCESS_CHANGE`). Create/revoke grant merotasi token target. `actions` pada effective
+access adalah gabungan terurut dari role sistem dan bundle aktif; `permission_grants`
+menjelaskan sumber tambahan tersebut. Bundle tidak memberikan scope dataset secara implisit.
+
+Access policy dimulai sebagai `DRAFT`; binding resource hanya dapat ditambah saat DRAFT.
+Submit memerlukan minimal satu binding. Approval membutuhkan admin berbeda dari pembuat
+policy dan memakai revision terbaru. Evaluator preview mengembalikan `POLICY_MATCH`,
+`EXPLICIT_DENY`, `DEFAULT_DENY`, atau `ACTION_NOT_GRANTED`, bersama policy IDs, row scope,
+aturan kolom, serta izin export. Untuk DataProduct dari SOURCE BE16 yang diaktifkan,
+evaluator dipakai pada DISCOVER/QUERY/EXPORT sebelum cache. Data product legacy dan
+resource/aksi lain tidak otomatis memakai evaluator sebagai enforcement. Row/column
+control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimasking.
+
 ## 3. Google Sheets dan profiling
 
 | Method | Path | Hak | Body / parameter | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
-| POST | `/sources/google-sheets` | E | SourceCreate | 202 | `{source: DataSource, ...EnqueuedJob}` |
+| POST | `/sources/google-sheets` | E | SourceCreate dengan access_metadata wajib | 202 | `{source: DataSource, ...EnqueuedJob}`; `source.access_status=ACCESS_POLICY_REQUIRED` |
 | GET | `/sources` | S | offset/limit | 200 | DataSource[]; meta pagination |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
+| PATCH | `/sources/{source_id}/access-metadata` | E | SourceAccessMetadataUpdate | 200 | DataSource dengan access_revision terbaru dan access_status pending |
+| GET | `/sources/{source_id}/access-review-context` | A | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk review metadata |
+| POST | `/sources/{source_id}/access-review` | A | SourceMetadataReview | 200 | Keputusan review metadata; status akses tetap pending |
+| GET | `/sources/{source_id}/access-policy-options` | A | UUID source | 200 | Policy SOURCE ALLOW approved yang berlaku dan didukung runtime |
+| POST | `/sources/{source_id}/access-activate` | A | SourceAccessActivation | 200 | Aktifkan source setelah review metadata dan binding policy approved |
 | PATCH | `/sources/{source_id}/schedule` | E | SourceScheduleUpdate | 200 | Edit cron/timezone/concurrency dengan optimistic revision |
 | GET | `/sources/{source_id}/sheets` | S | UUID source | 200 | SourceSheet[] |
 | GET | `/source-sheets/{sheet_id}/classification` | S | Tidak ada | 200 | SheetClassification: kind, status, revision, actor/time, execution_ready, blocker |
@@ -227,13 +291,22 @@ PATCH hanya mendukung `role`, `is_active`, dan `row_scope`; bukan username, full
   "source_code": "sales_cabang",
   "name": "Penjualan Cabang",
   "spreadsheet_url": "https://docs.google.com/spreadsheets/d/ID_SPREADSHEET_ANDA/edit",
+  "access_metadata": {
+    "owner_unit_id": "11111111-1111-4111-8111-111111111111",
+    "business_domain_id": "22222222-2222-4222-8222-222222222222",
+    "jurisdiction_id": "33333333-3333-4333-8333-333333333333",
+    "purpose_id": "44444444-4444-4444-8444-444444444444",
+    "data_owner_user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "data_steward_user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "sensitivity": "MEDIUM"
+  },
   "description": "Satu baris per transaksi penjualan",
   "credential_ref": "default",
   "sync_schedule": "0 */6 * * *"
 }
 ```
 
-`source_code` wajib unik per tenant, 1–63 karakter, lowercase identifier mulai huruf. `name` wajib 1–200 karakter. URL juga boleh berupa spreadsheet ID. Deskripsi maksimal 2000 karakter. `credential_ref` harus cocok dengan konfigurasi server; jangan mengirim email Service Account/private key. Cron lima field, optional/null untuk tanpa jadwal. Belum tersedia PATCH source untuk mengubah URL, deskripsi, atau jadwal setelah pendaftaran.
+`source_code` wajib unik per tenant, 1–63 karakter, lowercase identifier mulai huruf. `name` wajib 1–200 karakter. URL juga boleh berupa spreadsheet ID. `access_metadata` wajib untuk pendaftaran baru; tiga scope harus merupakan assignment aktif pendaftar, PURPOSE harus aktif pada registry tenant, dan owner/steward adalah user aktif tenant yang sama. Pilihan editor ada pada `GET /access/registration-options`; validasi backend diulang saat POST. Sensitivitas hanya `LOW`, `MEDIUM`, atau `HIGH`. Sumber lama tanpa metadata tetap null dan berstatus `ACCESS_POLICY_REQUIRED`. Deskripsi maksimal 2000 karakter. `credential_ref` harus cocok dengan konfigurasi server; jangan mengirim email Service Account/private key. Cron lima field, optional/null untuk tanpa jadwal. Metadata diperbaiki lewat PATCH access-metadata; jadwal melalui endpoint schedule.
 
 Contoh respons `202` lengkap:
 
@@ -252,6 +325,22 @@ Contoh respons `202` lengkap:
       "owner_user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "credential_ref": "default",
       "status": "DISCOVERED",
+      "access_status": "ACCESS_POLICY_REQUIRED",
+      "access_revision": 1,
+      "access_metadata_editor_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "access_review_status": "PENDING",
+      "access_reviewed_by": null,
+      "access_reviewed_at": null,
+      "access_review_reason": "",
+      "access_metadata": {
+        "owner_unit_id": "11111111-1111-4111-8111-111111111111",
+        "business_domain_id": "22222222-2222-4222-8222-222222222222",
+        "jurisdiction_id": "33333333-3333-4333-8333-333333333333",
+        "purpose_id": "44444444-4444-4444-8444-444444444444",
+        "data_owner_user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "data_steward_user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "sensitivity": "MEDIUM"
+      },
       "sync_schedule": "0 */6 * * *",
       "paused": false,
       "last_scheduled_at": null
@@ -266,6 +355,39 @@ Contoh respons `202` lengkap:
 ```
 
 Simpan `source.id` dan `job_id`. Pendaftaran belum membuktikan akses ke Google berhasil; worker DISCOVER membaca metadata lalu langsung menjalankan profiling. Tunggu job selesai sebelum menampilkan tab. Error source_code duplikat adalah `409 RESOURCE_CONFLICT`; registrasi ulang bukan mekanisme update master.
+
+Untuk sumber legacy dengan `access_metadata=null`, atau untuk memperbaiki metadata
+existing, editor mengirim `PATCH /sources/{source_id}/access-metadata` dengan body
+`SourceAccessMetadataUpdate` lengkap (contoh di `api/PAYLOADS.json`). Gunakan
+`access_revision` terakhir dari GET sumber sebagai `revision_no`; konflik menghasilkan
+`409 SOURCE_ACCESS_REVISION_CONFLICT`, resource tenant lain 404, scope yang tidak lagi
+ter-assign 403. Nilai yang sama idempotent selama status masih pending. Perubahan nyata
+menaikkan revision, mengaudit nama field yang berubah tanpa ID owner mentah, dan selalu
+mengembalikan `access_status=ACCESS_POLICY_REQUIRED`. Status ETL tidak berubah; PATCH
+ini bukan persetujuan policy atau gate query/export.
+
+Admin lain dapat membaca `GET /sources/{source_id}/access-review-context` untuk
+melihat label atribut dan username owner/steward pada tenant aktif. Review memakai
+`POST /sources/{source_id}/access-review` dengan `revision_no` terbaru, `decision`
+`APPROVE` atau `REJECT`, dan alasan kode. `METADATA_VERIFIED` hanya untuk APPROVE;
+REJECT memakai `SCOPE_MISMATCH`, `OWNER_UNCONFIRMED`, atau `OTHER`. Reviewer tidak
+boleh menjadi editor metadata terakhir. APPROVE memeriksa ulang atribut, user, dan
+assignment aktif editor; REJECT tetap dapat dilakukan bila scope sudah tidak valid.
+Keputusan menambah revision, menyimpan actor/waktu/alasan, dan teraudit tanpa nilai
+metadata mentah. PATCH metadata berikutnya mengembalikan review ke PENDING. Review
+`APPROVED` **bukan** `POLICY_APPROVED`: akses data tetap `ACCESS_POLICY_REQUIRED`.
+
+Untuk sumber dengan metadata baru, admin yang bukan editor metadata memilih policy
+SOURCE ALLOW approved dari `GET /sources/{source_id}/access-policy-options` dan mengirim
+`POST /sources/{source_id}/access-activate` dengan `revision_no` serta `policy_id`.
+Aktivasi memerlukan review metadata APPROVED, policy berlaku yang terikat pada kode
+sumber, memuat unit pemilik + domain bisnis + yurisdiksi sebagai atribut wajib, dan
+memiliki aksi DISCOVER + QUERY. Policy row/column control ditolak sampai
+runtime mendukungnya. Sumber berubah ke `POLICY_APPROVED`, tetapi katalog, query,
+join, report, dan export tetap mengevaluasi aksi pengguna melalui policy SOURCE pada
+setiap permintaan; explicit deny, expiry, dan revoke berlaku segera. Query/export
+menolak policy row/column yang belum bisa diterapkan runtime. Sumber legacy tanpa
+metadata masih mengikuti kontrol lama; ini bukan default-deny penuh BE16.
 
 ### Mengatur tab dan profiling
 

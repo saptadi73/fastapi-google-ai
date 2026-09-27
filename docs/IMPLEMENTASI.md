@@ -46,6 +46,23 @@ melalui `scripts/prepare_test_db.py`, terpisah dari database aplikasi `googleai`
 - Error envelope, request ID, structured HTTP log tanpa body/token/nilai sel, health live/ready,
   OpenAPI/Swagger, pencatatan event dan penggunaan token.
 
+## Penambahan kontrol akses BE16 (27 September 2026)
+
+Di luar cakupan backend awal di atas, registry tenant-scoped untuk atribut
+DEPARTMENT/BUSINESS_DOMAIN/JURISDICTION/CLEARANCE/PURPOSE, assignment efektif,
+permission bundle/grant, policy/binding serta preview evaluator tersedia. Pendaftaran
+sumber baru meminta metadata bisnis; koreksi dan review metadata memiliki revision dan
+actor. Admin lain dapat mengaktifkan sumber setelah review metadata dan policy SOURCE
+ALLOW approved yang mencakup unit, domain, dan yurisdiksi sumber.
+
+Untuk sumber dengan metadata, katalog DataProduct, query, export, saved query, join,
+laporan berbasis produk dan NL2SQL memeriksa SOURCE policy per pengguna sebelum akses
+hasil cache. Row/column controls yang belum diterapkan ditolak. Sumber legacy
+`access_metadata=null` **masih memakai role/row_scope lama**; jalur admin, artefak,
+resource lain, access request, masking, dan default-deny penuh belum tercakup.
+Implementasi BE16 saat ini dibuktikan pada database test, bukan rollout produksi.
+Lihat [status, matriks rute, dan gate rollout BE16](ACCESS_JURISDICTION_BE16.md).
+
 ## Keputusan implementasi
 
 1. API registrasi menyimpan source dan durable discovery job dengan HTTP 202. Pemeriksaan akses Google

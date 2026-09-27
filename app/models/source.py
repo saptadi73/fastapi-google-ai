@@ -28,6 +28,25 @@ class DataSource(TenantEntity, Base):
             "concurrency_policy IN ('QUEUE_LATEST', 'SKIP_IF_RUNNING')",
             name="ck_source_concurrency_policy",
         ),
+        CheckConstraint(
+            "access_status IN ('ACCESS_POLICY_REQUIRED', 'POLICY_APPROVED')",
+            name="ck_source_access_status",
+        ),
+        CheckConstraint("access_revision >= 1", name="ck_source_access_revision"),
+        CheckConstraint(
+            "access_review_status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="ck_source_access_review_status",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "access_metadata_editor_id"],
+            ["platform.app_user.tenant_id", "platform.app_user.id"],
+            name="fk_source_access_editor_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "access_reviewed_by"],
+            ["platform.app_user.tenant_id", "platform.app_user.id"],
+            name="fk_source_access_reviewer_tenant",
+        ),
         {"schema": "platform"},
     )
     source_code: Mapped[str] = mapped_column(String(63))
@@ -37,6 +56,18 @@ class DataSource(TenantEntity, Base):
     owner_user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
     credential_ref: Mapped[str] = mapped_column(String(100), default="default")
     status: Mapped[str] = mapped_column(String(40), default="DISCOVERED")
+    access_status: Mapped[str] = mapped_column(
+        String(40), default="ACCESS_POLICY_REQUIRED", server_default="ACCESS_POLICY_REQUIRED"
+    )
+    access_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    access_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    access_metadata_editor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
+    access_review_status: Mapped[str] = mapped_column(
+        String(20), default="PENDING", server_default="PENDING"
+    )
+    access_reviewed_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
+    access_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    access_review_reason: Mapped[str] = mapped_column(String(40), default="", server_default="")
     sync_schedule: Mapped[str | None] = mapped_column(String(100))
     schedule_timezone: Mapped[str] = mapped_column(String(100), default="UTC")
     concurrency_policy: Mapped[str] = mapped_column(String(30), default="QUEUE_LATEST")

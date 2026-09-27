@@ -1,5 +1,6 @@
 from app.core.exceptions import AppError
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
+from app.models.source import DataSource
 from app.repositories.base import record
 from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.semantic import QueryPlan
@@ -120,8 +121,15 @@ class SemanticCatalogService:
         return record(obj)
 
     async def products(self):
-        products = await self.repo.list(DataProduct, limit=1000, conditions=(DataProduct.status == "ACTIVE",))
-        return [record(p, exclude=("view_name",)) for p in products if self.user.role in p.allowed_roles]
+        products = list((await self.session.execute(
+            self.repo.visible_products().add_columns(DataSource)
+            .order_by(DataProduct.created_at.desc()).limit(1000)
+        )).all())
+        return [
+            record(product, exclude=("view_name",)) for product, source in products
+            if self.user.role in product.allowed_roles
+            and await self.repo.source_allowed(source, self.user, "DISCOVER")
+        ]
 
     async def join_relationships(self):
         product_codes = {product["code"] for product in await self.products()}

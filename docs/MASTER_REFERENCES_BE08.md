@@ -113,5 +113,5 @@ untuk membuktikan invalidasi alias dan perubahan record; Google Sheets tetap fix
 
 Ini bukan acceptance provider nyata, rollout production, pengujian semua penulis SQL
 eksternal, atau implementasi FK fisik BE-09. Fingerprint membaca seluruh record master
-yang dirujuk; benchmark/optimasi dataset besar masih BE-16. Otomatisasi pemilihan
+yang dirujuk; benchmark/optimasi dataset besar masih BE-17. Otomatisasi pemilihan
 kandidat/pertanyaan dan alur ETL legacy tidak diperluas oleh perubahan ini.

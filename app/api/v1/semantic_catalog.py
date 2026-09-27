@@ -67,7 +67,10 @@ async def reject_join_relationship(relationship_id: UUID, data: JoinRelationship
 async def saved_queries(session: Session, user: CurrentUser):
     service = SemanticCatalogService(session, user)
     items = await service.repo.list(SavedQuery)
-    return success([record(i) for i in items if user.role in i.allowed_roles])
+    product_codes = {product["code"] for product in await service.products()}
+    return success([
+        record(i) for i in items if user.role in i.allowed_roles and i.data_product_code in product_codes
+    ])
 
 
 @router.post("/intents", status_code=201, dependencies=admin)

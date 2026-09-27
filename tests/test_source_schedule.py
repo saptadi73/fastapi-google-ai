@@ -13,6 +13,8 @@ from app.workers import runner
 
 
 def test_source_schedule_validates_cron_timezone_and_policy():
+    with pytest.raises(ValidationError):
+        SourceCreate(source_code="sales", name="Sales", spreadsheet_url="sheet-id")
     payload = SourceScheduleUpdate(
         revision_no=1,
         sync_schedule="0 7 * * 1-5",
@@ -32,6 +34,15 @@ def test_source_schedule_validates_cron_timezone_and_policy():
             source_code="sales",
             name="Sales",
             spreadsheet_url="sheet-id",
+            access_metadata={
+                "owner_unit_id": "11111111-1111-4111-8111-111111111111",
+                "business_domain_id": "22222222-2222-4222-8222-222222222222",
+                "jurisdiction_id": "33333333-3333-4333-8333-333333333333",
+                "purpose_id": "44444444-4444-4444-8444-444444444444",
+                "data_owner_user_id": "55555555-5555-4555-8555-555555555555",
+                "data_steward_user_id": "66666666-6666-4666-8666-666666666666",
+                "sensitivity": "LOW",
+            },
             concurrency_policy="OVERLAP",
         )
 

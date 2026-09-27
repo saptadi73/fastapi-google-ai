@@ -13,14 +13,17 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
 from app.core.database import SessionFactory
-from app.core.security import password_hasher
+from app.core.security import decode_token, password_hasher
 from app.main import app
 from app.models import Base
+from app.models.access import AccessAttribute, UserAssignment
+from app.models.audit import AuditEvent
 from app.models.auth import Tenant, User
 from app.models.configuration import Artifact, Configuration
 from app.models.etl import Job
 from app.models.import_review import ImportReview
 from app.models.master import MasterDefinition
+from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, SourceSheet
 from app.services.google_sheets_service import GoogleSheetsService
 from app.workers.runner import run_pending, schedule_sources
@@ -154,15 +157,1077 @@ async def request(ctx, method, path, *, who="admin", expected=200, data=None):
     return response.json()
 
 
-async def onboard(ctx, config_data, *, classify=True):
+async def source_access_metadata(ctx):
+    async with SessionFactory() as session, session.begin():
+        admin_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "admin")
+        )
+        metadata = {
+            "data_owner_user_id": admin_id,
+            "data_steward_user_id": admin_id,
+            "sensitivity": "LOW",
+        }
+        for field, kind in (
+            ("owner_unit_id", "DEPARTMENT"),
+            ("business_domain_id", "BUSINESS_DOMAIN"),
+            ("jurisdiction_id", "JURISDICTION"),
+            ("purpose_id", "PURPOSE"),
+        ):
+            attribute = AccessAttribute(
+                tenant_id=ctx.tenant_id,
+                kind=kind,
+                code="TEST_" + uuid4().hex,
+                label=kind.title(),
+            )
+            session.add(attribute)
+            await session.flush()
+            metadata[field] = attribute.id
+            if kind != "PURPOSE":
+                session.add(UserAssignment(
+                    tenant_id=ctx.tenant_id,
+                    user_id=admin_id,
+                    attribute_id=attribute.id,
+                    granted_by=admin_id,
+                    valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+                ))
+    return metadata
+
+
+async def test_source_registration_checks_access_metadata(context):
+    ctx = context
+    base = {"source_code": "scope_test", "name": "Scoped source", "spreadsheet_url": "fake_sheet_12345"}
+    await request(ctx, "POST", "/sources/google-sheets", expected=422, data=base)
+    metadata = await source_access_metadata(ctx)
+    options = (await request(ctx, "GET", "/access/registration-options"))["data"]
+    assert {item["id"] for item in options["scopes"]} == {
+        metadata["owner_unit_id"], metadata["business_domain_id"], metadata["jurisdiction_id"]
+    }
+    assert [item["id"] for item in options["purposes"]] == [metadata["purpose_id"]]
+    assert options["sensitivities"] == ["LOW", "MEDIUM", "HIGH"]
+    assert (await request(ctx, "GET", "/access/registration-options", who="outsider"))["data"]["scopes"] == []
+    await request(ctx, "GET", "/access/registration-options", who="viewer", expected=403)
+    await request(
+        ctx, "POST", "/sources/google-sheets", expected=422,
+        data={**base, "access_metadata": {**metadata, "purpose_id": metadata["owner_unit_id"]}},
+    )
+    await request(
+        ctx, "POST", "/sources/google-sheets", who="approver", expected=403,
+        data={**base, "access_metadata": metadata},
+    )
+    outsider_id = decode_token(ctx.tokens["outsider"]["access_token"])["sub"]
+    async with SessionFactory() as session, session.begin():
+        outsider_tenant_id = await session.scalar(select(User.tenant_id).where(User.id == outsider_id))
+        foreign_attribute = AccessAttribute(
+            tenant_id=outsider_tenant_id, kind="DEPARTMENT", code="FOREIGN_SCOPE", label="Outside"
+        )
+        unassigned_attribute = AccessAttribute(
+            tenant_id=ctx.tenant_id, kind="DEPARTMENT", code="UNASSIGNED_SCOPE", label="Unassigned"
+        )
+        session.add_all([foreign_attribute, unassigned_attribute])
+        await session.flush()
+        foreign_id, unassigned_id = foreign_attribute.id, unassigned_attribute.id
+        viewer_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "viewer")
+        )
+    await request(
+        ctx, "POST", "/sources/google-sheets", expected=404,
+        data={**base, "access_metadata": {**metadata, "owner_unit_id": foreign_id}},
+    )
+    await request(
+        ctx, "POST", "/sources/google-sheets", expected=404,
+        data={**base, "access_metadata": {**metadata, "data_owner_user_id": outsider_id}},
+    )
+    await request(
+        ctx, "POST", "/sources/google-sheets", expected=403,
+        data={**base, "access_metadata": {**metadata, "owner_unit_id": unassigned_id}},
+    )
+    await request(ctx, "PATCH", f"/users/{viewer_id}", data={"is_active": False})
+    await request(
+        ctx, "POST", "/sources/google-sheets", expected=422,
+        data={**base, "access_metadata": {**metadata, "data_steward_user_id": viewer_id}},
+    )
+    created = await request(
+        ctx, "POST", "/sources/google-sheets", expected=202,
+        data={**base, "access_metadata": metadata},
+    )
+    source = (await request(ctx, "GET", f"/sources/{created['data']['source']['id']}"))["data"]
+    assert source["access_status"] == "ACCESS_POLICY_REQUIRED"
+    assert source["access_metadata"] == metadata
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(UserAssignment)
+            .where(UserAssignment.tenant_id == ctx.tenant_id,
+                   UserAssignment.attribute_id == metadata["owner_unit_id"])
+            .values(status="REVOKED")
+        )
+    options_after_revoke = (await request(ctx, "GET", "/access/registration-options"))["data"]
+    assert metadata["owner_unit_id"] not in {item["id"] for item in options_after_revoke["scopes"]}
+    await request(
+        ctx, "POST", "/sources/google-sheets", expected=403,
+        data={**base, "source_code": "scope_after_revoke", "access_metadata": metadata},
+    )
+
+
+async def test_legacy_source_access_metadata_update(context):
+    ctx = context
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        admin_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "admin")
+        )
+        legacy = DataSource(
+            tenant_id=ctx.tenant_id,
+            source_code="legacy_access",
+            name="Legacy access",
+            spreadsheet_id="legacy_sheet",
+            owner_user_id=admin_id,
+            status="ACTIVE",
+        )
+        session.add(legacy)
+        await session.flush()
+        source_id = legacy.id
+    path = f"/sources/{source_id}/access-metadata"
+    before = (await request(ctx, "GET", f"/sources/{source_id}"))["data"]
+    assert before["access_metadata"] is None and before["access_revision"] == 1
+    assert before["access_review_status"] == "PENDING"
+    await request(ctx, "PATCH", path, who="viewer", expected=403,
+                  data={"revision_no": 1, "access_metadata": metadata})
+    await request(ctx, "PATCH", path, who="outsider", expected=404,
+                  data={"revision_no": 1, "access_metadata": metadata})
+    await request(ctx, "PATCH", path, expected=422,
+                  data={"revision_no": 1, "access_metadata": {**metadata, "purpose_id": metadata["owner_unit_id"]}})
+    result = (await request(ctx, "PATCH", path,
+                            data={"revision_no": 1, "access_metadata": metadata}))["data"]
+    assert result["access_metadata"] == metadata
+    assert result["access_revision"] == 2
+    assert result["access_status"] == "ACCESS_POLICY_REQUIRED"
+    assert result["access_metadata_editor_id"] == admin_id
+    assert result["access_review_status"] == "PENDING"
+    assert result["status"] == "ACTIVE"
+    repeated = (await request(ctx, "PATCH", path,
+                              data={"revision_no": 2, "access_metadata": metadata}))["data"]
+    assert repeated["access_revision"] == 2
+    await request(ctx, "PATCH", path, expected=409,
+                  data={"revision_no": 1, "access_metadata": metadata})
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(DataSource).where(DataSource.id == source_id).values(access_status="POLICY_APPROVED")
+        )
+    corrected = (await request(ctx, "PATCH", path,
+                               data={"revision_no": 2, "access_metadata": {**metadata, "sensitivity": "HIGH"}}))["data"]
+    assert corrected["access_revision"] == 3
+    assert corrected["access_status"] == "ACCESS_POLICY_REQUIRED"
+    assert corrected["access_metadata"]["sensitivity"] == "HIGH"
+    async with SessionFactory() as session:
+        events = (await session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.tenant_id == ctx.tenant_id,
+                AuditEvent.resource_id == source_id,
+                AuditEvent.event == "source.access_metadata_updated",
+            ).order_by(AuditEvent.created_at)
+        )).all()
+    assert len(events) == 2
+    assert events[0].user_id == admin_id
+    assert set(events[0].details["changed_fields"]) == set(metadata)
+    assert events[1].details["changed_fields"] == ["sensitivity"]
+    assert metadata["data_owner_user_id"] not in str(events[0].details)
+
+
+async def test_source_metadata_review_separates_editor_and_reviewer(context):
+    ctx = context
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        admin_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "admin")
+        )
+        source = DataSource(
+            tenant_id=ctx.tenant_id,
+            source_code="review_metadata",
+            name="Review metadata",
+            spreadsheet_id="review_sheet",
+            owner_user_id=admin_id,
+        )
+        session.add(source)
+        await session.flush()
+        source_id = source.id
+    path = f"/sources/{source_id}/access-review"
+    await request(ctx, "POST", path, expected=409,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    await request(ctx, "POST", path, who="outsider", expected=404,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    await request(ctx, "POST", path, who="viewer", expected=403,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    edited = (await request(
+        ctx, "PATCH", f"/sources/{source_id}/access-metadata",
+        data={"revision_no": 1, "access_metadata": metadata},
+    ))["data"]
+    assert edited["access_revision"] == 2 and edited["access_metadata_editor_id"] == admin_id
+    await request(ctx, "POST", path, expected=422,
+                  data={"revision_no": 2, "decision": "APPROVE", "reason": "SCOPE_MISMATCH"})
+    await request(ctx, "POST", path, expected=403,
+                  data={"revision_no": 2, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    reviewer = (await request(
+        ctx, "POST", "/users", expected=201,
+        data={"username": "metadata_reviewer", "password": "test-password-456", "role": "PLATFORM_ADMIN"},
+    ))["data"]
+    login_response = await ctx.client.post(
+        "/api/v1/auth/login",
+        json={"tenant_code": ctx.tenant_code, "username": "metadata_reviewer", "password": "test-password-456"},
+    )
+    assert login_response.status_code == 200, login_response.text
+    ctx.headers["reviewer"] = {
+        "Authorization": "Bearer " + login_response.json()["data"]["access_token"]
+    }
+    await request(ctx, "GET", f"/sources/{source_id}/access-review-context", who="outsider", expected=404)
+    await request(ctx, "GET", f"/sources/{source_id}/access-review-context", who="viewer", expected=403)
+    review_context = (
+        await request(ctx, "GET", f"/sources/{source_id}/access-review-context", who="reviewer")
+    )["data"]
+    assert review_context["access_revision"] == 2
+    assert review_context["attributes"]["owner_unit_id"]["is_active"] is True
+    assert review_context["people"]["data_owner_user_id"]["username"] == "admin"
+    assert review_context["sensitivity"] == "LOW"
+    approved = (await request(
+        ctx, "POST", path, who="reviewer",
+        data={"revision_no": 2, "decision": "APPROVE", "reason": "METADATA_VERIFIED"},
+    ))["data"]
+    assert approved["access_review_status"] == "APPROVED"
+    assert approved["access_reviewed_by"] == reviewer["id"]
+    assert approved["access_review_reason"] == "METADATA_VERIFIED"
+    assert approved["access_reviewed_at"] is not None
+    assert approved["access_revision"] == 3
+    assert approved["access_status"] == "ACCESS_POLICY_REQUIRED"
+    await request(ctx, "POST", path, who="reviewer", expected=409,
+                  data={"revision_no": 3, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    updated = (await request(
+        ctx, "PATCH", f"/sources/{source_id}/access-metadata",
+        data={"revision_no": 3, "access_metadata": {**metadata, "sensitivity": "HIGH"}},
+    ))["data"]
+    assert updated["access_review_status"] == "PENDING"
+    assert updated["access_reviewed_by"] is None and updated["access_reviewed_at"] is None
+    assert updated["access_revision"] == 4
+    await request(ctx, "POST", path, who="reviewer", expected=409,
+                  data={"revision_no": 3, "decision": "REJECT", "reason": "SCOPE_MISMATCH"})
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(UserAssignment)
+            .where(UserAssignment.tenant_id == ctx.tenant_id,
+                   UserAssignment.attribute_id == metadata["owner_unit_id"])
+            .values(status="REVOKED")
+        )
+    await request(ctx, "POST", path, who="reviewer", expected=403,
+                  data={"revision_no": 4, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    rejected = (await request(
+        ctx, "POST", path, who="reviewer",
+        data={"revision_no": 4, "decision": "REJECT", "reason": "SCOPE_MISMATCH"},
+    ))["data"]
+    assert rejected["access_review_status"] == "REJECTED"
+    assert rejected["access_status"] == "ACCESS_POLICY_REQUIRED"
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(UserAssignment)
+            .where(UserAssignment.tenant_id == ctx.tenant_id,
+                   UserAssignment.attribute_id == metadata["owner_unit_id"])
+            .values(status="ACTIVE")
+        )
+    reopened = (await request(
+        ctx, "PATCH", f"/sources/{source_id}/access-metadata",
+        data={"revision_no": 5, "access_metadata": {**metadata, "sensitivity": "HIGH"}},
+    ))["data"]
+    assert reopened["access_review_status"] == "PENDING" and reopened["access_revision"] == 6
+    async with SessionFactory() as session:
+        events = (await session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.tenant_id == ctx.tenant_id,
+                AuditEvent.resource_id == source_id,
+                AuditEvent.event == "source.access_metadata_reviewed",
+            ).order_by(AuditEvent.created_at)
+        )).all()
+    assert len(events) == 2
+    assert all(event.user_id == reviewer["id"] for event in events)
+    assert [event.details["reason_code"] for event in events] == ["METADATA_VERIFIED", "SCOPE_MISMATCH"]
+    assert metadata["data_owner_user_id"] not in str([event.details for event in events])
+
+
+async def test_pending_source_product_blocks_direct_reads(context):
+    from app.core.exceptions import AppError
+    from app.schemas.semantic import QueryPlan
+    from app.services.query_execution_service import QueryExecutionService
+
+    ctx = context
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        admin_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "admin")
+        )
+        source = DataSource(
+            tenant_id=ctx.tenant_id,
+            source_code="be16_pending",
+            name="Pending source",
+            spreadsheet_id="pending_sheet",
+            owner_user_id=admin_id,
+            access_metadata=metadata,
+            access_metadata_editor_id=admin_id,
+        )
+        session.add(source)
+        await session.flush()
+        sheet = SourceSheet(tenant_id=ctx.tenant_id, source_id=source.id, sheet_id=1, sheet_name="Pending")
+        session.add(sheet)
+        await session.flush()
+        session.add(DataProduct(
+            tenant_id=ctx.tenant_id,
+            source_sheet_id=sheet.id,
+            code="BE16_PENDING",
+            name="Pending product",
+            view_name="v_be16_pending",
+            columns=[{"target_column": "region_code", "target_type": "text"}],
+            dimensions=["region_code"],
+            metrics=[],
+            allowed_roles=["PLATFORM_ADMIN", "VIEWER"],
+        ))
+        legacy_source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="be16_legacy_join",
+            name="Legacy join source", spreadsheet_id="legacy_join_sheet", owner_user_id=admin_id,
+        )
+        session.add(legacy_source)
+        await session.flush()
+        legacy_sheet = SourceSheet(
+            tenant_id=ctx.tenant_id, source_id=legacy_source.id, sheet_id=2, sheet_name="Legacy join"
+        )
+        session.add(legacy_sheet)
+        await session.flush()
+        session.add(DataProduct(
+            tenant_id=ctx.tenant_id, source_sheet_id=legacy_sheet.id,
+            code="BE16_LEGACY", name="Legacy join product", view_name="v_be16_legacy",
+            columns=[{"target_column": "region_code", "target_type": "text"}],
+            dimensions=["region_code"], metrics=[], allowed_roles=["PLATFORM_ADMIN", "VIEWER"],
+        ))
+        session.add(JoinRelationship(
+            tenant_id=ctx.tenant_id, code="legacy_to_pending",
+            left_product_code="BE16_LEGACY", left_column="region_code",
+            right_product_code="BE16_PENDING", right_column="region_code",
+            cardinality="MANY_TO_ONE", join_type="LEFT", duplicate_policy="REJECT_AMBIGUOUS",
+            status="APPROVED", created_by=admin_id,
+        ))
+        for suffix in ("A", "B"):
+            session.add(SavedQuery(
+                tenant_id=ctx.tenant_id,
+                code=f"PENDING_{suffix}",
+                data_product_code="BE16_PENDING",
+                plan={"dimensions": ["region_code"]},
+                examples=["pending report"],
+                allowed_roles=["VIEWER"],
+                semantic_version=1,
+                status="ACTIVE",
+                created_by=admin_id,
+            ))
+    assert not any(item["code"] == "BE16_PENDING" for item in
+                   (await request(ctx, "GET", "/data-products"))["data"])
+    assert not any(item["code"] == "BE16_PENDING" for item in
+                   (await request(ctx, "GET", "/semantic/data-products"))["data"])
+    assert (await request(ctx, "GET", "/semantic/metrics"))["data"] == []
+    assert (await request(ctx, "GET", "/semantic/join-relationships"))["data"] == []
+    assert (await request(ctx, "GET", "/semantic/query-templates", who="viewer"))["data"] == []
+    await request(ctx, "GET", "/data-products/BE16_PENDING", expected=404)
+    await request(ctx, "GET", "/data-products/BE16_PENDING/dimensions", expected=404)
+    await request(ctx, "GET", "/data-products/BE16_PENDING/metrics", expected=404)
+    await request(ctx, "POST", "/data-products/BE16_PENDING/query", who="viewer", expected=404,
+                  data={"dimensions": ["region_code"]})
+    await request(ctx, "POST", "/data-products/BE16_PENDING/export", who="viewer", expected=404,
+                  data={"dimensions": ["region_code"]})
+    await request(ctx, "POST", "/saved-queries/PENDING_A/run", who="viewer", expected=404)
+    await request(ctx, "POST", "/nl2sql/query", who="viewer", expected=404,
+                  data={"question": "Pending report?", "data_product_code": "BE16_PENDING"})
+    async with SessionFactory() as session:
+        viewer = await session.scalar(
+            select(User).where(User.tenant_id == ctx.tenant_id, User.username == "viewer")
+        )
+        with pytest.raises(AppError) as denied_join:
+            await QueryExecutionService(session, viewer).compile(
+                "BE16_LEGACY",
+                QueryPlan(join_relationships=["legacy_to_pending"], dimensions=["BE16_PENDING.region_code"]),
+            )
+        assert denied_join.value.code == "DATA_PRODUCT_NOT_FOUND"
+
+
+async def test_source_activation_requires_live_subject_policy(context):
+    from app.core.exceptions import AppError
+    from app.schemas.semantic import QueryPlan
+    from app.services.query_execution_service import QueryExecutionService
+
+    ctx = context
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        admin_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "admin")
+        )
+        viewer_id = await session.scalar(
+            select(User.id).where(User.tenant_id == ctx.tenant_id, User.username == "viewer")
+        )
+        source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="reviewed_source", name="Reviewed source",
+            spreadsheet_id="reviewed_sheet", owner_user_id=admin_id, access_metadata=metadata,
+            access_metadata_editor_id=admin_id,
+        )
+        session.add(source)
+        await session.flush()
+        source_id = source.id
+        sheet = SourceSheet(tenant_id=ctx.tenant_id, source_id=source_id, sheet_id=1, sheet_name="Reviewed")
+        session.add(sheet)
+        await session.flush()
+        session.add(DataProduct(
+            tenant_id=ctx.tenant_id, source_sheet_id=sheet.id,
+            code="BE16_REVIEWED", name="Reviewed product", view_name="v_be16_reviewed",
+            columns=[{"target_column": "region_code", "target_type": "text"}],
+            dimensions=["region_code"], metrics=[], allowed_roles=["PLATFORM_ADMIN", "VIEWER"],
+        ))
+    path = f"/sources/{source_id}/access-activate"
+    await request(ctx, "POST", path, expected=409,
+                  data={"revision_no": 1, "policy_id": str(uuid4())})
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer", expected=404)
+    reviewer = (await request(
+        ctx, "POST", "/users", expected=201,
+        data={"username": "source_policy_reviewer", "password": "test-password-456", "role": "PLATFORM_ADMIN"},
+    ))["data"]
+    login_response = await ctx.client.post(
+        "/api/v1/auth/login",
+        json={"tenant_code": ctx.tenant_code, "username": "source_policy_reviewer", "password": "test-password-456"},
+    )
+    assert login_response.status_code == 200, login_response.text
+    ctx.headers["source_reviewer"] = {
+        "Authorization": "Bearer " + login_response.json()["data"]["access_token"]
+    }
+    metadata_review = (await request(
+        ctx, "POST", f"/sources/{source_id}/access-review", who="source_reviewer",
+        data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"},
+    ))["data"]
+    assert metadata_review["access_status"] == "ACCESS_POLICY_REQUIRED"
+    broad = (await request(
+        ctx, "POST", "/access/policies", expected=201,
+        data={
+            "code": "reviewed_source_broad", "label": "Reviewed broad", "effect": "ALLOW",
+            "actions": ["DISCOVER", "QUERY"], "required_attribute_ids": [],
+        },
+    ))["data"]
+    await request(ctx, "POST", f"/access/policies/{broad['id']}/bindings", expected=201,
+                  data={"resource_type": "SOURCE", "resource_id": "reviewed_source"})
+    broad_submitted = (await request(
+        ctx, "POST", f"/access/policies/{broad['id']}/submit",
+        data={"revision": 2, "note": "Broad scope"},
+    ))["data"]
+    await request(ctx, "POST", f"/access/policies/{broad['id']}/approve", who="source_reviewer",
+                  data={"revision": broad_submitted["revision"], "note": "Broad approved"})
+    assert (await request(
+        ctx, "GET", f"/sources/{source_id}/access-policy-options", who="source_reviewer"
+    ))["data"] == []
+    await request(ctx, "POST", path, who="source_reviewer", expected=422,
+                  data={"revision_no": 2, "policy_id": broad["id"]})
+    policy = (await request(
+        ctx, "POST", "/access/policies", expected=201,
+        data={
+            "code": "reviewed_source_allow", "label": "Reviewed source allow", "effect": "ALLOW",
+            "actions": ["DISCOVER", "QUERY", "EXPORT"],
+            "required_attribute_ids": [
+                metadata["owner_unit_id"], metadata["business_domain_id"], metadata["jurisdiction_id"]
+            ],
+        },
+    ))["data"]
+    await request(ctx, "POST", path, who="source_reviewer", expected=409,
+                  data={"revision_no": 2, "policy_id": policy["id"]})
+    await request(ctx, "POST", f"/access/policies/{policy['id']}/bindings", expected=201,
+                  data={"resource_type": "SOURCE", "resource_id": "reviewed_source"})
+    submitted = (await request(
+        ctx, "POST", f"/access/policies/{policy['id']}/submit",
+        data={"revision": 2, "note": "Review source"},
+    ))["data"]
+    approved_policy = (await request(
+        ctx, "POST", f"/access/policies/{policy['id']}/approve", who="source_reviewer",
+        data={"revision": submitted["revision"], "note": "Approved source"},
+    ))["data"]
+    await request(ctx, "GET", f"/sources/{source_id}/access-policy-options", who="viewer", expected=403)
+    await request(ctx, "GET", f"/sources/{source_id}/access-policy-options", who="outsider", expected=404)
+    options = (await request(
+        ctx, "GET", f"/sources/{source_id}/access-policy-options", who="source_reviewer"
+    ))["data"]
+    assert [item["id"] for item in options] == [policy["id"]]
+    await request(ctx, "POST", path, expected=403,
+                  data={"revision_no": 2, "policy_id": policy["id"]})
+    await request(ctx, "POST", path, who="viewer", expected=403,
+                  data={"revision_no": 2, "policy_id": policy["id"]})
+    activated = (await request(
+        ctx, "POST", path, who="source_reviewer",
+        data={"revision_no": 2, "policy_id": policy["id"]},
+    ))["data"]
+    assert activated["access_revision"] == 3
+    assert activated["access_status"] == "POLICY_APPROVED"
+    assert activated["access_review_status"] == "APPROVED"
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer", expected=404)
+    async with SessionFactory() as session, session.begin():
+        for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id"):
+            session.add(UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer_id,
+                attribute_id=metadata[field], granted_by=admin_id,
+                valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            ))
+    product = (await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer"))["data"]
+    assert product["code"] == "BE16_REVIEWED"
+    assert any(item["code"] == "BE16_REVIEWED" for item in
+               (await request(ctx, "GET", "/data-products", who="viewer"))["data"])
+    async with SessionFactory() as session:
+        viewer = await session.scalar(select(User).where(User.id == viewer_id))
+        admin = await session.scalar(select(User).where(User.id == admin_id))
+        plan = QueryPlan(dimensions=["region_code"])
+        compiled = await QueryExecutionService(session, viewer).compile("BE16_REVIEWED", plan)
+        assert compiled[0].code == "BE16_REVIEWED"
+        with pytest.raises(AppError) as denied_export:
+            await QueryExecutionService(session, viewer).compile("BE16_REVIEWED", plan, action="EXPORT")
+        assert denied_export.value.code == "DATA_PRODUCT_NOT_FOUND"
+        with pytest.raises(AppError) as admin_export:
+            await QueryExecutionService(session, admin).compile("BE16_REVIEWED", plan, action="EXPORT")
+        assert admin_export.value.code == "DATA_PRODUCT_NOT_FOUND"
+    deny = (await request(
+        ctx, "POST", "/access/policies", expected=201,
+        data={
+            "code": "reviewed_source_deny", "label": "Reviewed deny", "effect": "DENY",
+            "actions": ["DISCOVER", "QUERY"],
+            "required_attribute_ids": [metadata["owner_unit_id"]],
+        },
+    ))["data"]
+    await request(ctx, "POST", f"/access/policies/{deny['id']}/bindings", expected=201,
+                  data={"resource_type": "SOURCE", "resource_id": "reviewed_source"})
+    deny_submitted = (await request(
+        ctx, "POST", f"/access/policies/{deny['id']}/submit",
+        data={"revision": 2, "note": "Deny source"},
+    ))["data"]
+    deny_approved = (await request(
+        ctx, "POST", f"/access/policies/{deny['id']}/approve", who="source_reviewer",
+        data={"revision": deny_submitted["revision"], "note": "Approved deny"},
+    ))["data"]
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer", expected=404)
+    await request(ctx, "POST", f"/access/policies/{deny['id']}/revoke",
+                  data={"revision": deny_approved["revision"], "note": "Deny ended"})
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer")
+    scoped = (await request(
+        ctx, "POST", "/access/policies", expected=201,
+        data={
+            "code": "reviewed_source_scoped", "label": "Reviewed scoped", "effect": "ALLOW",
+            "actions": ["DISCOVER", "QUERY"],
+            "required_attribute_ids": [
+                metadata["owner_unit_id"], metadata["business_domain_id"], metadata["jurisdiction_id"]
+            ],
+            "row_scope": {"region_code": ["JATIM"]},
+        },
+    ))["data"]
+    await request(ctx, "POST", f"/access/policies/{scoped['id']}/bindings", expected=201,
+                  data={"resource_type": "SOURCE", "resource_id": "reviewed_source"})
+    scoped_submitted = (await request(
+        ctx, "POST", f"/access/policies/{scoped['id']}/submit",
+        data={"revision": 2, "note": "Scoped source"},
+    ))["data"]
+    scoped_approved = (await request(
+        ctx, "POST", f"/access/policies/{scoped['id']}/approve", who="source_reviewer",
+        data={"revision": scoped_submitted["revision"], "note": "Approved scoped"},
+    ))["data"]
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer", expected=404)
+    await request(ctx, "POST", f"/access/policies/{scoped['id']}/revoke",
+                  data={"revision": scoped_approved["revision"], "note": "Scoped ended"})
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer")
+    await request(ctx, "POST", f"/access/policies/{policy['id']}/revoke",
+                  data={"revision": approved_policy["revision"], "note": "Revoke access"})
+    await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer", expected=404)
+    await request(ctx, "POST", "/data-products/BE16_REVIEWED/export", who="viewer", expected=404,
+                  data={"dimensions": ["region_code"]})
+    assert reviewer["id"] == activated["access_reviewed_by"]
+
+
+async def test_access_jurisdiction_lifecycle_and_tenant_scope(context):
+    ctx = context
+    users = (await request(ctx, "GET", "/users"))["data"]
+    viewer_id = next(item["id"] for item in users if item["username"] == "viewer")
+    admin_id = next(item["id"] for item in users if item["username"] == "admin")
+    from app.core.security import decode_token
+
+    outsider_id = decode_token(ctx.tokens["outsider"]["access_token"])["sub"]
+    async with SessionFactory() as session, session.begin():
+        outsider_tenant = await session.scalar(select(User.tenant_id).where(User.id == outsider_id))
+        source = DataSource(
+            tenant_id=ctx.tenant_id,
+            source_code="finance_source",
+            name="Finance source",
+            spreadsheet_id="finance_sheet",
+            owner_user_id=admin_id,
+        )
+        outside_source = DataSource(
+            tenant_id=outsider_tenant,
+            source_code="outside_source",
+            name="Outside source",
+            spreadsheet_id="outside_sheet",
+            owner_user_id=outsider_id,
+        )
+        session.add_all([source, outside_source])
+        await session.flush()
+        for sheet_id, product_code in enumerate(("FINANCE_REPORT", "FINANCE_EXPORT"), start=1):
+            sheet = SourceSheet(
+                tenant_id=ctx.tenant_id,
+                source_id=source.id,
+                sheet_id=sheet_id,
+                sheet_name=product_code,
+            )
+            session.add(sheet)
+            await session.flush()
+            session.add(DataProduct(
+                tenant_id=ctx.tenant_id,
+                source_sheet_id=sheet.id,
+                code=product_code,
+                name=product_code,
+                view_name=f"v_finance_{sheet_id}",
+                columns=[],
+                allowed_roles=["VIEWER"],
+            ))
+    products = (
+        await request(ctx, "GET", "/access/resources?resource_type=DATA_PRODUCT&search=FINANCE")
+    )["data"]
+    assert {item["code"] for item in products} == {"FINANCE_REPORT", "FINANCE_EXPORT"}
+    sources = (await request(ctx, "GET", "/access/resources?resource_type=SOURCE"))["data"]
+    assert {item["code"] for item in sources} == {"finance_source"}
+    await request(ctx, "GET", "/access/resources?resource_type=SOURCE", who="viewer", expected=403)
+    department = (
+        await request(
+            ctx,
+            "POST",
+            "/access/attributes",
+            expected=201,
+            data={"kind": "DEPARTMENT", "code": "finance", "label": "Finance"},
+        )
+    )["data"]
+    assert department["code"] == "FINANCE"
+    child = (
+        await request(
+            ctx,
+            "POST",
+            "/access/attributes",
+            expected=201,
+            data={
+                "kind": "DEPARTMENT",
+                "code": "accounting",
+                "label": "Accounting",
+                "parent_id": department["id"],
+            },
+        )
+    )["data"]
+    await request(
+        ctx,
+        "PATCH",
+        f"/access/attributes/{department['id']}",
+        expected=422,
+        data={"parent_id": child["id"], "revision": department["revision"]},
+    )
+    assert (await request(ctx, "GET", "/access/attributes", who="outsider"))["data"] == []
+    await request(ctx, "GET", "/access/attributes", who="viewer", expected=403)
+
+    assignment = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/users/{viewer_id}/assignments",
+            expected=201,
+            data={
+                "attribute_id": department["id"],
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_to": "2027-01-01T00:00:00Z",
+                "note": "Finance 2026",
+            },
+        )
+    )["data"]
+    await request(
+        ctx,
+        "POST",
+        f"/access/users/{viewer_id}/assignments",
+        expected=409,
+        data={
+            "attribute_id": department["id"],
+            "valid_from": "2026-06-01T00:00:00Z",
+            "valid_to": "2027-06-01T00:00:00Z",
+        },
+    )
+    effective = (
+        await request(
+            ctx,
+            "GET",
+            f"/access/users/{viewer_id}/effective?at=2026-09-27T00:00:00Z",
+        )
+    )["data"]
+    assert effective["dimensions"] == {"DEPARTMENT": ["FINANCE"]}
+    assert effective["actions"] == ["DISCOVER", "QUERY", "READ"]
+    own = (await request(ctx, "GET", "/access/me/effective", who="viewer"))["data"]
+    assert own["user"]["username"] == "viewer"
+
+    bundle = (
+        await request(
+            ctx,
+            "POST",
+            "/access/permission-bundles",
+            expected=201,
+            data={
+                "code": "report_exporter",
+                "label": "Report Exporter",
+                "description": "Ekspor laporan terotorisasi",
+                "actions": ["READ", "QUERY", "EXPORT"],
+            },
+        )
+    )["data"]
+    assert (await request(ctx, "GET", "/access/permission-bundles", who="outsider"))["data"] == []
+    admin_id = next(item["id"] for item in users if item["username"] == "admin")
+    await request(
+        ctx,
+        "POST",
+        f"/access/users/{admin_id}/permission-grants",
+        expected=422,
+        data={"bundle_id": bundle["id"]},
+    )
+    grant = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/users/{viewer_id}/permission-grants",
+            expected=201,
+            data={
+                "bundle_id": bundle["id"],
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_to": "2027-01-01T00:00:00Z",
+            },
+        )
+    )["data"]
+    effective = (
+        await request(
+            ctx,
+            "GET",
+            f"/access/users/{viewer_id}/effective?at=2026-09-27T00:00:00Z",
+        )
+    )["data"]
+    assert effective["actions"] == ["DISCOVER", "EXPORT", "QUERY", "READ"]
+    assert effective["permission_grants"][0]["bundle"]["code"] == "REPORT_EXPORTER"
+
+    policy = (
+        await request(
+            ctx,
+            "POST",
+            "/access/policies",
+            expected=201,
+            data={
+                "code": "finance_report_query",
+                "label": "Finance report query",
+                "effect": "ALLOW",
+                "actions": ["QUERY", "EXPORT"],
+                "required_attribute_ids": [department["id"]],
+                "row_scope": {"region_code": ["JATIM"]},
+                "column_rules": {"bank_account": "HIDDEN"},
+                "export_allowed": False,
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_to": "2027-01-01T00:00:00Z",
+            },
+        )
+    )["data"]
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{policy['id']}/bindings",
+        expected=404,
+        data={"resource_type": "DATA_PRODUCT", "resource_id": "MISSING_PRODUCT"},
+    )
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{policy['id']}/bindings",
+        expected=404,
+        data={"resource_type": "SOURCE", "resource_id": "outside_source"},
+    )
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{policy['id']}/bindings",
+        expected=201,
+        data={"resource_type": "DATA_PRODUCT", "resource_id": "FINANCE_REPORT"},
+    )
+    submitted = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/policies/{policy['id']}/submit",
+            data={"revision": 2, "note": "Ready for review"},
+        )
+    )["data"]
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{policy['id']}/approve",
+        expected=422,
+        data={"revision": submitted["revision"], "note": "Self approval"},
+    )
+    await request(
+        ctx,
+        "POST",
+        "/users",
+        expected=201,
+        data={
+            "username": "policy_reviewer",
+            "password": "test-password-456",
+            "role": "PLATFORM_ADMIN",
+        },
+    )
+    reviewer_login = await ctx.client.post(
+        "/api/v1/auth/login",
+        json={
+            "tenant_code": ctx.tenant_code,
+            "username": "policy_reviewer",
+            "password": "test-password-456",
+        },
+    )
+    assert reviewer_login.status_code == 200
+    reviewer_headers = {
+        "Authorization": "Bearer " + reviewer_login.json()["data"]["access_token"]
+    }
+    approved_response = await ctx.client.post(
+        f"/api/v1/access/policies/{policy['id']}/approve",
+        headers=reviewer_headers,
+        json={"revision": submitted["revision"], "note": "Approved by separate admin"},
+    )
+    assert approved_response.status_code == 200, approved_response.text
+    decision = (
+        await request(
+            ctx,
+            "POST",
+            "/access/evaluate",
+            data={
+                "user_id": viewer_id,
+                "action": "QUERY",
+                "resource_type": "DATA_PRODUCT",
+                "resource_id": "FINANCE_REPORT",
+                "at": "2026-09-27T00:00:00Z",
+            },
+        )
+    )["data"]
+    assert decision == {
+        "allowed": True,
+        "reason_code": "POLICY_MATCH",
+        "policy_ids": [policy["id"]],
+        "row_scope": {"region_code": ["JATIM"]},
+        "columns": {"bank_account": "HIDDEN"},
+        "export_allowed": False,
+    }
+    export_decision = (
+        await request(
+            ctx,
+            "POST",
+            "/access/evaluate",
+            data={
+                "user_id": viewer_id,
+                "action": "EXPORT",
+                "resource_type": "DATA_PRODUCT",
+                "resource_id": "FINANCE_REPORT",
+                "at": "2026-09-27T00:00:00Z",
+            },
+        )
+    )["data"]
+    assert export_decision["allowed"] is False
+    assert export_decision["reason_code"] == "EXPORT_NOT_ALLOWED"
+    assert export_decision["export_allowed"] is False
+    export_policy = (
+        await request(
+            ctx,
+            "POST",
+            "/access/policies",
+            expected=201,
+            data={
+                "code": "finance_export",
+                "label": "Finance export",
+                "effect": "ALLOW",
+                "actions": ["EXPORT"],
+                "required_attribute_ids": [department["id"]],
+                "export_allowed": True,
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_to": "2027-01-01T00:00:00Z",
+            },
+        )
+    )["data"]
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{export_policy['id']}/bindings",
+        expected=201,
+        data={"resource_type": "DATA_PRODUCT", "resource_id": "FINANCE_EXPORT"},
+    )
+    export_submitted = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/policies/{export_policy['id']}/submit",
+            data={"revision": 2, "note": "Ready for review"},
+        )
+    )["data"]
+    export_approval = await ctx.client.post(
+        f"/api/v1/access/policies/{export_policy['id']}/approve",
+        headers=reviewer_headers,
+        json={"revision": export_submitted["revision"], "note": "Export reviewed"},
+    )
+    assert export_approval.status_code == 200, export_approval.text
+    permitted_export = (
+        await request(
+            ctx,
+            "POST",
+            "/access/evaluate",
+            data={
+                "user_id": viewer_id,
+                "action": "EXPORT",
+                "resource_type": "DATA_PRODUCT",
+                "resource_id": "FINANCE_EXPORT",
+                "at": "2026-09-27T00:00:00Z",
+            },
+        )
+    )["data"]
+    assert permitted_export["allowed"] is True
+    assert permitted_export["export_allowed"] is True
+    default_denied = (
+        await request(
+            ctx,
+            "POST",
+            "/access/evaluate",
+            data={
+                "user_id": viewer_id,
+                "action": "QUERY",
+                "resource_type": "DATA_PRODUCT",
+                "resource_id": "UNBOUND_REPORT",
+            },
+        )
+    )["data"]
+    assert default_denied["reason_code"] == "DEFAULT_DENY"
+
+    deny_policy = (
+        await request(
+            ctx,
+            "POST",
+            "/access/policies",
+            expected=201,
+            data={
+                "code": "finance_report_deny",
+                "label": "Finance report explicit deny",
+                "effect": "DENY",
+                "actions": ["QUERY"],
+                "required_attribute_ids": [department["id"]],
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_to": "2027-01-01T00:00:00Z",
+            },
+        )
+    )["data"]
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{deny_policy['id']}/bindings",
+        expected=201,
+        data={"resource_type": "DATA_PRODUCT", "resource_id": "FINANCE_REPORT"},
+    )
+    deny_submitted = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/policies/{deny_policy['id']}/submit",
+            data={"revision": 2, "note": "Deny review"},
+        )
+    )["data"]
+    deny_approved_response = await ctx.client.post(
+        f"/api/v1/access/policies/{deny_policy['id']}/approve",
+        headers=reviewer_headers,
+        json={"revision": deny_submitted["revision"], "note": "Deny approved"},
+    )
+    assert deny_approved_response.status_code == 200, deny_approved_response.text
+    denied = (
+        await request(
+            ctx,
+            "POST",
+            "/access/evaluate",
+            data={
+                "user_id": viewer_id,
+                "action": "QUERY",
+                "resource_type": "DATA_PRODUCT",
+                "resource_id": "FINANCE_REPORT",
+                "at": "2026-09-27T00:00:00Z",
+            },
+        )
+    )["data"]
+    assert denied["reason_code"] == "EXPLICIT_DENY"
+    await request(
+        ctx,
+        "POST",
+        f"/access/policies/{deny_policy['id']}/revoke",
+        data={"revision": deny_approved_response.json()["data"]["revision"], "note": "Deny ended"},
+    )
+
+    permission_revoked = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/permission-grants/{grant['id']}/revoke",
+            data={"revision": grant["revision"], "note": "Periode tugas selesai"},
+        )
+    )["data"]
+    assert permission_revoked["status"] == "REVOKED"
+
+    revoked = (
+        await request(
+            ctx,
+            "POST",
+            f"/access/assignments/{assignment['id']}/revoke",
+            data={"revision": assignment["revision"], "note": "Pindah unit"},
+        )
+    )["data"]
+    assert revoked["status"] == "REVOKED"
+    history = (
+        await request(ctx, "GET", f"/access/users/{viewer_id}/assignments?include_inactive=true")
+    )["data"]
+    assert history[0]["revoked_by"] is not None
+    await request(ctx, "PATCH", f"/users/{viewer_id}", data={"is_active": False})
+    inactive = (await request(ctx, "GET", f"/access/users/{viewer_id}/effective"))["data"]
+    assert inactive["actions"] == []
+    assert inactive["assignments"] == []
+    inactive_decision = (
+        await request(
+            ctx,
+            "POST",
+            "/access/evaluate",
+            data={
+                "user_id": viewer_id,
+                "action": "QUERY",
+                "resource_type": "DATA_PRODUCT",
+                "resource_id": "FINANCE_REPORT",
+            },
+        )
+    )["data"]
+    assert inactive_decision["allowed"] is False
+    assert inactive_decision["reason_code"] == "USER_INACTIVE"
+
+
+async def onboard(ctx, config_data, *, classify=True, legacy_source=True):
+    metadata = await source_access_metadata(ctx)
     data = await request(
         ctx,
         "POST",
         "/sources/google-sheets",
         expected=202,
-        data={"source_code": "sales_test", "name": "Sales Test", "spreadsheet_url": "fake_sheet_12345"},
+        data={
+            "source_code": "sales_test",
+            "name": "Sales Test",
+            "spreadsheet_url": "fake_sheet_12345",
+            "access_metadata": metadata,
+        },
     )
     source_id = data["data"]["source"]["id"]
+    if legacy_source:
+        async with SessionFactory() as session, session.begin():
+            await session.execute(
+                update(DataSource)
+                .where(DataSource.tenant_id == ctx.tenant_id, DataSource.id == source_id)
+                .values(access_metadata=text("NULL"), access_metadata_editor_id=None)
+            )
     await run_pending(ctx.tenant_id)
     job = await request(ctx, "GET", "/jobs/" + data["data"]["job_id"])
     assert job["data"]["status"] == "SUCCEEDED", job
@@ -434,12 +1499,18 @@ async def test_failed_google_job_is_observable(context, monkeypatch):
         raise AppError("SOURCE_ACCESS_DENIED", "Service account cannot read this sheet.", 403)
 
     monkeypatch.setattr(GoogleSheetsService, "metadata", denied)
+    metadata = await source_access_metadata(ctx)
     data = await request(
         context,
         "POST",
         "/sources/google-sheets",
         expected=202,
-        data={"source_code": "unavailable", "name": "Missing access", "spreadsheet_url": "fake_sheet_12345"},
+        data={
+            "source_code": "unavailable",
+            "name": "Missing access",
+            "spreadsheet_url": "fake_sheet_12345",
+            "access_metadata": metadata,
+        },
     )
     await run_pending(ctx.tenant_id)
     job = (await request(context, "GET", "/jobs/" + data["data"]["job_id"]))["data"]
@@ -470,6 +1541,10 @@ async def test_database_rejects_cross_tenant_foreign_key(context):
 async def test_classification_required_and_master_gate(context, config_data):
     ctx = context
     source_id, sheet_id, config = await onboard(ctx, config_data, classify=False)
+    source = (await request(ctx, "GET", f"/sources/{source_id}"))["data"]
+    assert source["status"] == "NEEDS_REVIEW"
+    assert source["access_status"] == "ACCESS_POLICY_REQUIRED"
+    assert source["access_revision"] == 1
     path = f"/source-sheets/{sheet_id}/classification"
     current = (await request(ctx, "GET", path))["data"]
     assert current["status"] == "CLASSIFICATION_REQUIRED"

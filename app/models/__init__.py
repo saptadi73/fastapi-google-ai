@@ -1,3 +1,11 @@
+from app.models.access import (
+    AccessAttribute,
+    AccessPolicy,
+    AccessPolicyBinding,
+    PermissionBundle,
+    UserAssignment,
+    UserPermissionGrant,
+)
 from app.models.ai_policy import AITaskPolicy
 from app.models.audit import AIUsage, AuditEvent
 from app.models.auth import RefreshToken, Tenant, User
@@ -16,6 +24,12 @@ install_tenant_constraints(Base.metadata)
 
 __all__ = [
     "ImportReview",
+    "AccessAttribute",
+    "AccessPolicy",
+    "AccessPolicyBinding",
+    "PermissionBundle",
+    "UserAssignment",
+    "UserPermissionGrant",
     "ImportReviewRow",
     "ImportQuestion",
     "ImportDecision",

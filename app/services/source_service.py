@@ -1,17 +1,20 @@
 from datetime import datetime, timezone
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, or_, select, text
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.models.access import AccessAttribute, AccessPolicy, AccessPolicyBinding, UserAssignment
+from app.models.auth import User
+from app.models.base import now
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
 from app.models.source import DataSource, ProfilingRun, SourceDependency, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.import_review import ImportReviewCreate
-from app.schemas.source import spreadsheet_id
+from app.schemas.source import SourceAccessMetadata, spreadsheet_id
 from app.services.audit_service import audit
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.import_review_service import ImportReviewService
@@ -64,6 +67,39 @@ class SourceService:
         self.repo = SourceRepository(session, user.tenant_id)
         self.google = google or GoogleSheetsService()
 
+    async def _validated_access_metadata(self, data, *, subject_id=None):
+        metadata = data.model_dump(mode="json")
+        scope_ids = {}
+        for field, kind in (
+            ("owner_unit_id", "DEPARTMENT"),
+            ("business_domain_id", "BUSINESS_DOMAIN"),
+            ("jurisdiction_id", "JURISDICTION"),
+            ("purpose_id", "PURPOSE"),
+        ):
+            attribute = await self.repo.get(AccessAttribute, metadata[field])
+            if not attribute.is_active or attribute.kind != kind:
+                raise AppError("SOURCE_ACCESS_SCOPE_INVALID", "Atribut metadata sumber tidak sesuai atau nonaktif.")
+            if kind != "PURPOSE":
+                scope_ids[field] = attribute.id
+        instant = now()
+        assigned_ids = set((await self.session.scalars(
+            select(UserAssignment.attribute_id).where(
+                UserAssignment.tenant_id == self.user.tenant_id,
+                UserAssignment.user_id == (subject_id or self.user.id),
+                UserAssignment.status == "ACTIVE",
+                UserAssignment.valid_from <= instant,
+                or_(UserAssignment.valid_to.is_(None), UserAssignment.valid_to > instant),
+                UserAssignment.attribute_id.in_(scope_ids.values()),
+            )
+        )).all())
+        if assigned_ids != set(scope_ids.values()):
+            raise AppError("SOURCE_SCOPE_NOT_ASSIGNED", "Scope sumber harus menjadi assignment aktif pendaftar.", 403)
+        for field in ("data_owner_user_id", "data_steward_user_id"):
+            target = await self.repo.get(User, metadata[field])
+            if not target.is_active:
+                raise AppError("SOURCE_ACCESS_USER_INACTIVE", "Owner atau steward tidak aktif.")
+        return metadata
+
     async def register(self, data):
         if data.credential_ref != get_settings().google_credential_ref:
             raise AppError("UNKNOWN_CREDENTIAL_REF", "credential_ref belum dikonfigurasi pada server.")
@@ -71,15 +107,212 @@ class SourceService:
             sid = spreadsheet_id(data.spreadsheet_url)
         except ValueError as exc:
             raise AppError("INVALID_SPREADSHEET_ID", str(exc)) from None
+        metadata = await self._validated_access_metadata(data.access_metadata)
         source = await self.repo.add(
             DataSource,
-            **data.model_dump(exclude={"spreadsheet_url"}),
+            **data.model_dump(exclude={"spreadsheet_url", "access_metadata"}),
             spreadsheet_id=sid,
             owner_user_id=self.user.id,
+            access_metadata=metadata,
+            access_metadata_editor_id=self.user.id,
         )
         audit(self.session, self.user, "source.registered", source.id)
         job = await enqueue(self.session, self.user, "DISCOVER", source.id)
         return {"source": record(source), **job}
+
+    async def update_access_metadata(self, source_id, data):
+        source = await self.session.scalar(
+            self.repo.query(DataSource)
+            .where(DataSource.id == str(source_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if source is None:
+            raise AppError("RESOURCE_NOT_FOUND", "Data tidak ditemukan.", 404)
+        if source.access_revision != data.revision_no:
+            raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
+        metadata = await self._validated_access_metadata(data.access_metadata)
+        if (source.access_metadata == metadata and source.access_status == "ACCESS_POLICY_REQUIRED"
+            and source.access_review_status != "REJECTED" and source.access_metadata_editor_id):
+            return record(source)
+        previous_status = source.access_status
+        changed_fields = [
+            field for field, value in metadata.items()
+            if (source.access_metadata or {}).get(field) != value
+        ]
+        source.access_metadata = metadata
+        source.access_metadata_editor_id = self.user.id
+        source.access_status = "ACCESS_POLICY_REQUIRED"
+        source.access_review_status = "PENDING"
+        source.access_reviewed_by = None
+        source.access_reviewed_at = None
+        source.access_review_reason = ""
+        source.access_revision += 1
+        audit(
+            self.session, self.user, "source.access_metadata_updated", source.id,
+            revision_no=source.access_revision,
+            changed_fields=changed_fields,
+            previous_status=previous_status,
+        )
+        return record(source)
+
+    async def review_access_metadata(self, source_id, data):
+        source = await self.session.scalar(
+            self.repo.query(DataSource)
+            .where(DataSource.id == str(source_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if source is None:
+            raise AppError("RESOURCE_NOT_FOUND", "Data tidak ditemukan.", 404)
+        if source.access_revision != data.revision_no:
+            raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
+        if source.access_review_status != "PENDING":
+            raise AppError("SOURCE_METADATA_ALREADY_REVIEWED", "Metadata sudah diputuskan; muat ulang sumber.", 409)
+        if not source.access_metadata or not source.access_metadata_editor_id:
+            raise AppError("SOURCE_METADATA_INCOMPLETE", "Metadata perlu diisi ulang oleh editor.", 409)
+        if source.access_metadata_editor_id == self.user.id:
+            raise AppError("SOURCE_METADATA_SELF_REVIEW", "Editor metadata tidak boleh menjadi reviewer.", 403)
+        if data.decision == "APPROVE":
+            editor = await self.repo.get(User, source.access_metadata_editor_id)
+            if not editor.is_active:
+                raise AppError("SOURCE_METADATA_EDITOR_INACTIVE", "Editor metadata tidak lagi aktif.", 409)
+            await self._validated_access_metadata(
+                SourceAccessMetadata.model_validate(source.access_metadata), subject_id=editor.id
+            )
+        source.access_review_status = "APPROVED" if data.decision == "APPROVE" else "REJECTED"
+        source.access_reviewed_by = self.user.id
+        source.access_reviewed_at = now()
+        source.access_review_reason = data.reason
+        source.access_status = "ACCESS_POLICY_REQUIRED"
+        source.access_revision += 1
+        audit(
+            self.session, self.user, "source.access_metadata_reviewed", source.id,
+            revision_no=source.access_revision,
+            decision=data.decision,
+            reason_code=data.reason,
+        )
+        return record(source)
+
+    async def metadata_review_context(self, source_id):
+        source = await self.repo.get(DataSource, source_id)
+        metadata = source.access_metadata or {}
+        attribute_fields = ("owner_unit_id", "business_domain_id", "jurisdiction_id", "purpose_id")
+        user_fields = ("data_owner_user_id", "data_steward_user_id")
+        attribute_ids = [metadata[field] for field in attribute_fields if metadata.get(field)]
+        user_ids = [metadata[field] for field in user_fields if metadata.get(field)]
+        attributes = {}
+        people = {}
+        if attribute_ids:
+            attributes = {
+                item.id: item for item in (await self.session.scalars(
+                    self.repo.query(AccessAttribute).where(AccessAttribute.id.in_(attribute_ids))
+                )).all()
+            }
+        if user_ids:
+            people = {
+                item.id: item for item in (await self.session.scalars(
+                    self.repo.query(User).where(User.id.in_(user_ids))
+                )).all()
+            }
+        return {
+            "source_id": source.id,
+            "source_code": source.source_code,
+            "access_revision": source.access_revision,
+            "access_status": source.access_status,
+            "review_status": source.access_review_status,
+            "attributes": {
+                field: (
+                    {"code": attributes[metadata[field]].code, "label": attributes[metadata[field]].label,
+                     "is_active": attributes[metadata[field]].is_active}
+                    if metadata.get(field) in attributes else None
+                ) for field in attribute_fields
+            },
+            "people": {
+                field: (
+                    {"username": people[metadata[field]].username, "is_active": people[metadata[field]].is_active}
+                    if metadata.get(field) in people else None
+                ) for field in user_fields
+            },
+            "sensitivity": metadata.get("sensitivity"),
+        }
+
+    async def activate_source_access(self, source_id, data):
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        if source.access_revision != data.revision_no:
+            raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
+        if not source.access_metadata or source.access_review_status != "APPROVED":
+            raise AppError("SOURCE_METADATA_REVIEW_REQUIRED", "Metadata sumber harus direview terlebih dahulu.", 409)
+        if source.access_metadata_editor_id == self.user.id:
+            raise AppError("SOURCE_ACCESS_APPROVER_CONFLICT", "Editor metadata tidak boleh mengaktifkan akses.", 403)
+        editor = await self.repo.get(User, source.access_metadata_editor_id)
+        if not editor.is_active:
+            raise AppError("SOURCE_METADATA_EDITOR_INACTIVE", "Editor metadata tidak lagi aktif.", 409)
+        await self._validated_access_metadata(
+            SourceAccessMetadata.model_validate(source.access_metadata), subject_id=editor.id
+        )
+        policy = await self.repo.get(AccessPolicy, data.policy_id, lock=True)
+        instant = now()
+        binding = await self.session.scalar(
+            self.repo.query(AccessPolicyBinding).where(
+                AccessPolicyBinding.policy_id == policy.id,
+                AccessPolicyBinding.resource_type == "SOURCE",
+                AccessPolicyBinding.resource_id == source.source_code,
+            )
+        )
+        if (binding is None or policy.status != "APPROVED" or policy.effect != "ALLOW"
+                or policy.valid_from > instant or (policy.valid_to and policy.valid_to <= instant)
+                or not {"DISCOVER", "QUERY"}.issubset(policy.actions)):
+            raise AppError("SOURCE_ACCESS_POLICY_REQUIRED", "Policy SOURCE ALLOW belum approved atau tidak berlaku.", 409)
+        scope_ids = {
+            source.access_metadata[field]
+            for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id")
+        }
+        if not scope_ids.issubset(policy.required_attribute_ids):
+            raise AppError("SOURCE_POLICY_SCOPE_REQUIRED", "Policy wajib memuat unit, domain, dan yurisdiksi sumber.", 422)
+        if policy.row_scope or policy.column_rules:
+            raise AppError("SOURCE_POLICY_CONTROLS_UNSUPPORTED", "Aturan baris/kolom belum didukung untuk aktivasi.", 422)
+        if source.access_status == "POLICY_APPROVED":
+            return record(source)
+        source.access_status = "POLICY_APPROVED"
+        source.access_revision += 1
+        audit(
+            self.session, self.user, "source.access_activated", source.id,
+            revision_no=source.access_revision, policy_id=policy.id,
+        )
+        return record(source)
+
+    async def source_policy_options(self, source_id):
+        source = await self.repo.get(DataSource, source_id)
+        instant = now()
+        scope_ids = {
+            source.access_metadata[field]
+            for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id")
+        } if source.access_metadata else set()
+        policies = (await self.session.scalars(
+            self.repo.query(AccessPolicy)
+            .join(AccessPolicyBinding, AccessPolicyBinding.policy_id == AccessPolicy.id)
+            .where(
+                AccessPolicyBinding.tenant_id == self.user.tenant_id,
+                AccessPolicyBinding.resource_type == "SOURCE",
+                AccessPolicyBinding.resource_id == source.source_code,
+                AccessPolicy.status == "APPROVED",
+                AccessPolicy.effect == "ALLOW",
+                AccessPolicy.valid_from <= instant,
+                or_(AccessPolicy.valid_to.is_(None), AccessPolicy.valid_to > instant),
+                AccessPolicy.actions.contains(["DISCOVER", "QUERY"]),
+                AccessPolicy.row_scope == {},
+                AccessPolicy.column_rules == {},
+            )
+            .order_by(AccessPolicy.code)
+            .limit(100)
+        )).all()
+        return [
+            {"id": policy.id, "code": policy.code, "label": policy.label,
+             "actions": policy.actions, "export_allowed": policy.export_allowed}
+            for policy in policies
+            if scope_ids.issubset(policy.required_attribute_ids)
+        ]
 
     async def discover(self, source_id):
         source = await self.repo.get(DataSource, source_id)

@@ -180,4 +180,4 @@ async def test_compile_checks_approved_relationship_and_access_to_each_product()
     )
     assert joined == [products] and len(relations) == 1
     assert "JOIN" in str(statement)
-    service.repo.product.assert_any_await("PRODUCT", service.user)
+    service.repo.product.assert_any_await("PRODUCT", service.user, action="QUERY")

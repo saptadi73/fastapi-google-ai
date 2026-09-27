@@ -26,8 +26,12 @@ class NL2SQLService:
                 raise AppError("SAVED_QUERY_PRODUCT_MISMATCH", "Template bukan milik produk yang dipilih.", 422)
             route = "SAVED_QUERY"
         else:
-            matched = await self.repo.matching_templates(normalize_intent(request.question), self.user,
-                                                        request.data_product_code)
+            visible_codes = {product["code"] for product in await catalog.products()}
+            matched = [
+                item for item in await self.repo.matching_templates(
+                    normalize_intent(request.question), self.user, request.data_product_code
+                ) if item.data_product_code in visible_codes
+            ]
             if len(matched) > 1:
                 return await self.clarification(request,
                     "Beberapa template cocok. Pilih template yang dimaksud atau persempit produk/pertanyaan.",

@@ -11,10 +11,43 @@ from app.schemas.common import StrictModel
 from app.schemas.data_policy import DatasetKind
 
 
+class SourceAccessMetadata(StrictModel):
+    owner_unit_id: UUID
+    business_domain_id: UUID
+    jurisdiction_id: UUID
+    purpose_id: UUID
+    data_owner_user_id: UUID
+    data_steward_user_id: UUID
+    sensitivity: Literal["LOW", "MEDIUM", "HIGH"]
+
+
+class SourceAccessMetadataUpdate(StrictModel):
+    revision_no: int = Field(ge=1)
+    access_metadata: SourceAccessMetadata
+
+
+class SourceMetadataReview(StrictModel):
+    revision_no: int = Field(ge=1)
+    decision: Literal["APPROVE", "REJECT"]
+    reason: Literal["METADATA_VERIFIED", "SCOPE_MISMATCH", "OWNER_UNCONFIRMED", "OTHER"]
+
+    @model_validator(mode="after")
+    def reason_matches_decision(self):
+        if (self.decision == "APPROVE") != (self.reason == "METADATA_VERIFIED"):
+            raise ValueError("METADATA_VERIFIED hanya untuk approval; rejection memerlukan alasan lain")
+        return self
+
+
+class SourceAccessActivation(StrictModel):
+    revision_no: int = Field(ge=1)
+    policy_id: UUID
+
+
 class SourceCreate(StrictModel):
     source_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
     name: str = Field(min_length=1, max_length=200)
     spreadsheet_url: str = Field(min_length=5, max_length=500)
+    access_metadata: SourceAccessMetadata
     description: str = Field(default="", max_length=2000)
     credential_ref: str = Field(default="default", max_length=100)
     sync_schedule: str | None = None

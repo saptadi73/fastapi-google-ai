@@ -47,6 +47,193 @@ Body: [UserUpdate](#userupdate).
 |---|---|---|---|
 | `user_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/access/registration-options
+
+Body: —.
+
+### GET /api/v1/access/resources
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `resource_type` | query | Ya | `enum ["DATA_PRODUCT","SOURCE","MASTER","TAXONOMY"]` {} |
+| `search` | query | Tidak | `string` {"default":""} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
+
+### GET /api/v1/access/attributes
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `kind` | query | Tidak | `enum ["DEPARTMENT","BUSINESS_DOMAIN","JURISDICTION","CLEARANCE","PURPOSE"] / null` {} |
+| `include_inactive` | query | Tidak | `boolean` {"default":false} |
+
+### POST /api/v1/access/attributes
+
+Body: [AccessAttributeCreate](#accessattributecreate).
+
+### PATCH /api/v1/access/attributes/{attribute_id}
+
+Body: [AccessAttributeUpdate](#accessattributeupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `attribute_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/access/permission-bundles
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `include_inactive` | query | Tidak | `boolean` {"default":false} |
+
+### POST /api/v1/access/permission-bundles
+
+Body: [PermissionBundleCreate](#permissionbundlecreate).
+
+### PATCH /api/v1/access/permission-bundles/{bundle_id}
+
+Body: [PermissionBundleUpdate](#permissionbundleupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `bundle_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/access/users/{user_id}/assignments
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `user_id` | path | Ya | `string (uuid)` {} |
+| `include_inactive` | query | Tidak | `boolean` {"default":false} |
+
+### POST /api/v1/access/users/{user_id}/assignments
+
+Body: [UserAssignmentCreate](#userassignmentcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `user_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/assignments/{assignment_id}/revoke
+
+Body: [AssignmentRevoke](#assignmentrevoke).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `assignment_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/access/users/{user_id}/permission-grants
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `user_id` | path | Ya | `string (uuid)` {} |
+| `include_inactive` | query | Tidak | `boolean` {"default":false} |
+
+### POST /api/v1/access/users/{user_id}/permission-grants
+
+Body: [PermissionGrantCreate](#permissiongrantcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `user_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/permission-grants/{grant_id}/revoke
+
+Body: [AssignmentRevoke](#assignmentrevoke).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `grant_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/access/policies
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `include_revoked` | query | Tidak | `boolean` {"default":false} |
+
+### POST /api/v1/access/policies
+
+Body: [AccessPolicyCreate](#accesspolicycreate).
+
+### PATCH /api/v1/access/policies/{policy_id}
+
+Body: [AccessPolicyUpdate](#accesspolicyupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/access/policies/{policy_id}/bindings
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/policies/{policy_id}/bindings
+
+Body: [AccessPolicyBindingCreate](#accesspolicybindingcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/policies/{policy_id}/submit
+
+Body: [AccessPolicyTransition](#accesspolicytransition).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/policies/{policy_id}/approve
+
+Body: [AccessPolicyTransition](#accesspolicytransition).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/policies/{policy_id}/revoke
+
+Body: [AccessPolicyTransition](#accesspolicytransition).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/evaluate
+
+Body: [AccessEvaluationRequest](#accessevaluationrequest).
+
+### GET /api/v1/access/users/{user_id}/effective
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `user_id` | path | Ya | `string (uuid)` {} |
+| `at` | query | Tidak | `string (date-time) / null` {} |
+
+### GET /api/v1/access/me/effective
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `at` | query | Tidak | `string (date-time) / null` {} |
+
 ### GET /api/v1/source-sheets/{sheet_id}/classification
 
 Body: —.
@@ -77,6 +264,46 @@ Body: —.
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
 
 ### GET /api/v1/sources/{source_id}
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### PATCH /api/v1/sources/{source_id}/access-metadata
+
+Body: [SourceAccessMetadataUpdate](#sourceaccessmetadataupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/sources/{source_id}/access-review
+
+Body: [SourceMetadataReview](#sourcemetadatareview).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/sources/{source_id}/access-review-context
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/sources/{source_id}/access-activate
+
+Body: [SourceAccessActivation](#sourceaccessactivation).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/sources/{source_id}/access-policy-options
 
 Body: —.
 
@@ -1326,6 +1553,194 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### AccessAttributeCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `kind` | Ya | `enum ["DEPARTMENT","BUSINESS_DOMAIN","JURISDICTION","CLEARANCE","PURPOSE"]` | — | — |
+| `code` | Ya | `string` | — | {"maxLength":80,"minLength":1,"pattern":"^[A-Za-z0-9_.-]+$"} |
+| `label` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `parent_id` | Tidak | `string (uuid) / null` | — | — |
+| `attribute_data` | Tidak | `object` | {} | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "kind": "DEPARTMENT",
+  "code": "FINANCE",
+  "label": "Finance",
+  "parent_id": null,
+  "attribute_data": {}
+}
+```
+
+### AccessAttributeUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `label` | Tidak | `string / null` | — | — |
+| `parent_id` | Tidak | `string (uuid) / null` | — | — |
+| `is_active` | Tidak | `boolean / null` | — | — |
+| `attribute_data` | Tidak | `object / null` | — | — |
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "label": "Finance and Accounting",
+  "is_active": true,
+  "attribute_data": {},
+  "revision": 1
+}
+```
+
+### AccessEvaluationRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `user_id` | Tidak | `string (uuid) / null` | — | — |
+| `action` | Ya | `enum ["DISCOVER","READ","QUERY","EXPORT","EDIT","APPROVE","OPERATE","ADMIN"]` | — | — |
+| `resource_type` | Ya | `enum ["DATA_PRODUCT","SOURCE","MASTER","TAXONOMY"]` | — | — |
+| `resource_id` | Ya | `string` | — | {"maxLength":100,"minLength":1} |
+| `at` | Tidak | `string (date-time)` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "action": "QUERY",
+  "resource_type": "DATA_PRODUCT",
+  "resource_id": "FINANCE_REPORT",
+  "at": "2026-09-27T00:00:00+07:00"
+}
+```
+
+### AccessPolicyBindingCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `resource_type` | Ya | `enum ["DATA_PRODUCT","SOURCE","MASTER","TAXONOMY"]` | — | — |
+| `resource_id` | Ya | `string` | — | {"maxLength":100,"minLength":1,"pattern":"^[A-Za-z0-9_.:-]+$"} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "resource_type": "DATA_PRODUCT",
+  "resource_id": "FINANCE_REPORT"
+}
+```
+
+### AccessPolicyCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"maxLength":80,"minLength":1,"pattern":"^[A-Za-z0-9_.-]+$"} |
+| `label` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `description` | Tidak | `string` | "" | {"maxLength":500} |
+| `effect` | Ya | `enum ["ALLOW","DENY"]` | — | — |
+| `actions` | Ya | `array<enum ["DISCOVER","READ","QUERY","EXPORT","EDIT","APPROVE","OPERATE","ADMIN"]>` | — | {"maxItems":8,"minItems":1} |
+| `required_attribute_ids` | Tidak | `array<string (uuid)>` | [] | {"maxItems":100} |
+| `row_scope` | Tidak | `map<string, array<string>>` | {} | — |
+| `column_rules` | Tidak | `map<string, enum ["VISIBLE","MASKED","HIDDEN"]>` | {} | — |
+| `export_allowed` | Tidak | `boolean` | false | — |
+| `valid_from` | Tidak | `string (date-time)` | — | — |
+| `valid_to` | Tidak | `string (date-time) / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "finance_jatim_read",
+  "label": "Finance Jawa Timur",
+  "description": "Akses baca produk keuangan Jawa Timur",
+  "effect": "ALLOW",
+  "actions": [
+    "READ",
+    "QUERY"
+  ],
+  "required_attribute_ids": [
+    "11111111-1111-4111-8111-111111111111"
+  ],
+  "row_scope": {
+    "region_code": [
+      "JATIM"
+    ]
+  },
+  "column_rules": {
+    "employee_name": "MASKED",
+    "bank_account": "HIDDEN"
+  },
+  "export_allowed": false,
+  "valid_from": "2026-09-27T00:00:00+07:00",
+  "valid_to": null
+}
+```
+
+### AccessPolicyTransition
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision": 2,
+  "note": "Policy telah diperiksa"
+}
+```
+
+### AccessPolicyUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `label` | Tidak | `string / null` | — | — |
+| `description` | Tidak | `string / null` | — | — |
+| `effect` | Tidak | `enum ["ALLOW","DENY"] / null` | — | — |
+| `actions` | Tidak | `array<enum ["DISCOVER","READ","QUERY","EXPORT","EDIT","APPROVE","OPERATE","ADMIN"]> / null` | — | — |
+| `required_attribute_ids` | Tidak | `array<string (uuid)> / null` | — | — |
+| `row_scope` | Tidak | `map<string, array<string>> / null` | — | — |
+| `column_rules` | Tidak | `map<string, enum ["VISIBLE","MASKED","HIDDEN"]> / null` | — | — |
+| `export_allowed` | Tidak | `boolean / null` | — | — |
+| `valid_from` | Tidak | `string (date-time) / null` | — | — |
+| `valid_to` | Tidak | `string (date-time) / null` | — | — |
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "label": "Finance Jawa Timur",
+  "description": "Akses baca yang telah direview",
+  "actions": [
+    "READ",
+    "QUERY"
+  ],
+  "revision": 1
+}
+```
+
+### AssignmentRevoke
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision": 1,
+  "note": "Pengguna berpindah departemen"
+}
+```
+
 ### ColumnMapping
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2207,6 +2622,76 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### PermissionBundleCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"maxLength":80,"minLength":1,"pattern":"^[A-Za-z0-9_.-]+$"} |
+| `label` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `description` | Tidak | `string` | "" | {"maxLength":500} |
+| `actions` | Ya | `array<enum ["DISCOVER","READ","QUERY","EXPORT","EDIT","APPROVE","OPERATE","ADMIN"]>` | — | {"maxItems":8,"minItems":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "report_exporter",
+  "label": "Report Exporter",
+  "description": "Tambahan kewenangan ekspor untuk analis terpilih",
+  "actions": [
+    "READ",
+    "QUERY",
+    "EXPORT"
+  ]
+}
+```
+
+### PermissionBundleUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `label` | Tidak | `string / null` | — | — |
+| `description` | Tidak | `string / null` | — | — |
+| `actions` | Tidak | `array<enum ["DISCOVER","READ","QUERY","EXPORT","EDIT","APPROVE","OPERATE","ADMIN"]> / null` | — | — |
+| `is_active` | Tidak | `boolean / null` | — | — |
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "label": "Report Exporter",
+  "description": "Kewenangan query dan ekspor",
+  "actions": [
+    "READ",
+    "QUERY",
+    "EXPORT"
+  ],
+  "is_active": true,
+  "revision": 1
+}
+```
+
+### PermissionGrantCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `bundle_id` | Ya | `string (uuid)` | — | — |
+| `valid_from` | Tidak | `string (date-time)` | — | — |
+| `valid_to` | Tidak | `string (date-time) / null` | — | — |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "bundle_id": "22222222-2222-4222-8222-222222222222",
+  "valid_from": "2026-09-27T00:00:00+07:00",
+  "valid_to": "2026-12-31T23:59:59+07:00",
+  "note": "Akses ekspor laporan kuartal empat"
+}
+```
+
 ### ProductUpdate
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2526,6 +3011,58 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `field` | Ya | `string` | — | — |
 | `direction` | Tidak | `enum ["asc","desc"]` | "asc" | — |
 
+### SourceAccessActivation
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `policy_id` | Ya | `string (uuid)` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 3,
+  "policy_id": "77777777-7777-4777-8777-777777777777"
+}
+```
+
+### SourceAccessMetadata
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `owner_unit_id` | Ya | `string (uuid)` | — | — |
+| `business_domain_id` | Ya | `string (uuid)` | — | — |
+| `jurisdiction_id` | Ya | `string (uuid)` | — | — |
+| `purpose_id` | Ya | `string (uuid)` | — | — |
+| `data_owner_user_id` | Ya | `string (uuid)` | — | — |
+| `data_steward_user_id` | Ya | `string (uuid)` | — | — |
+| `sensitivity` | Ya | `enum ["LOW","MEDIUM","HIGH"]` | — | — |
+
+### SourceAccessMetadataUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `access_metadata` | Ya | `SourceAccessMetadata` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "access_metadata": {
+    "owner_unit_id": "11111111-1111-4111-8111-111111111111",
+    "business_domain_id": "22222222-2222-4222-8222-222222222222",
+    "jurisdiction_id": "33333333-3333-4333-8333-333333333333",
+    "purpose_id": "44444444-4444-4444-8444-444444444444",
+    "data_owner_user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "data_steward_user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "sensitivity": "HIGH"
+  }
+}
+```
+
 ### SourceConflictPolicy
 
 `enum ["REQUIRE_REVIEW","AUTHORITATIVE_SOURCE"]`
@@ -2537,6 +3074,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `source_code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
 | `name` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
 | `spreadsheet_url` | Ya | `string` | — | {"maxLength":500,"minLength":5} |
+| `access_metadata` | Ya | `SourceAccessMetadata` | — | — |
 | `description` | Tidak | `string` | "" | {"maxLength":2000} |
 | `credential_ref` | Tidak | `string` | "default" | {"maxLength":100} |
 | `sync_schedule` | Tidak | `string / null` | — | — |
@@ -2550,11 +3088,38 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "source_code": "sales_cabang",
   "name": "Penjualan Cabang",
   "spreadsheet_url": "https://docs.google.com/spreadsheets/d/ID_SPREADSHEET_ANDA/edit",
+  "access_metadata": {
+    "owner_unit_id": "11111111-1111-4111-8111-111111111111",
+    "business_domain_id": "22222222-2222-4222-8222-222222222222",
+    "jurisdiction_id": "33333333-3333-4333-8333-333333333333",
+    "purpose_id": "44444444-4444-4444-8444-444444444444",
+    "data_owner_user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "data_steward_user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "sensitivity": "MEDIUM"
+  },
   "description": "Satu baris per transaksi penjualan",
   "credential_ref": "default",
   "sync_schedule": "0 */6 * * *",
   "schedule_timezone": "Asia/Jakarta",
   "concurrency_policy": "QUEUE_LATEST"
+}
+```
+
+### SourceMetadataReview
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `decision` | Ya | `enum ["APPROVE","REJECT"]` | — | — |
+| `reason` | Ya | `enum ["METADATA_VERIFIED","SCOPE_MISMATCH","OWNER_UNCONFIRMED","OTHER"]` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 2,
+  "decision": "APPROVE",
+  "reason": "METADATA_VERIFIED"
 }
 ```
 
@@ -2809,6 +3374,26 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `rounding` | Ya | `enum ["HALF_UP","HALF_EVEN","DOWN"]` | — | — |
 | `on_error` | Tidak | `"REJECT_ROW"` | "REJECT_ROW" | — |
 
+### UserAssignmentCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `attribute_id` | Ya | `string (uuid)` | — | — |
+| `valid_from` | Tidak | `string (date-time)` | — | — |
+| `valid_to` | Tidak | `string (date-time) / null` | — | — |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "attribute_id": "11111111-1111-4111-8111-111111111111",
+  "valid_from": "2026-09-27T00:00:00+07:00",
+  "valid_to": "2027-01-01T00:00:00+07:00",
+  "note": "Assignment Finance untuk periode kerja"
+}
+```
+
 ### UserCreate
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -3016,6 +3601,111 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |
 
+### Record AccessAttribute
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `kind` | `VARCHAR(30)` | Tidak |
+| `code` | `VARCHAR(80)` | Tidak |
+| `label` | `VARCHAR(200)` | Tidak |
+| `parent_id` | `CHAR(32)` | Ya |
+| `is_active` | `BOOLEAN` | Tidak |
+| `revision` | `INTEGER` | Tidak |
+| `attribute_data` | `JSONB` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record PermissionBundle
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `code` | `VARCHAR(80)` | Tidak |
+| `label` | `VARCHAR(200)` | Tidak |
+| `description` | `VARCHAR(500)` | Tidak |
+| `actions` | `JSONB` | Tidak |
+| `is_active` | `BOOLEAN` | Tidak |
+| `revision` | `INTEGER` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record AccessPolicy
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `code` | `VARCHAR(80)` | Tidak |
+| `label` | `VARCHAR(200)` | Tidak |
+| `description` | `VARCHAR(500)` | Tidak |
+| `effect` | `VARCHAR(10)` | Tidak |
+| `actions` | `JSONB` | Tidak |
+| `required_attribute_ids` | `JSONB` | Tidak |
+| `row_scope` | `JSONB` | Tidak |
+| `column_rules` | `JSONB` | Tidak |
+| `export_allowed` | `BOOLEAN` | Tidak |
+| `status` | `VARCHAR(20)` | Tidak |
+| `revision` | `INTEGER` | Tidak |
+| `valid_from` | `DATETIME` | Tidak |
+| `valid_to` | `DATETIME` | Ya |
+| `created_by` | `CHAR(32)` | Tidak |
+| `submitted_by` | `CHAR(32)` | Ya |
+| `submitted_at` | `DATETIME` | Ya |
+| `approved_by` | `CHAR(32)` | Ya |
+| `approved_at` | `DATETIME` | Ya |
+| `revoked_by` | `CHAR(32)` | Ya |
+| `revoked_at` | `DATETIME` | Ya |
+| `decision_note` | `VARCHAR(500)` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record AccessPolicyBinding
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `policy_id` | `CHAR(32)` | Tidak |
+| `resource_type` | `VARCHAR(30)` | Tidak |
+| `resource_id` | `VARCHAR(100)` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record UserAssignment
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `user_id` | `CHAR(32)` | Tidak |
+| `attribute_id` | `CHAR(32)` | Tidak |
+| `valid_from` | `DATETIME` | Tidak |
+| `valid_to` | `DATETIME` | Ya |
+| `status` | `VARCHAR(20)` | Tidak |
+| `revision` | `INTEGER` | Tidak |
+| `granted_by` | `CHAR(32)` | Tidak |
+| `revoked_by` | `CHAR(32)` | Ya |
+| `revoked_at` | `DATETIME` | Ya |
+| `note` | `VARCHAR(500)` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record UserPermissionGrant
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `user_id` | `CHAR(32)` | Tidak |
+| `bundle_id` | `CHAR(32)` | Tidak |
+| `valid_from` | `DATETIME` | Tidak |
+| `valid_to` | `DATETIME` | Ya |
+| `status` | `VARCHAR(20)` | Tidak |
+| `revision` | `INTEGER` | Tidak |
+| `granted_by` | `CHAR(32)` | Tidak |
+| `revoked_by` | `CHAR(32)` | Ya |
+| `revoked_at` | `DATETIME` | Ya |
+| `note` | `VARCHAR(500)` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
 ### Record DataSource
 
 | Field | Tipe penyimpanan | Nullable |
@@ -3027,6 +3717,14 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `owner_user_id` | `CHAR(32)` | Tidak |
 | `credential_ref` | `VARCHAR(100)` | Tidak |
 | `status` | `VARCHAR(40)` | Tidak |
+| `access_status` | `VARCHAR(40)` | Tidak |
+| `access_revision` | `INTEGER` | Tidak |
+| `access_metadata` | `JSONB` | Ya |
+| `access_metadata_editor_id` | `CHAR(32)` | Ya |
+| `access_review_status` | `VARCHAR(20)` | Tidak |
+| `access_reviewed_by` | `CHAR(32)` | Ya |
+| `access_reviewed_at` | `DATETIME` | Ya |
+| `access_review_reason` | `VARCHAR(40)` | Tidak |
 | `sync_schedule` | `VARCHAR(100)` | Ya |
 | `schedule_timezone` | `VARCHAR(100)` | Tidak |
 | `concurrency_policy` | `VARCHAR(30)` | Tidak |

@@ -299,4 +299,15 @@ Lihat [AI task policy](docs/AI_TASK_POLICIES_BE15.md),
 [jadwal source](docs/SOURCE_SCHEDULING_BE15.md),
 [watermark](docs/INCREMENTAL_WATERMARK_BE15.md), dan
 [notifikasi operasional](docs/OPERATIONAL_NOTIFICATIONS_BE15.md). Head migration saat ini
-`i9e2a5b8d0f7`; database aplikasi harus dimigrasikan melalui proses rollout terkontrol.
+`p6f9b2c5d7a4` (BE16); database aplikasi harus dimigrasikan melalui proses rollout terkontrol.
+
+## Kontrol akses BE-16 (parsial)
+
+Registry atribut (termasuk PURPOSE), assignment bertanggal, permission bundle,
+policy/binding, dan preview evaluator tersedia. Sumber baru wajib memiliki metadata;
+review metadata dan aktivasi policy SOURCE memakai revision serta approver berbeda.
+Untuk sumber dengan metadata, katalog/query/export/join/NL2SQL memeriksa status sumber
+dan policy SOURCE saat permintaan. Sumber legacy tanpa metadata **masih memakai kontrol
+lama**; row/column policy, masking, access request, jalur admin/artefak, dan default-deny
+penuh belum tersedia. Lihat [cakupan dan batas BE-16](docs/ACCESS_JURISDICTION_BE16.md).
+Migrasi BE16 hanya diuji pada database test; production dan acceptance berada di BE-17.

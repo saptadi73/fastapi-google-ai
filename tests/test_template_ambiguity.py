@@ -21,6 +21,7 @@ async def test_matching_templates_scopes_both_product_and_template():
     assert "validated_query_template.tenant_id =" in sql
     assert "validated_query_template.allowed_roles @>" in sql and "data_product.allowed_roles @>" in sql
     assert "validated_query_template.examples @>" in sql
+    assert "access_status" in sql and "access_metadata" in sql
     assert "validated_query_template.data_product_code =" in sql and "LIMIT" in sql
 
 
@@ -32,6 +33,7 @@ async def test_ambiguity_never_calls_ai_or_executes_and_caps_candidates(monkeypa
     service.executor.execute = AsyncMock()
     ai = AsyncMock()
     monkeypatch.setattr("app.services.nl2sql_service.OpenAIService", lambda: SimpleNamespace(generate=ai))
+    monkeypatch.setattr(SemanticCatalogService, "products", AsyncMock(return_value=[{"code": "SALES"}]))
     result = await service.query(QuestionRequest(question=" Sales?! "))
     assert result["rows"] == [] and result["meta"]["clarification_required"]
     assert len(result["meta"]["template_candidates"]) == 20
@@ -65,8 +67,9 @@ async def test_explicit_choice_rechecks_access_version_and_product(monkeypatch):
 @pytest.mark.asyncio
 async def test_single_match_keeps_deterministic_template_route(monkeypatch):
     service = NL2SQLService(Mock(), SimpleNamespace(id="user", tenant_id="tenant", role="VIEWER"))
-    service.repo.matching_templates = AsyncMock(return_value=[SimpleNamespace(code="daily")])
+    service.repo.matching_templates = AsyncMock(return_value=[SimpleNamespace(code="daily", data_product_code="SALES")])
     monkeypatch.setattr(SemanticCatalogService, "saved", AsyncMock(return_value=SimpleNamespace(data_product_code="SALES", plan={})))
+    monkeypatch.setattr(SemanticCatalogService, "products", AsyncMock(return_value=[{"code": "SALES"}]))
     service.repo.add = AsyncMock(return_value=SimpleNamespace(id="query"))
     service.executor.execute = AsyncMock(return_value={"rows": [], "meta": {}})
     await service.query(QuestionRequest(question="  Daily Sales?! ", data_product_code="SALES"))

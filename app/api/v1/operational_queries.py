@@ -44,7 +44,7 @@ async def query(code: str, data: QueryPlan, session: Session, user: CurrentUser)
 
 @router.post("/data-products/{code}/export", response_class=Response)
 async def export(code: str, data: QueryPlan, session: Session, user: CurrentUser):
-    result = await QueryExecutionService(session, user).execute(code, data)
+    result = await QueryExecutionService(session, user).execute(code, data, action="EXPORT")
     stream = io.StringIO(newline="")
     if result["rows"]:
         writer = csv.DictWriter(stream, fieldnames=list(result["rows"][0]))

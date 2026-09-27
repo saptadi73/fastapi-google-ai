@@ -1,6 +1,6 @@
 # TODO implementasi backend
 
-Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 26 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
+Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 27 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
 
 Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres. Centang item hanya setelah kode, migrasi yang diperlukan, pengujian, dan kontrak API selesai. Tandai tahap sedang dikerjakan pada catatan progres; jangan mencentang hanya karena desainnya sudah dibuat.
 
@@ -19,11 +19,14 @@ Verifikasi historis setelah BE-06: **99 tes backend lulus**, Ruff lulus, serta e
 
 ## Sinkronisasi frontend
 
-Audit 26 September 2026 tersedia di [audit kesesuaian backend dan frontend](AUDIT_FRONTEND_BACKEND_2026-09-26.md).
+Audit awal 26 September 2026 dengan addendum BE16 27 September tersedia di
+[audit kesesuaian backend dan frontend](AUDIT_FRONTEND_BACKEND_2026-09-26.md).
 Frontend sudah mencakup BE-02 sampai BE-10, cakupan aktif BE-13, BE-14 tahap 1–9,
-serta endpoint aktif registry join BE-14 dan AI task policy BE-15. BE-11/BE-12 tetap
-mengikuti status parsial backend; editor `transform_parameters` BE-12 kini tersedia.
-Regresi frontend: **54 unit test dan 62 skenario browser lulus**; tes browser memakai mock
+serta endpoint aktif registry join BE-14, AI task policy BE-15, dan BE16 tahap 1–4
+parsial. BE-11/BE-12 tetap mengikuti status parsial backend; editor
+`transform_parameters` BE-12 tersedia. Baseline sebelum BE16: **54 unit test dan
+62 skenario browser lulus**. Regresi terkini 27 September 2026: **54 unit test,
+68 skenario browser, dan build/typecheck frontend lulus**; tes browser memakai mock
 API dan bukan acceptance deployment.
 
 ## Urutan implementasi
@@ -297,7 +300,7 @@ Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 
 Selesai jika laporan/join menghasilkan angka yang benar dan tidak memperluas akses data pengguna.
 
-Status tinjauan 27 September 2026: tahap 1–11 tersedia pada backend, frontend, dan dokumentasi. Structured query multi-product dan discovery NL2SQL memakai relationship APPROVED yang dapat diakses. Verifikasi terkini mencakup 337 tes backend non-integration, regresi join/NL2SQL/import terarah, Ruff, 54 unit frontend, 62 skenario browser, dan typecheck. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, tab 12/13 lengkap, PostgreSQL join E2E, dan acceptance provider AI/deployment nyata.
+Status tinjauan BE-14 pada 27 September 2026: tahap 1–11 tersedia pada backend, frontend, dan dokumentasi. Structured query multi-product dan discovery NL2SQL memakai relationship APPROVED yang dapat diakses. Bukti saat tahap BE-14 mencakup 337 tes backend non-integration, regresi join/NL2SQL/import terarah, Ruff, 54 unit frontend, 62 skenario browser, dan typecheck. Regresi frontend terbaru setelah BE-16 tercatat pada bagian sinkronisasi frontend di atas. Pekerjaan terbuka BE-14: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, tab 12/13 lengkap, PostgreSQL join E2E, dan acceptance provider AI/deployment nyata.
 
 Progres registry join BE-14 (27 September 2026): model/migrasi
 `platform.join_relationship`, endpoint list/create/edit/approve/reject, validasi
@@ -353,7 +356,90 @@ idempotent dan teraudit. Retention snapshot/artifact/audit masih terbuka.
 Migration `i9e2a5b8d0f7` merekonsiliasi constraint tenant graph dependency dan ledger
 AI policy agar metadata model dan jalur upgrade database yang sudah hidup konsisten.
 
-### BE-16 — Kesiapan deployment production
+### BE-16 — Kontrol akses berbasis yurisdiksi bisnis
+
+Prasyarat: autentikasi/role fondasi, metadata sumber BE-02, taxonomy BE-13, dan DataProduct
+BE-14. Rancangan rinci: [Kontrol akses yurisdiksi BE-16](ACCESS_JURISDICTION_BE16.md).
+
+Tahap 1 selesai pada migration `j0f3b6c9e1a8`: registry atribut tenant-scoped untuk
+departemen, domain bisnis, yurisdiksi, dan clearance; assignment bertanggal efektif;
+revoke yang merotasi sesi; audit; endpoint effective access role + assignment; serta UI
+administrasi frontend. Fondasi ini belum mengubah keputusan akses data lama.
+Tahap 2 selesai pada migration `k1a4c7d0f2b9`: kamus delapan aksi baku, permission
+bundle tenant-scoped, grant bertanggal efektif, self-grant/revoke guard, rotasi sesi,
+audit, effective access gabungan, dan UI administrasi bundle/grant.
+Tahap 3 selesai pada migration `l2b5d8e1a3c0`: registry policy/binding, lifecycle
+DRAFT/IN_REVIEW/APPROVED/REVOKED, approval admin berbeda, effective dating, preview
+evaluator default-deny, explicit deny override, row/column controls, audit, dan UI policy.
+Hardening evaluator tahap 3: akun nonaktif tidak lagi memiliki effective actions atau
+keputusan ALLOW; aksi EXPORT memerlukan `export_allowed` dari setiap policy ALLOW yang
+cocok. UI policy dapat mengatur izin ekspor eksplisit dan preview menampilkan hasil
+izinkan/tolak. Tes integrasi PostgreSQL access serta browser BE16 lulus. Ini masih
+preview pada tahap 3; enforcement produk SOURCE ditambahkan bertahap pada tahap 4.
+Binding policy baru kini mewajibkan kode resource nyata milik tenant aktif; API admin
+`/access/resources` menyediakan daftar/pencarian kode berscope tenant dan form Vue
+memakai selector. Tes PostgreSQL menolak kode tidak ditemukan/lintas tenant dan akses
+viewer ke daftar resource. Binding lama belum dibackfill atau diaudit ulang.
+Fondasi tahap 4: migration `m3c6e9f2b4d1` menambah `access_status` terpisah dari status
+ETL; sumber baru dan legacy default `ACCESS_POLICY_REQUIRED`. GET sumber dan workspace
+Vue menampilkan status tersebut; tes PostgreSQL memverifikasi nilainya bertahan setelah
+profiling. Pada saat migrasi ini dibuat, field baru penanda, bukan gate query/export;
+gate untuk produk dari sumber dengan metadata ditambahkan setelah aktivasi SOURCE.
+Sumber legacy tanpa metadata tetap memakai kontrol lama.
+Lanjutan tahap 4: migration `n4d7f0a3c5e2` menambah metadata registrasi wajib untuk
+sumber baru dan registry PURPOSE. Backend memeriksa atribut tenant/jenis/aktif, tiga
+assignment aktif pendaftar, serta owner/steward aktif sebelum enqueue. Vue memakai
+`/access/registration-options` untuk selector dan tes HTTP/browser memeriksa payload,
+lintas tenant, serta revoke setelah daftar opsi dimuat. Sumber legacy tetap tanpa
+metadata sampai diperbaiki eksplisit. Migration `o5e8a1b4d6f3` menambah optimistic
+`access_revision` dan PATCH metadata lengkap untuk legacy/koreksi, dengan audit tanpa
+nilai PII serta reset status akses ke pending. Vue menyediakan editor sumber terpilih
+dan mempertahankan input saat konflik 409. Migration `p6f9b2c5d7a4` menambah review
+metadata PENDING/APPROVED/REJECTED dengan admin reviewer berbeda, reason allowlist,
+revision, audit, dan UI ringkasan/reject/approve. `access_status` tetap pending;
+aktivasi berikutnya memerlukan SOURCE policy ALLOW approved. Gate bertahap menahan
+produk baru pending dari katalog, query, export, report, saved query, join, serta
+konteks NL2SQL; setelah aktivasi, evaluator SOURCE menegakkan aksi pengguna saat
+lookup dan sebelum cache. Deny/revoke/expiry serta kontrol row/column yang belum
+didukung ditolak fail-closed; Vue menyediakan pilihan policy approved. Sumber legacy
+tanpa metadata tetap memakai kontrol lama. Policy template, enforcement semua jalur,
+row/column policy, access request, dan default-deny penuh masih terbuka.
+
+- [~] Tetapkan kamus aksi (`DISCOVER`, `READ`, `QUERY`, `EXPORT`, `EDIT`, `APPROVE`, `OPERATE`, `ADMIN`) dan keputusan policy dengan **default deny** serta deny eksplisit mengalahkan allow; berlaku pada evaluator dan produk SOURCE BE16, belum seluruh resource/legacy.
+- [~] Perluas User Management: lifecycle akun create/activate/suspend/deactivate, role sistem, permission bundle bisnis, assignment yurisdiksi, effective dating, delegasi admin, reset/revoke sesi, dan audit. Create/aktif-nonaktif/role/bundle/assignment tersedia; suspended, delegasi, approval assignment berisiko, dan effective access lengkap belum.
+- [x] Buat registry permission bundle/business role untuk paket kewenangan berulang. Bundle memetakan aksi baku, tidak membawa daftar data secara implisit; scope data tetap berasal dari assignment dan policy.
+- [ ] Terapkan separation-of-duties pada pengelolaan akses: pemohon, pemberi assignment, approver policy, dan penerima akses tidak boleh dirangkap pada keputusan yang dilarang; aturan konflik harus divalidasi backend.
+- [x] Terapkan separation-of-duties minimum pada permission grant: admin tidak dapat memberi atau mencabut bundle miliknya sendiri; approval policy berisiko tetap tahap berikutnya.
+- [~] Sediakan endpoint effective-access/capability untuk melihat hasil gabungan role, assignment, policy, deny, masking, dan expiry tanpa mengekspos policy/resource tenant lain. Effective role/assignment/grant dan preview per resource tersedia; endpoint capability gabungan/masking belum.
+- [x] Sediakan endpoint tahap 1 effective-access untuk hasil role, aksi dasar, assignment aktif, dan expiry; perluas dengan policy/deny/masking pada tahap evaluator.
+- [~] Buat registry hierarkis `organization_unit`, `business_domain`, `jurisdiction`, `data_clearance`, dan `access_purpose`; registry generik `access_attribute` dengan lima jenis, kode tenant-scoped, parent sejenis dan revision tersedia; model/domain lifecycle terpisah belum.
+- [x] Buat `user_assignment` many-to-many dengan departemen/domain/wilayah/clearance, `valid_from`/`valid_to`, status, revision, pemberi tugas, dan audit. Perubahan assignment tidak memerlukan role gabungan baru.
+- [x] Implementasikan registry `access_attribute` dan `user_assignment` tahap 1 untuk departemen/domain/yurisdiksi/clearance, hierarchy satu jenis, effective dating, optimistic revoke, actor, audit, dan tenant constraint PostgreSQL.
+- [~] Tambahkan metadata wajib sumber: unit pemilik, business domain/category, data owner, data steward, yurisdiksi, klasifikasi sensitivitas, tujuan penggunaan, dan policy template. Semua kecuali policy template wajib untuk sumber baru; scope diverifikasi terhadap assignment aktif saat POST, legacy memerlukan koreksi eksplisit.
+- [~] Tambahkan status `ACCESS_POLICY_REQUIRED`; sumber lama dibackfill ke status terbatas dan tidak otomatis dianggap publik. Status tersimpan dan produk sumber baru pending ditahan; sumber legacy null-metadata masih dapat dibaca lewat kontrol lama.
+- [x] Buat registry `access_policy` dan `access_policy_binding` berversi dengan lifecycle draft/review/approve/revoke, separation of duties, effective dating, alasan, serta optimistic concurrency pada kontrak tahap 3.
+- [x] Implementasikan registry dan lifecycle policy/binding tahap 3 dengan optimistic revision, effective dating, alasan keputusan, audit, dan larangan self-approval.
+- [~] Implementasikan evaluator terpusat yang menerima subject, action, resource, dan context; preview serta enforcement produk SOURCE tersedia untuk allow/deny, reason, row_scope/column_rules, export flag; row predicate SQL, masking, export limit, dan policy revision pada respons belum tersedia.
+- [x] Implementasikan evaluator preview tahap 3 untuk subject/action/resource/waktu, default deny, explicit deny override, row scope, column visibility, export flag, policy IDs, dan reason code; enforcement endpoint data tetap tahap berikutnya.
+- [~] Terapkan evaluator di seluruh list/detail source, sheet, configuration, import review, job, artifact, master, taxonomy, DataProduct, query, report, NL2SQL, dan export. DataProduct sumber BE16, query/report berbasis produk, export/join/konteks NL2SQL memakai SOURCE evaluator; source admin, sheet, job, artefak, master, taxonomy, dan legacy belum.
+- [ ] Terapkan filter baris dari atribut pengguna secara parameterized melalui compiler, bukan SQL bebas dalam policy. Tolak policy yang merujuk field nonpublik/tidak bertipe atau dapat melewati tenant scope.
+- [ ] Terapkan kebijakan kolom `VISIBLE`, `MASKED`, dan `HIDDEN` berdasarkan klasifikasi/clearance. Business key, join key, filter, sort, lineage, error, preview, dan export tidak boleh membocorkan nilai tersembunyi.
+- [~] Untuk query multi-product/join, gunakan irisan izin semua resource dan policy paling ketat; compiler mengecek tiap produk dan relationship pending tidak ditemukan, tetapi row/column policy paling ketat belum diterapkan.
+- [~] Batasi katalog, prompt, contoh, schema, relationship, cache, dan hasil AI/NL2SQL pada resource/kolom yang lolos evaluator. Filter produk SOURCE dan validasi ulang plan tersedia; filter kolom/sensitivitas dan invalidasi cache lintas jalur belum lengkap.
+- [ ] Tambahkan `access_request`/approval untuk permintaan akses sementara, delegasi, alasan bisnis, expiry, revoke, dan notifikasi reviewer tanpa memberikan akses sebelum approval commit.
+- [~] Pisahkan kepemilikan data dari hak akses: owner/steward dan admin platform tidak otomatis mendapat akses produk SOURCE BE16; seluruh jalur PII legacy dan masking belum terlindungi model ini.
+- [~] Masukkan policy/assignment revision ke cache key dan invalidasi session/query cache saat revoke, expiry, perubahan assignment, classification, atau policy. Lookup produk memeriksa SOURCE policy sebelum cache query; revision belum masuk semua key dan invalidasi lintas jalur belum.
+- [~] Audit keputusan sensitif dan perubahan policy: subject, action, resource, policy/revision, hasil, alasan kode, request ID, dan waktu; event keputusan/alasan dan actor tersedia tanpa raw PII, tetapi request ID serta revision policy per keputusan belum lengkap.
+- [~] Implementasikan frontend registrasi sumber dengan selector registry, capability response, layar User Management/role/permission bundle/assignment, policy/access request, effective-access preview, masking konsisten, serta penjelasan deny yang aman. Registrasi/review/aktivasi dan admin policy tersedia; capability global, access request dan masking belum.
+- [x] Implementasikan UI tahap 1 pada Administrasi untuk membuat registry, memberi/mencabut assignment bertanggal, melihat histori, dan preview effective access role + assignment.
+- [~] Uji matriks role + atribut, hierarchy departemen, multi-assignment, expiry/revoke, deny override, lintas tenant, direct API bypass, row/column leakage, export, cache stale, join, AI context, dan concurrent approval di PostgreSQL. Tes terarah SOURCE tersedia; masking, seluruh jalur dan acceptance concurrency masih perlu.
+- [~] Dokumentasikan backfill, rollout bertahap, emergency break-glass dengan expiry/audit, rollback schema, serta acceptance bersama data owner dan security. Strategi rollback/aditif dan batas rollout tercatat; break-glass/acceptance masih terbuka.
+
+Selesai jika setiap resource mempunyai metadata kepemilikan dan policy approved, semua
+jalur baca/ubah/query/export memakai evaluator yang sama, serta perubahan yurisdiksi
+mencabut akses tanpa menunggu perubahan role atau redeploy aplikasi.
+
+### BE-17 — Kesiapan deployment production
 
 Prasyarat: tahap yang akan dirilis sudah selesai. Pemeriksaan lingkungan dasar boleh dilakukan sejak awal.
 
@@ -384,7 +470,7 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 
 | Tahap | Status awal | Bukti penyelesaian / pekerjaan berikutnya |
 |---|---|---|
-| Fondasi review konfigurasi | Selesai di kode/test | [Panduan review ETL](PANDUAN_REVIEW_ETL.md); rollout aplikasi ada pada BE-16 |
+| Fondasi review konfigurasi | Selesai di kode/test | [Panduan review ETL](PANDUAN_REVIEW_ETL.md); rollout aplikasi ada pada BE-17 |
 | BE-01 | Selesai: kontrak dasar | Keputusan pengguna, schema policy, guard lifecycle/role, dan tes; enforcement runtime diteruskan oleh BE-02 |
 | BE-02 | Selesai di kode/test | Migrasi, GET/PUT klasifikasi, gate runtime dan worker; migrasi dilaporkan selesai oleh pengguna |
 | BE-03 | Selesai di kode/test | Registry berversi, candidate review, binding/dry-run/approval; pemuatan record diteruskan dan tersedia melalui BE-07 |
@@ -400,6 +486,7 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 | BE-13 | Tersedia di kode/frontend | Taxonomy, binding, resolver, rekomendasi dan integrasi UI tersedia; acceptance provider/deployment nyata masih terbuka |
 | BE-14 | Tahap 1–11 tersedia; hardening join berlanjut | Frontend mencakup metadata semantic, periode, metrik, ambiguity flow, visualisasi dinamis, lifecycle registry, dan query join approved; backend menyediakan discovery join NL2SQL tervalidasi. Approval metrik, AST lanjutan, template lengkap, provider acceptance, dan PostgreSQL join E2E masih terbuka |
 | BE-15 | Sebagian selesai | Backend dan frontend registry AI, budget/fallback, cron/timezone/concurrency, dependency freshness, incremental watermark transaksional, statistik proses, serta notifikasi persisten/acknowledge tersedia. Scope dataset ETL/taxonomy, trigger/masking lanjutan, retention, dan provider live masih terbuka |
-| BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
+| BE-16 | Tahap 1–3 dan enforcement produk tahap 4 parsial | Registry atribut/assignment, bundle/grant, policy/binding, metadata sumber, aktivasi SOURCE dan evaluasi katalog/query/export/join tersedia; legacy masih memakai akses lama, policy template, row/column, jalur admin/artefak, access request, default-deny penuh dan rollout masih terbuka |
+| BE-17 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 
 Referensi: [Spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), [cakupan template ETL](REVIEW_KONFIGURASI_ETL.md), [API Reference aktif](API_REFERENCE.md), [batasan implementasi](IMPLEMENTASI.md), dan [konfigurasi/rotasi kredensial](KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).

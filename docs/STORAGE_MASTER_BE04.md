@@ -109,7 +109,7 @@ Tidak ada migrasi Alembic baru BE-04: tabel dinamis dibuat per master melalui de
 
 DDL memakai `DATABASE_DDL_URL` dengan fallback `DATABASE_URL`. Role DDL memerlukan CREATE pada schema trusted serta ownership untuk ALTER/GRANT target. Deploy memberikan SELECT/INSERT/UPDATE pada tabel kepada role DATABASE_URL; tidak menambahkan DELETE/TRUNCATE atau akses ke role NL2SQL. Hak schema USAGE tetap bagian setup role lingkungan.
 
-Lock registry menserialisasi deployment terhadap perubahan definisi; advisory lock melindungi target DDL. DDL berada dalam transaksi tersendiri dari audit registry. Jika DDL berhasil tetapi commit audit gagal, tabel dapat sudah tersedia: retry memeriksa schema dan membuat audit kembali. Kegagalan satu transaksi ALTER akan rollback seluruh ALTER di transaksi tersebut. Tidak ada cleanup DROP otomatis terhadap tabel yang sudah dibuat. Pemulihan lintas transaksi lengkap tetap bagian hardening operasional BE-09/BE-16.
+Lock registry menserialisasi deployment terhadap perubahan definisi; advisory lock melindungi target DDL. DDL berada dalam transaksi tersendiri dari audit registry. Jika DDL berhasil tetapi commit audit gagal, tabel dapat sudah tersedia: retry memeriksa schema dan membuat audit kembali. Kegagalan satu transaksi ALTER akan rollback seluruh ALTER di transaksi tersebut. Tidak ada cleanup DROP otomatis terhadap tabel yang sudah dibuat. Pemulihan lintas transaksi lengkap tetap bagian hardening operasional BE-09/BE-17.
 
 Lihat [API Reference](API_REFERENCE.md), [Registry BE-03](REGISTRY_MASTER_BE03.md), dan [TODO backend](TODO_BACKEND.md). Frontend belum diubah pada tahap ini.
 

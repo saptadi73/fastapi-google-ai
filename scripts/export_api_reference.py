@@ -26,6 +26,14 @@ def build_documents():
     )
     config.get_settings = lambda: settings
     from app.main import app
+    from app.models.access import (
+        AccessAttribute,
+        AccessPolicy,
+        AccessPolicyBinding,
+        PermissionBundle,
+        UserAssignment,
+        UserPermissionGrant,
+    )
     from app.models.audit import AuditEvent
     from app.models.auth import User
     from app.models.configuration import Artifact, Configuration
@@ -52,6 +60,7 @@ def build_documents():
         "common",
         "taxonomy",
         "ai_policy",
+        "access",
     ):
         module = importlib.import_module("app.schemas." + name)
         for cls in vars(module).values():
@@ -182,6 +191,12 @@ def build_documents():
     ]
     for cls, exclude in [
         (User, {"password_hash", "token_version"}),
+        (AccessAttribute, set()),
+        (PermissionBundle, set()),
+        (AccessPolicy, set()),
+        (AccessPolicyBinding, set()),
+        (UserAssignment, set()),
+        (UserPermissionGrant, set()),
         (DataSource, set()),
         (SourceSheet, set()),
         (ProfilingRun, set()),

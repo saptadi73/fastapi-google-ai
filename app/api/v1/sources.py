@@ -15,7 +15,10 @@ from app.schemas.source import (
     SheetClassificationUpdate,
     SheetUpdate,
     SheetWatermarkUpdate,
+    SourceAccessActivation,
+    SourceAccessMetadataUpdate,
     SourceCreate,
+    SourceMetadataReview,
     SourceScheduleUpdate,
 )
 from app.services.classification_service import ClassificationService
@@ -61,6 +64,37 @@ async def sources(
 async def get_source(source_id: UUID, session: Session, user: CurrentUser):
     source = await SourceRepository(session, user.tenant_id).get(DataSource, source_id)
     return success((await source_records(session, [source]))[0])
+
+
+@router.patch("/sources/{source_id}/access-metadata", dependencies=edit)
+async def update_access_metadata(
+    source_id: UUID, data: SourceAccessMetadataUpdate, session: Session, user: CurrentUser
+):
+    return success(await SourceService(session, user).update_access_metadata(source_id, data))
+
+
+@router.post("/sources/{source_id}/access-review", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def review_access_metadata(
+    source_id: UUID, data: SourceMetadataReview, session: Session, user: CurrentUser
+):
+    return success(await SourceService(session, user).review_access_metadata(source_id, data))
+
+
+@router.get("/sources/{source_id}/access-review-context", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def access_review_context(source_id: UUID, session: Session, user: CurrentUser):
+    return success(await SourceService(session, user).metadata_review_context(source_id))
+
+
+@router.post("/sources/{source_id}/access-activate", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def activate_source_access(
+    source_id: UUID, data: SourceAccessActivation, session: Session, user: CurrentUser
+):
+    return success(await SourceService(session, user).activate_source_access(source_id, data))
+
+
+@router.get("/sources/{source_id}/access-policy-options", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def source_policy_options(source_id: UUID, session: Session, user: CurrentUser):
+    return success(await SourceService(session, user).source_policy_options(source_id))
 
 
 @router.patch("/sources/{source_id}/schedule", dependencies=edit)
