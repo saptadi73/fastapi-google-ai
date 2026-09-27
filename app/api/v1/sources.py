@@ -11,10 +11,16 @@ from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import AIConfigurationRequest
-from app.schemas.source import SheetClassificationUpdate, SheetUpdate, SourceCreate
+from app.schemas.source import (
+    SheetClassificationUpdate,
+    SheetUpdate,
+    SheetWatermarkUpdate,
+    SourceCreate,
+    SourceScheduleUpdate,
+)
 from app.services.classification_service import ClassificationService
 from app.services.job_service import enqueue
-from app.services.source_service import SourceService
+from app.services.source_service import SourceService, source_records
 
 router = APIRouter(tags=["Sources"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
@@ -41,13 +47,11 @@ async def create(data: SourceCreate, session: Session, user: CurrentUser):
 async def sources(
     session: Session, user: CurrentUser, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)
 ):
+    items = await SourceRepository(session, user.tenant_id).list(
+        DataSource, offset=offset, limit=limit
+    )
     return success(
-        [
-            record(s)
-            for s in await SourceRepository(session, user.tenant_id).list(
-                DataSource, offset=offset, limit=limit
-            )
-        ],
+        await source_records(session, items),
         offset=offset,
         limit=limit,
     )
@@ -55,7 +59,15 @@ async def sources(
 
 @router.get("/sources/{source_id}")
 async def get_source(source_id: UUID, session: Session, user: CurrentUser):
-    return success(record(await SourceRepository(session, user.tenant_id).get(DataSource, source_id)))
+    source = await SourceRepository(session, user.tenant_id).get(DataSource, source_id)
+    return success((await source_records(session, [source]))[0])
+
+
+@router.patch("/sources/{source_id}/schedule", dependencies=edit)
+async def update_schedule(
+    source_id: UUID, data: SourceScheduleUpdate, session: Session, user: CurrentUser
+):
+    return success(await SourceService(session, user).update_schedule(source_id, data))
 
 
 @router.get("/sources/{source_id}/sheets")
@@ -66,6 +78,13 @@ async def sheets(source_id: UUID, session: Session, user: CurrentUser):
 @router.patch("/source-sheets/{sheet_id}", dependencies=edit)
 async def update_sheet(sheet_id: UUID, data: SheetUpdate, session: Session, user: CurrentUser):
     return success(await SourceService(session, user).update_sheet(sheet_id, data))
+
+
+@router.patch("/source-sheets/{sheet_id}/watermark", dependencies=edit)
+async def update_watermark(
+    sheet_id: UUID, data: SheetWatermarkUpdate, session: Session, user: CurrentUser
+):
+    return success(await SourceService(session, user).update_watermark(sheet_id, data))
 
 
 @router.post("/sources/{source_id}/discover", status_code=202, dependencies=edit)

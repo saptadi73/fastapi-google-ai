@@ -73,6 +73,22 @@ async def test_join_relationship_draft_edit_increments_revision_and_clears_appro
 
 
 @pytest.mark.asyncio
+async def test_join_relationship_list_hides_inaccessible_product_metadata(monkeypatch):
+    service = SemanticCatalogService(
+        Mock(), SimpleNamespace(tenant_id="tenant", id="viewer", role="VIEWER")
+    )
+    service.products = AsyncMock(return_value=[{"code": "SALES"}, {"code": "PRODUCT"}])
+    visible = SimpleNamespace(code="sales_product", left_product_code="SALES", right_product_code="PRODUCT")
+    hidden = SimpleNamespace(code="sales_secret", left_product_code="SALES", right_product_code="SECRET")
+    service.repo.list = AsyncMock(return_value=[visible, hidden])
+    monkeypatch.setattr("app.services.semantic_catalog_service.record", lambda value: vars(value).copy())
+
+    result = await service.join_relationships()
+
+    assert [item["code"] for item in result] == ["sales_product"]
+
+
+@pytest.mark.asyncio
 async def test_metadata_lock_conflict_and_version_invalidation(monkeypatch):
     session = Mock()
     user = SimpleNamespace(tenant_id="tenant", id="editor")

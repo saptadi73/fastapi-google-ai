@@ -9,6 +9,7 @@ from test_integration import onboard, request
 from test_masters import approved_master, binding_body, master_sheet
 
 from app.core.database import SessionFactory
+from app.models.audit import AuditEvent
 from app.models.auth import User
 from app.models.base import now
 from app.models.configuration import Configuration
@@ -57,6 +58,33 @@ async def test_import_idempotency_checkpoint_and_blocked_resume(context, config_
     waiting = await detail(ctx, review)
     assert waiting["status"] == "NEEDS_INPUT" and waiting["checkpoint"]["ai_coverage"] == "NOT_STARTED"
     assert waiting["checkpoint"]["blocking_codes"] == ["AI_REVIEW_NOT_IMPLEMENTED"]
+    summary = (await request(ctx, "GET", "/operations/summary"))["data"]
+    assert summary["import_reviews"]["NEEDS_INPUT"] == 1
+    assert summary["unacknowledged_notifications"] == 1
+    notifications = (await request(ctx, "GET", "/notifications?limit=10"))["data"]
+    notification = notifications[0]
+    assert notification["kind"] == "IMPORT_NEEDS_INPUT"
+    assert notification["resource_id"] == review["id"]
+    assert "raw_data" not in str(notification)
+    await request(
+        ctx, "POST", f"/notifications/{notification['id']}/acknowledge"
+    )
+    await request(
+        ctx, "POST", f"/notifications/{notification['id']}/acknowledge"
+    )
+    assert (await request(ctx, "GET", "/notifications?limit=10"))["data"] == []
+    assert (await request(ctx, "GET", "/notifications?limit=10", who="outsider"))["data"] == []
+    await request(ctx, "GET", "/notifications", who="viewer", expected=403)
+    async with SessionFactory() as session:
+        audits = (
+            await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.tenant_id == ctx.tenant_id,
+                    AuditEvent.event == "notification.acknowledged",
+                )
+            )
+        ).all()
+    assert len(audits) == 1
     assert (await run_pending(ctx.tenant_id))["processed"] == 0
     for action in ("resume", "revalidate"):
         result = await request(
@@ -156,6 +184,8 @@ async def test_import_worker_crash_recovery_reuses_checkpoint(context, config_da
     await schedule_sources()
     failed = await detail(ctx, review)
     assert failed["status"] == "FAILED" and failed["checkpoint"]["deterministic_complete"]
+    failed_notifications = (await request(ctx, "GET", "/notifications?limit=10"))["data"]
+    assert {item["kind"] for item in failed_notifications} == {"JOB_FAILED", "IMPORT_FAILED"}
     await request(ctx, "POST", f"/jobs/{failed['job_id']}/retry", expected=409)
     retried = (
         await request(

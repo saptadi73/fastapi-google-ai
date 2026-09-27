@@ -1,9 +1,13 @@
+from datetime import datetime, timezone
+
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import delete, select, text
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.models.configuration import Configuration
 from app.models.etl import Snapshot
-from app.models.source import DataSource, ProfilingRun, SourceSheet
+from app.models.source import DataSource, ProfilingRun, SourceDependency, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.import_review import ImportReviewCreate
@@ -13,6 +17,45 @@ from app.services.google_sheets_service import GoogleSheetsService
 from app.services.import_review_service import ImportReviewService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
+
+
+async def source_records(session, sources):
+    sources = list(sources)
+    if not sources:
+        return []
+    rows = await session.execute(
+        select(SourceDependency.downstream_source_id, SourceDependency.upstream_source_id)
+        .where(SourceDependency.downstream_source_id.in_([source.id for source in sources]))
+        .order_by(SourceDependency.upstream_source_id)
+    )
+    dependencies = {}
+    for downstream_id, upstream_id in rows:
+        dependencies.setdefault(str(downstream_id), []).append(str(upstream_id))
+    return [
+        {**record(source), "dependency_source_ids": dependencies.get(str(source.id), [])}
+        for source in sources
+    ]
+
+
+def dependency_graph_has_cycle(edges):
+    graph = {}
+    for downstream, upstream in edges:
+        graph.setdefault(str(downstream), set()).add(str(upstream))
+    visiting, visited = set(), set()
+
+    def visit(node):
+        if node in visiting:
+            return True
+        if node in visited:
+            return False
+        visiting.add(node)
+        if any(visit(parent) for parent in graph.get(node, ())):
+            return True
+        visiting.remove(node)
+        visited.add(node)
+        return False
+
+    return any(visit(node) for node in graph)
 
 
 class SourceService:
@@ -127,3 +170,105 @@ class SourceService:
         sheet.last_fingerprint = None
         audit(self.session, self.user, "sheet.updated", sheet.id)
         return record(sheet)
+
+    async def update_watermark(self, sheet_id, data):
+        sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
+        if sheet.watermark_revision != data.revision_no:
+            raise AppError("WATERMARK_REVISION_CONFLICT", "Watermark tab telah berubah; muat ulang.", 409)
+        if data.source_column:
+            profile = await self.repo.latest_profile(sheet.id)
+            columns = {
+                item["source_column"] for item in (profile.profile_json.get("columns", []) if profile else [])
+            }
+            if data.source_column not in columns:
+                raise AppError("WATERMARK_COLUMN_INVALID", "Pilih kolom dari profil tab terbaru.")
+            if sheet.active_configuration_id:
+                config = await self.repo.get(Configuration, sheet.active_configuration_id)
+                if config.configuration_json.get("load_strategy") == "FULL_REFRESH":
+                    raise AppError(
+                        "WATERMARK_STRATEGY_INVALID",
+                        "Incremental watermark tidak didukung untuk FULL_REFRESH.",
+                    )
+        changed = (
+            sheet.watermark_source_column != data.source_column
+            or sheet.watermark_kind != data.kind
+        )
+        sheet.watermark_source_column = data.source_column
+        sheet.watermark_kind = data.kind
+        if changed or data.source_column is None:
+            sheet.watermark_value = None
+            sheet.watermark_updated_at = None
+        sheet.watermark_revision += 1
+        audit(
+            self.session,
+            self.user,
+            "sheet.watermark_updated",
+            sheet.id,
+            revision_no=sheet.watermark_revision,
+            source_column=sheet.watermark_source_column,
+            kind=sheet.watermark_kind,
+            reset=changed,
+        )
+        return record(sheet)
+
+    async def update_schedule(self, source_id, data):
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        if source.schedule_revision != data.revision_no:
+            raise AppError("SOURCE_SCHEDULE_CONFLICT", "Jadwal sumber telah berubah; muat ulang.", 409)
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": "source-dependency:" + self.user.tenant_id},
+        )
+        dependency_ids = [str(item) for item in data.dependency_source_ids]
+        if str(source.id) in dependency_ids:
+            raise AppError("SOURCE_DEPENDENCY_INVALID", "Source tidak dapat bergantung pada dirinya sendiri.")
+        for dependency_id in dependency_ids:
+            await self.repo.get(DataSource, dependency_id)
+        existing_edges = list(
+            (
+                await self.session.execute(
+                    select(
+                        SourceDependency.downstream_source_id,
+                        SourceDependency.upstream_source_id,
+                    ).where(SourceDependency.tenant_id == self.user.tenant_id)
+                )
+            ).all()
+        )
+        candidate_edges = [
+            (str(downstream), str(upstream))
+            for downstream, upstream in existing_edges
+            if str(downstream) != str(source.id)
+        ] + [(str(source.id), dependency_id) for dependency_id in dependency_ids]
+        if dependency_graph_has_cycle(candidate_edges):
+            raise AppError("SOURCE_DEPENDENCY_CYCLE", "Dependency source membentuk siklus.", 409)
+        await self.session.execute(
+            delete(SourceDependency).where(
+                SourceDependency.tenant_id == self.user.tenant_id,
+                SourceDependency.downstream_source_id == source.id,
+            )
+        )
+        for dependency_id in dependency_ids:
+            self.session.add(
+                SourceDependency(
+                    tenant_id=self.user.tenant_id,
+                    downstream_source_id=source.id,
+                    upstream_source_id=dependency_id,
+                )
+            )
+        source.sync_schedule = data.sync_schedule
+        source.schedule_timezone = data.schedule_timezone
+        source.concurrency_policy = data.concurrency_policy
+        source.schedule_revision += 1
+        source.last_scheduled_at = datetime.now(timezone.utc) if data.sync_schedule else None
+        audit(
+            self.session,
+            self.user,
+            "source.schedule_updated",
+            source.id,
+            revision_no=source.schedule_revision,
+            sync_schedule=source.sync_schedule,
+            schedule_timezone=source.schedule_timezone,
+            concurrency_policy=source.concurrency_policy,
+            dependency_source_ids=dependency_ids,
+        )
+        return {**record(source), "dependency_source_ids": dependency_ids}

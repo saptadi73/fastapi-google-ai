@@ -1,7 +1,7 @@
 # Audit kesesuaian backend dan frontend
 
 Audit ini membandingkan `docs/TODO_BACKEND.md` dengan kode pada
-`C:\projek\vue-googlesheet-ai` tanggal 26 September 2026. Status **tersedia** berarti
+`C:\projek\vue-googlesheet-ai` dan diperbarui 27 September 2026. Status **tersedia** berarti
 kontrak backend memiliki tipe/pemanggilan dan alur UI yang sesuai. Bukti browser
 memakai mock API; hasilnya tidak membuktikan deployment Google, OpenAI, PostgreSQL,
 worker, atau CORS production.
@@ -24,8 +24,8 @@ worker, atau CORS production.
 | BE-12 | Parameter runtime, effective dating dan APPEND policy | Tersedia untuk cakupan backend | UI tersedia untuk precision/scale, varchar, date/locale/timezone, unit/currency, DQ, default, effective dating, `as_of`, close periods, APPEND duplicate policy, serta editor `transform_parameters` untuk `prefix`/`suffix`/`replace`. Multi-target/schema evolution memang belum tersedia di backend. |
 | BE-13 | Taxonomy registry/version/binding/resolver/AI suggestion | Tersedia untuk cakupan backend | Halaman taxonomy dan binding, version draft/publish, resolver, validasi nilai, saran deterministic/generatif, konfigurasi `in_taxonomy`, workbook, serta pertanyaan batch memiliki implementasi dan tes. Acceptance provider nyata tetap terbuka. |
 | BE-14 tahap 1-9 | Metadata semantic, metrik, ambiguity dan visualisasi | Tersedia | `ProductMetadata.vue`, editor semantic di review, Dashboard/Chat, template ambiguity, dan `ResultChart.vue` menangani table/KPI/bar/line/area/pie/donut/combo/scatter/heatmap. |
-| BE-14 registry join | CRUD/lifecycle join relationship; compiler masih single-product | Tersedia untuk endpoint aktif | Route `/governance` menyediakan list/create/edit/approve/reject, revision, produk/kolom, cardinality, join type, dan duplicate policy. UI menjelaskan bahwa JOIN query belum aktif. |
-| BE-15 tahap awal | Registry/lifecycle AI task policy dan runtime policy approved | Tersedia untuk endpoint aktif | Route `/governance` menyediakan list/create/approve/reject dengan purpose, prompt version terdaftar, model allowlist, revision, role, error recovery, dan tanpa API key. |
+| BE-14 registry join | CRUD/lifecycle dan structured compiler multi-product | Tersedia | Route `/governance` mengelola lifecycle; Dashboard memilih relationship APPROVED dan field qualified. Backend memeriksa path, akses, scope, PII, dan agregasi. |
+| BE-15 tahap runtime | Registry AI, budget/fallback, cron/timezone/concurrency, dependency source, incremental watermark, statistik proses, dan notifikasi persisten | Tersedia untuk endpoint aktif | `/governance` mengelola policy AI, `/jobs` mengelola schedule/dependency serta inbox/acknowledge, dan workspace mengelola watermark per tab. API key tetap tidak masuk frontend. |
 | BE-16 | Acceptance dan rollout production | Belum selesai | Bukan fitur UI tunggal; bukti deployment lintas layanan tetap diperlukan. |
 
 ## Hasil implementasi frontend
@@ -34,7 +34,7 @@ worker, atau CORS production.
    editor operasi `prefix`, `suffix`, dan `replace`, serta tes payload. Expression bebas
    tetap tidak diterima.
 2. Halaman Governance menyediakan lifecycle registry join relationship dan menjaga
-   revision terbaru. Status APPROVED tetap tidak mengaktifkan query join.
+   revision terbaru. Dashboard hanya mengaktifkan relationship APPROVED yang dapat diakses.
 3. Halaman yang sama menyediakan lifecycle AI task policy. Prompt version berasal dari
    mapping server dan API key tidak ditampilkan atau disimpan.
 4. `vue-googlesheet-ai/docs/IMPLEMENTASI_FRONTEND.md` dan panduan Governance sudah
@@ -43,6 +43,6 @@ worker, atau CORS production.
 ## Verifikasi audit
 
 - `npm.cmd test`: **54 unit test lulus**.
-- `npm.cmd run test:e2e`: **58 browser test lulus**.
+- `npm.cmd run test:e2e`: **62 skenario browser lulus**.
 - `npm.cmd run build`: typecheck dan build production lulus; Vite hanya memberi warning
   ukuran chunk chart yang sudah ada.

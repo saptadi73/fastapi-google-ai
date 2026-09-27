@@ -1252,6 +1252,112 @@
         }
       }
     },
+    "/api/v1/sources/{source_id}/schedule": {
+      "patch": {
+        "tags": [
+          "Sources"
+        ],
+        "summary": "Update Schedule",
+        "operationId": "update_schedule_api_v1_sources__source_id__schedule_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceScheduleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/sources/{source_id}/sheets": {
       "get": {
         "tags": [
@@ -1378,6 +1484,112 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SheetUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/source-sheets/{sheet_id}/watermark": {
+      "patch": {
+        "tags": [
+          "Sources"
+        ],
+        "summary": "Update Watermark",
+        "operationId": "update_watermark_api_v1_source_sheets__sheet_id__watermark_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SheetWatermarkUpdate"
               }
             }
           }
@@ -15569,6 +15781,112 @@
         ]
       }
     },
+    "/api/v1/ai-task-policies/{policy_id}": {
+      "patch": {
+        "tags": [
+          "AI task policies"
+        ],
+        "summary": "Update Policy",
+        "operationId": "update_policy_api_v1_ai_task_policies__policy_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Policy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AITaskPolicyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/ai-task-policies/{policy_id}/approve": {
       "post": {
         "tags": [
@@ -15709,6 +16027,305 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/operations/summary": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Summary",
+        "operationId": "summary_api_v1_operations_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Notifications",
+        "operationId": "notifications_api_v1_notifications_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unacknowledged_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Unacknowledged Only"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{notification_id}/acknowledge": {
+      "post": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Acknowledge",
+        "operationId": "acknowledge_api_v1_notifications__notification_id__acknowledge_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "notification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Notification Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -15978,6 +16595,50 @@
             "maxItems": 20,
             "minItems": 1,
             "title": "Allowed Models"
+          },
+          "data_product_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,62}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Product Code"
+          },
+          "max_context_chars": {
+            "type": "integer",
+            "maximum": 2000000.0,
+            "minimum": 1000.0,
+            "title": "Max Context Chars",
+            "default": 200000
+          },
+          "daily_budget_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Budget Usd"
+          },
+          "fallback_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Model"
           }
         },
         "additionalProperties": false,
@@ -15990,6 +16651,103 @@
           "allowed_models"
         ],
         "title": "AITaskPolicyCreate"
+      },
+      "AITaskPolicyUpdate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "title": "Code"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "ETL_CONFIG",
+              "TAXONOMY_RECOMMEND",
+              "NL2SQL"
+            ],
+            "title": "Purpose"
+          },
+          "prompt_version": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]{0,79}$",
+            "title": "Prompt Version"
+          },
+          "model": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$",
+            "title": "Model"
+          },
+          "allowed_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Allowed Models"
+          },
+          "data_product_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,62}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Product Code"
+          },
+          "max_context_chars": {
+            "type": "integer",
+            "maximum": 2000000.0,
+            "minimum": 1000.0,
+            "title": "Max Context Chars",
+            "default": 200000
+          },
+          "daily_budget_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Budget Usd"
+          },
+          "fallback_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Model"
+          },
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision No"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "purpose",
+          "prompt_version",
+          "model",
+          "allowed_models",
+          "revision_no"
+        ],
+        "title": "AITaskPolicyUpdate"
       },
       "ColumnMapping": {
         "properties": {
@@ -18065,6 +18823,14 @@
       },
       "QueryPlan": {
         "properties": {
+          "join_relationships": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Join Relationships"
+          },
           "metrics": {
             "items": {
               "type": "string"
@@ -18499,6 +19265,51 @@
         "type": "object",
         "title": "SheetUpdate"
       },
+      "SheetWatermarkUpdate": {
+        "properties": {
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision No"
+          },
+          "source_column": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Column"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "INTEGER",
+                  "DECIMAL",
+                  "DATE",
+                  "DATETIME"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision_no"
+        ],
+        "title": "SheetWatermarkUpdate"
+      },
       "SortField": {
         "properties": {
           "field": {
@@ -18571,6 +19382,22 @@
               }
             ],
             "title": "Sync Schedule"
+          },
+          "schedule_timezone": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Schedule Timezone",
+            "default": "UTC"
+          },
+          "concurrency_policy": {
+            "type": "string",
+            "enum": [
+              "QUEUE_LATEST",
+              "SKIP_IF_RUNNING"
+            ],
+            "title": "Concurrency Policy",
+            "default": "QUEUE_LATEST"
           }
         },
         "additionalProperties": false,
@@ -18581,6 +19408,57 @@
           "spreadsheet_url"
         ],
         "title": "SourceCreate"
+      },
+      "SourceScheduleUpdate": {
+        "properties": {
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision No"
+          },
+          "sync_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Schedule"
+          },
+          "schedule_timezone": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Schedule Timezone",
+            "default": "UTC"
+          },
+          "concurrency_policy": {
+            "type": "string",
+            "enum": [
+              "QUEUE_LATEST",
+              "SKIP_IF_RUNNING"
+            ],
+            "title": "Concurrency Policy",
+            "default": "QUEUE_LATEST"
+          },
+          "dependency_source_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Dependency Source Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision_no"
+        ],
+        "title": "SourceScheduleUpdate"
       },
       "TaxonomyAIRecommendRequest": {
         "properties": {

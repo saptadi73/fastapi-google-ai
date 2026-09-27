@@ -7,6 +7,7 @@ from app.models.constraints import install_tenant_constraints
 from app.models.etl import ETLRun, Job, QualityIssue, Snapshot, StagingRow
 from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
+from app.models.notification import OperationalNotification
 from app.models.semantic import DataProduct, JoinRelationship, QueryRequest, SavedQuery
 from app.models.source import DataSource, ProfilingRun, SourceSheet
 from app.models.taxonomy import Taxonomy, TaxonomyColumnBinding, TaxonomyTerm, TaxonomyVersion
@@ -21,6 +22,7 @@ __all__ = [
     "MasterDefinition",
     "MasterSourceBinding",
     "MasterColumnBinding",
+    "OperationalNotification",
     "AIUsage",
     "AITaskPolicy",
     "AuditEvent",

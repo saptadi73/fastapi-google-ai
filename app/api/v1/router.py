@@ -9,6 +9,7 @@ from app.api.v1 import (
     masters,
     nl2sql,
     operational_queries,
+    operations,
     profiling,
     reports,
     semantic_catalog,
@@ -45,5 +46,6 @@ for child in (
     nl2sql.router,
     admin_ai_usage.router,
     ai_policies.router,
+    operations.router,
 ):
     router.include_router(child)

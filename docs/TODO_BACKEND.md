@@ -23,7 +23,7 @@ Audit 26 September 2026 tersedia di [audit kesesuaian backend dan frontend](AUDI
 Frontend sudah mencakup BE-02 sampai BE-10, cakupan aktif BE-13, BE-14 tahap 1–9,
 serta endpoint aktif registry join BE-14 dan AI task policy BE-15. BE-11/BE-12 tetap
 mengikuti status parsial backend; editor `transform_parameters` BE-12 kini tersedia.
-Regresi frontend: **54 unit test dan 58 browser test lulus**; tes browser memakai mock
+Regresi frontend: **54 unit test dan 62 skenario browser lulus**; tes browser memakai mock
 API dan bukan acceptance deployment.
 
 ## Urutan implementasi
@@ -289,42 +289,69 @@ Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 - [~] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi (aggregation/kolom, PRESERVE/ZERO_RESULT, serta filter tetap bertipe melalui aggregate FILTER tersedia dalam konfigurasi reviewed, frontend, dan workbook tab 11 H/M; expression arithmetic AST lanjutan belum).
 - [~] Tambahkan query template berparameter dan periode relatif, timezone, output type, priority, serta ambiguity policy. Tahap 5 BE14 meminta pilihan eksplisit untuk template ambigu (backend + Chat frontend), memeriksa ulang akses/versi; parameter, periode, timezone/output dan priority masih terbuka.
 - [x] Tambahkan spesifikasi visualisasi allowlist pada QueryPlan dan saved query: table, KPI, bar, line, area, pie/donut, combo, scatter, heatmap; validasi field output, renderer Dashboard/Chat, override manual, dan isolasi SQL/cache tersedia pada tahap 9.
-- [~] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda. Registry tenant-scoped dengan lifecycle DRAFT/APPROVED/REJECTED, optimistic revision, validasi product/column, join type, cardinality, dan duplicate policy sudah tersedia; query execution masih belum mengaktifkan JOIN.
-- [ ] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join.
+- [x] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda. Registry tenant-scoped dengan lifecycle DRAFT/APPROVED/REJECTED, optimistic revision, validasi product/column, join type, cardinality, duplicate policy, dan aktivasi hanya untuk relationship APPROVED tersedia.
+- [x] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join. QueryPlan menerima path relationship terarah; field produk sekunder memakai `PRODUCT.field`, dan SQL guard hanya menerima object/kolom hasil kompilasi katalog.
+- [x] Izinkan NL2SQL AI menemukan join hanya dari graph relationship APPROVED yang dapat diakses. Konteks dibatasi 10 produk/50 relationship, mengikuti arah maksimal lima hop, membuang relationship stale/PII, mengunci root product eksplisit, dan menolak kode relationship hasil AI di luar konteks.
 - [~] Aktifkan field lanjutan tab 10–13 setelah compiler dan validasinya siap. Tab 10/11 sudah aktif untuk metadata periode dan metrik yang didukung; tab 12/13 serta parameter lanjutan masih terbuka.
-- [~] Uji kontrak registry join dan validasi metadata sudah tersedia; pengujian agregasi one-to-many, relasi ambigu saat query, unauthorized join, filter waktu lintas product, dan saved query join masih menunggu compiler multi-product.
+- [~] Uji kontrak registry, path compiler, tenant/row scope tiap sisi, field sensitif, agregasi ambigu, cache revision, saved-query validation, dan payload browser sudah tersedia. Eksekusi PostgreSQL nyata untuk LEFT/INNER join, filter waktu lintas product, serta concurrency perubahan relationship masih terbuka.
 
 Selesai jika laporan/join menghasilkan angka yang benar dan tidak memperluas akses data pengguna.
 
-Status tinjauan 26 September 2026: tahap 1–9 tersedia pada backend, frontend, dan dokumentasi. Verifikasi terakhir mencakup 66 tes backend terarah, renderer chart Dashboard/Chat, typecheck/build frontend, tes browser visualisasi dinamis, serta exporter **161 operasi API**. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, join multi-product, tab 12/13, dan acceptance provider/deployment nyata.
+Status tinjauan 27 September 2026: tahap 1–11 tersedia pada backend, frontend, dan dokumentasi. Structured query multi-product dan discovery NL2SQL memakai relationship APPROVED yang dapat diakses. Verifikasi terkini mencakup 337 tes backend non-integration, regresi join/NL2SQL/import terarah, Ruff, 54 unit frontend, 62 skenario browser, dan typecheck. Pekerjaan terbuka: registry approval metrik, arithmetic AST, template berparameter/priority/output timezone, tab 12/13 lengkap, PostgreSQL join E2E, dan acceptance provider AI/deployment nyata.
 
-Progres registry join BE-14 (26 September 2026): model/migrasi
+Progres registry join BE-14 (27 September 2026): model/migrasi
 `platform.join_relationship`, endpoint list/create/edit/approve/reject, validasi
 tenant/product/column, cardinality `ONE_TO_ONE`/`MANY_TO_ONE`/`ONE_TO_MANY`,
-join type `LEFT`/`INNER`, dan duplicate policy sudah tersedia. Query compiler tetap
-single-product dan SQL guard tetap menolak JOIN sampai tenant scope, row scope, PII,
-dan kebijakan agregasi ganda memiliki implementasi serta test end-to-end.
+join type `LEFT`/`INNER`, dan duplicate policy sudah tersedia. Structured compiler
+menjalankan path terarah maksimal lima relationship APPROVED, memeriksa akses produk,
+tenant/row scope, PII, versi cache, dan agregasi ganda. Dashboard menyediakan pemilih
+relationship serta field sekunder qualified. NL2SQL AI menerima graph aman yang sama
+dan keluarannya diperiksa ulang sebelum kompilasi. Acceptance provider nyata dan
+PostgreSQL/deployment tetap pekerjaan berikutnya.
 
 ### BE-15 — Kebijakan AI dan operasional per dataset/task
 
 Prasyarat: BE-10 dan BE-11; kontrak parameter mengikuti BE-12.
 
-- [~] Buat registry task/prompt/version dan assignment model melalui allowlist server; registry tenant-scoped, approval, prompt mapping internal, dan runtime override OpenAI sudah tersedia. API key tetap hanya dari environment; edit policy, assignment per dataset, dan version history lanjutan masih terbuka.
-- [ ] Tambahkan trigger, threshold, masking, budget, dan fallback policy per task dengan approval/audit perubahan.
-- [ ] Tambahkan edit jadwal, timezone, dependency job, concurrency policy, dan incremental watermark yang commit hanya setelah load sukses.
-- [ ] Implementasikan retention snapshot/artifact/audit sesuai kebutuhan, statistik proses, dan notifikasi NEEDS_INPUT/FAILED.
+- [~] Buat registry task/prompt/version dan assignment model melalui allowlist server; registry tenant-scoped, create/edit DRAFT dengan optimistic revision, approval, prompt mapping internal, runtime override OpenAI, audit edit, frontend, serta assignment DataProduct khusus NL2SQL dengan fallback global tersedia. API key tetap hanya dari environment; scope dataset ETL/taxonomy dan version history rinci masih terbuka.
+- [~] Tambahkan trigger, threshold, masking, budget, dan fallback policy per task dengan approval/audit perubahan; batas karakter konteks, budget harian policy, fallback model allowlisted satu kali, ledger policy, frontend, dan audit edit tersedia. Trigger sumber dan masking khusus task masih terbuka.
+- [x] Tambahkan edit jadwal, timezone, dependency job, concurrency policy, dan incremental watermark yang commit hanya setelah load sukses; cron/timezone/revision/audit, policy `QUEUE_LATEST`/`SKIP_IF_RUNNING`, graph dependency tenant-aware, serta watermark INTEGER/DECIMAL/DATE/DATETIME pada ETL dan import review tersedia pada backend/frontend.
+- [~] Implementasikan retention snapshot/artifact/audit sesuai kebutuhan, statistik proses, dan notifikasi NEEDS_INPUT/FAILED; statistik tenant, inbox persisten, event transaksional, acknowledge teraudit, frontend, dan migration tersedia. Policy/worker retention masih terbuka.
 - [ ] Pertimbangkan SSE untuk progres serta similarity/embedding/query cache hanya dengan kebutuhan dan invalidation yang jelas.
 - [ ] Aktifkan parameter tab 07/08 bertahap; uji jadwal, retry, perubahan policy, batas biaya, dan pergantian kredensial.
 
 Selesai jika operasi berulang dapat dikonfigurasi, diamati, dan dipulihkan tanpa menghilangkan bukti review.
 
-Progres BE-15 (26 September 2026): registry `platform.ai_task_policy` dan endpoint
-list/create/approve/reject tersedia untuk purpose `ETL_CONFIG`, `TAXONOMY_RECOMMEND`,
+Progres BE-15 (27 September 2026): registry `platform.ai_task_policy` dan endpoint
+list/create/edit/approve/reject tersedia untuk purpose `ETL_CONFIG`, `TAXONOMY_RECOMMEND`,
 dan `NL2SQL`. Prompt version hanya menerima file prompt yang dipetakan server;
 model harus termasuk allowlist server dari settings atau model purpose terkait.
 `OpenAIService` memakai policy APPROVED bila tersedia dan tetap mengambil API key dari
 environment, bukan workbook/database. Kontrak lengkap: [AI task policy BE-15](AI_TASK_POLICIES_BE15.md).
-Bukti: **4 tes terarah lulus**; provider nyata belum dipanggil.
+Migration `c3e6a9b2d4f1` menambahkan assignment DataProduct tenant-aware untuk NL2SQL;
+policy scoped diprioritaskan sebelum policy global. Migration `d4f7b0c3e5a2` menambah
+batas konteks, budget harian, fallback model, dan `audit.ai_usage_log.policy_id`.
+Runtime mereservasi estimasi biaya worst-case, menolak konteks sebelum provider, serta
+mencoba fallback allowlisted satu kali. Bukti tes dan dokumentasi diperbarui bersama
+frontend Governance; provider nyata belum dipanggil.
+
+Kontrol operasional source kini dapat diedit melalui
+`PATCH /sources/{source_id}/schedule`. Migration `e5a8c1d4f6b3` menambah timezone IANA,
+optimistic schedule revision, dan concurrency policy. Scheduler tetap memakai durable
+job: `QUEUE_LATEST` mempertahankan satu occurrence untuk dijalankan setelah job aktif,
+sedangkan `SKIP_IF_RUNNING` memajukan clock dan melewati occurrence tersebut.
+Migration `f6b9d2e5a7c4` menambah graph dependency tenant-aware; scheduler menunggu setiap
+upstream sukses dan lebih baru daripada keberhasilan downstream terakhir.
+Migration `g7c0e3f6b8d5` menambah incremental watermark per tab. Filter mempertahankan
+nomor baris sumber dan hanya menerima nilai lebih besar. ETL langsung menahan watermark
+bila ada issue; import review mem-pin base/candidate dan baru memajukannya pada apply
+sukses dalam transaksi yang sama.
+Migration `h8d1f4a7c9e6` menambah inbox notifikasi operasional tenant-scoped. Job gagal,
+worker stale, serta batch `NEEDS_INPUT`/`FAILED` menghasilkan event persisten tanpa raw
+data. Endpoint summary/list/acknowledge dan halaman Jobs frontend tersedia; acknowledge
+idempotent dan teraudit. Retention snapshot/artifact/audit masih terbuka.
+Migration `i9e2a5b8d0f7` merekonsiliasi constraint tenant graph dependency dan ledger
+AI policy agar metadata model dan jalur upgrade database yang sudah hidup konsisten.
 
 ### BE-16 — Kesiapan deployment production
 
@@ -371,8 +398,8 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 | BE-11 | Sebagian selesai | `/sync-review` manual/terjadwal kini membuat batch setelah refresh snapshot dan reuse saat konten sama; orkestrasi approval/apply penuh, apply migrasi, dan E2E domain masih terbuka |
 | BE-12 | Sebagian selesai | Backend dan frontend mendukung DQ, precision/varchar, locale angka, unit, timezone, currency, effective dating, APPEND policy, serta editor transform parameter statis; multi-target/schema evolution tetap pending backend |
 | BE-13 | Tersedia di kode/frontend | Taxonomy, binding, resolver, rekomendasi dan integrasi UI tersedia; acceptance provider/deployment nyata masih terbuka |
-| BE-14 | Tahap 1–9 tersedia; registry join parsial | Frontend mencakup metadata semantic, periode, metrik, ambiguity flow, visualisasi dinamis, dan lifecycle registry join. Compiler multi-product, approval metrik, AST lanjutan, dan template lengkap masih terbuka |
-| BE-15 | Sebagian selesai | Backend dan frontend registry task/prompt/model serta lifecycle policy tersedia. Trigger, fallback, jadwal, watermark, retention, notifikasi, dan provider live masih terbuka |
+| BE-14 | Tahap 1–11 tersedia; hardening join berlanjut | Frontend mencakup metadata semantic, periode, metrik, ambiguity flow, visualisasi dinamis, lifecycle registry, dan query join approved; backend menyediakan discovery join NL2SQL tervalidasi. Approval metrik, AST lanjutan, template lengkap, provider acceptance, dan PostgreSQL join E2E masih terbuka |
+| BE-15 | Sebagian selesai | Backend dan frontend registry AI, budget/fallback, cron/timezone/concurrency, dependency freshness, incremental watermark transaksional, statistik proses, serta notifikasi persisten/acknowledge tersedia. Scope dataset ETL/taxonomy, trigger/masking lanjutan, retention, dan provider live masih terbuka |
 | BE-16 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 
 Referensi: [Spesifikasi master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), [cakupan template ETL](REVIEW_KONFIGURASI_ETL.md), [API Reference aktif](API_REFERENCE.md), [batasan implementasi](IMPLEMENTASI.md), dan [konfigurasi/rotasi kredensial](KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).

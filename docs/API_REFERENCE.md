@@ -1,8 +1,8 @@
 # API Reference untuk frontend
 
-Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **26 September 2026**.
+Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **27 September 2026**.
 
-Dokumen ini menjelaskan **161 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **167 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -203,10 +203,12 @@ PATCH hanya mendukung `role`, `is_active`, dan `row_scope`; bukan username, full
 | POST | `/sources/google-sheets` | E | SourceCreate | 202 | `{source: DataSource, ...EnqueuedJob}` |
 | GET | `/sources` | S | offset/limit | 200 | DataSource[]; meta pagination |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
+| PATCH | `/sources/{source_id}/schedule` | E | SourceScheduleUpdate | 200 | Edit cron/timezone/concurrency dengan optimistic revision |
 | GET | `/sources/{source_id}/sheets` | S | UUID source | 200 | SourceSheet[] |
 | GET | `/source-sheets/{sheet_id}/classification` | S | Tidak ada | 200 | SheetClassification: kind, status, revision, actor/time, execution_ready, blocker |
 | PUT | `/source-sheets/{sheet_id}/classification` | E | SheetClassificationUpdate | 200 | SheetClassification terbaru |
 | PATCH | `/source-sheets/{sheet_id}` | E | SheetUpdate | 200 | SourceSheet |
+| PATCH | `/source-sheets/{sheet_id}/watermark` | E | SheetWatermarkUpdate | 200 | Konfigurasi/reset incremental watermark dengan revision |
 | POST | `/sources/{source_id}/discover` | E | — | 202 | EnqueuedJob |
 | POST | `/sources/{source_id}/profile` | E | — | 202 | EnqueuedJob |
 | POST | `/sources/{source_id}/sync` | E | — | 202 | EnqueuedJob legacy; response menandai `review_required=true` dan merekomendasikan `sync-review` |
@@ -654,6 +656,9 @@ File JSON/YAML berisi metadata schema_version, configuration_id, configuration_v
 | GET | `/jobs` | S | offset/limit | 200 | Job[]; meta pagination |
 | GET | `/jobs/{job_id}` | S | — | 200 | Job |
 | POST | `/jobs/{job_id}/retry` | S | — | 202 | EnqueuedJob baru |
+| GET | `/operations/summary` | S | — | 200 | Jumlah status job/review dan notifikasi aktif |
+| GET | `/notifications` | S | unacknowledged_only, offset/limit | 200 | OperationalNotification[]; meta pagination |
+| POST | `/notifications/{notification_id}/acknowledge` | S | — | 200 | OperationalNotification yang sudah diakui |
 | GET | `/etl-jobs` | S | — | 200 | DataSource[]; maksimal 100 |
 | POST | `/etl-jobs/{job_id}/run` | E | — | 202 | EnqueuedJob |
 | POST | `/etl-jobs/{job_id}/pause` | E | — | 200 | DataSource |
@@ -802,13 +807,27 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | POST | `/semantic/query-templates/{template_id}/activate` | D | — | 200 | SavedQuery ACTIVE |
 | GET | `/ai-task-policies` | Auth | — | 200 | Policy task AI tenant-scoped |
 | POST | `/ai-task-policies` | E | AITaskPolicyCreate | 201 | Policy DRAFT; model harus allowlist server |
+| PATCH | `/ai-task-policies/{policy_id}` | E | AITaskPolicyUpdate | 200 | Edit hanya DRAFT; optimistic revision; approval dibersihkan |
 | POST | `/ai-task-policies/{policy_id}/approve` | R | AITaskPolicyAction | 200 | Policy APPROVED |
 | POST | `/ai-task-policies/{policy_id}/reject` | R | AITaskPolicyAction | 200 | Policy REJECTED |
+
 | GET | `/reports/sales/summary` | Auth | start_date, end_date wajib | 200 | QueryRow[] total sales |
 | GET | `/reports/sales/by-branch` | Auth | start_date, end_date wajib | 200 | QueryRow[] per branch |
 | GET | `/reports/sales/trend` | Auth | start_date, end_date wajib | 200 | QueryRow[] per bulan |
 | GET | `/reports/inventory/stock-position` | Auth | — | 200 | QueryRow[] stock |
 | GET | `/reports/data-quality/summary` | D | — | 200 | map status → jumlah issue |
+
+`data_product_code` pada AI task policy bersifat nullable dan hanya didukung untuk
+purpose `NL2SQL`. Nilai harus menunjuk DataProduct aktif yang accessible dalam tenant.
+Runtime memprioritaskan policy APPROVED yang cocok dengan produk, lalu policy global
+(`data_product_code=null`) sebagai fallback.
+
+Payload policy juga menerima `max_context_chars` (1.000-2.000.000),
+`daily_budget_usd` opsional, dan `fallback_model` opsional. Fallback wajib berbeda dari
+model utama serta berada dalam allowlist policy dan server. Runtime menolak konteks
+berlebih sebelum provider dipanggil, mereservasi estimasi biaya seluruh percobaan,
+membatasi budget harian policy mulai 00:00 UTC, dan mencoba fallback paling banyak satu
+kali. Ledger `audit.ai_usage_log.policy_id` mengaitkan biaya dengan policy yang dipakai.
 
 ### Data product dan pengaturan akses
 
@@ -828,6 +847,7 @@ Field opsional, status ACTIVE/SUSPENDED. PATCH menaikkan `version`, sehingga tem
 
 ```json
 {
+  "join_relationships": [],
   "metrics": ["net_sales", "transaction_count"],
   "dimensions": ["branch_name"],
   "filters": [
@@ -844,6 +864,7 @@ Query metrics/dimensions berasal dari katalog produk, bukan label bebas. Maksima
 
 | Field | Mekanisme |
 |---|---|
+| `join_relationships` | Maksimal 5 kode relationship APPROVED dalam urutan path terarah dari produk utama |
 | `metrics` | Agregasi metric yang didefinisikan katalog |
 | `dimensions` | Kolom group-by jika ada metrics; jika tanpa metrics, proyeksi baris, bukan DISTINCT otomatis |
 | `filters` | Semua digabung AND dan hanya boleh memakai dimensi yang diizinkan |
@@ -854,7 +875,17 @@ Query metrics/dimensions berasal dari katalog produk, bukan label bebas. Maksima
 | `time_grain` | none/day/week/month/quarter/year; diterapkan pada dimensi bertipe tanggal/waktu |
 | `visualization` | Opsional; spec allowlist table/KPI/chart yang hanya merujuk output plan |
 
-Jika metrics dan dimensions kosong, server memilih seluruh dimensi produk. Bila tidak ada output yang dapat dipilih, QUERY_INVALID. Tidak ada raw SQL, join bebas, OR filter, HAVING, atau pencarian contains pada payload.
+Jika metrics dan dimensions kosong, server memilih seluruh dimensi produk utama. Bila tidak ada output yang dapat dipilih, QUERY_INVALID. Tidak ada raw SQL, join bebas, OR filter, HAVING, atau pencarian contains pada payload.
+
+Untuk query multi-product, field produk sekunder wajib ditulis `PRODUCT.field` pada
+metrics, dimensions, filters, dan sort. Compiler hanya mengikuti relationship APPROVED
+yang diberikan secara eksplisit; urutannya harus membentuk path dari produk utama tanpa
+siklus. Setiap produk diperiksa terhadap role, tenant scope, row scope, dan klasifikasi
+PII. Guard kardinalitas menolak agregasi yang dapat menghitung ganda. Metrik dengan
+`default_period` memerlukan filter periode eksplisit dalam query join. Error khusus:
+`QUERY_JOIN_NOT_FOUND`, `QUERY_JOIN_PATH_INVALID`, `QUERY_JOIN_STALE`,
+`QUERY_JOIN_FORBIDDEN`, `QUERY_FIELD_FORBIDDEN`,
+`QUERY_AGGREGATION_AMBIGUOUS`, dan `QUERY_JOIN_DEFAULT_PERIOD_REQUIRED`.
 
 Metrik dapat memiliki `default_period` berisi dimension temporal dan days 1..3660.
 Backend menerapkannya menurut tanggal UTC hanya ketika QueryPlan tidak memfilter
@@ -873,6 +904,8 @@ Respons query lengkap:
   ],
   "meta": {
     "data_product": "SALES",
+    "joined_products": [],
+    "join_relationships": [],
     "query_source": "OPERATIONAL",
     "row_count": 2,
     "cached": false,
@@ -954,6 +987,13 @@ Sukses query normal mempunyai meta query ditambah:
 ```
 
 Route normal: SAVED_QUERY, INTENT_TEMPLATE, OPENAI. `meta.query_source` mengikuti route. `cached=true` bisa bersamaan dengan `openai_called=true`, karena AI dapat dipanggil untuk membuat plan sebelum hasil SQL ditemukan di cache.
+
+Pada route OPENAI, konteks dapat memuat `approved_join_relationships`. Daftar tersebut
+hanya berisi relationship tenant-scoped yang kedua produknya dapat diakses, kolomnya
+masih tersedia, dan join key bukan PII MEDIUM/HIGH. Jika request menentukan
+`data_product_code`, graph dibangun terarah dari root itu maksimal lima hop. Lebih dari
+10 produk atau 50 relationship menghasilkan klarifikasi. Kode join hasil AI wajib
+merupakan subset konteks dan kembali diperiksa compiler sebelum SQL dijalankan.
 
 ### Klarifikasi adalah sukses HTTP 200
 
@@ -1155,13 +1195,13 @@ CORS saat ini mengizinkan GET/POST/PATCH dan header Authorization/Content-Type, 
 | 409 | PROFILE_REQUIRED, APPROVAL_REQUIRED | Selesaikan langkah prasyarat |
 | 409 | TEMPLATE_STALE, TEMPLATE_VALIDATION_REQUIRED | Validate/activate template sesuai versi produk |
 | 409 | JOB_CONFLICT, QUERY_CONFLICT | Aksi tidak cocok dengan status objek |
-| 409 | SOURCE_PAUSED, ETL_RUN_LOCKED | Resume sumber atau tunggu run lain selesai |
+| 409 | SOURCE_PAUSED, SOURCE_SCHEDULE_CONFLICT, SOURCE_DEPENDENCY_CYCLE, WATERMARK_REVISION_CONFLICT, WATERMARK_STALE, ETL_RUN_LOCKED | Resume/muat ulang sumber, perbaiki dependency/watermark, atau tunggu run lain selesai |
 | 409 | ARTIFACT_MISSING, ARTIFACT_HASH_MISMATCH, ARTIFACT_INVALID | Jangan lanjut deploy; eskalasi ke pengelola backend |
 | 422 | VALIDATION_ERROR | Petakan details[].field ke input form |
-| 422 | CONFIGURATION_INVALID, AI_CONFIGURATION_INVALID, SCHEMA_CHANGE_UNSAFE | Perbaiki mapping/data atau lakukan migrasi yang ditinjau |
+| 422 | CONFIGURATION_INVALID, AI_CONFIGURATION_INVALID, AI_CONTEXT_LIMIT_EXCEEDED, SCHEMA_CHANGE_UNSAFE | Perbaiki mapping/data, kecilkan konteks, atau lakukan migrasi yang ditinjau |
 | 422 | QUERY_INVALID, QUERY_TOO_EXPENSIVE, NL2SQL_UNSAFE_QUERY | Perbaiki plan, dimensi, atau persempit periode |
 | 422 | DQ_STOP_BATCH, DQ_REQUIRE_REVIEW | Tampilkan batch tertahan; minta perbaikan sumber/aturan |
-| 429 | NL2SQL_QUOTA_EXCEEDED, AI_BUDGET_EXCEEDED | Jangan retry terus; kuota/budget harian tercapai |
+| 429 | NL2SQL_QUOTA_EXCEEDED, AI_BUDGET_EXCEEDED, AI_TASK_BUDGET_EXCEEDED | Jangan retry terus; kuota/budget harian tercapai |
 | 503 | OPENAI_NOT_CONFIGURED, AI_UPSTREAM_FAILED, AI_PRICING_REQUIRED | Konfigurasi/layanan AI perlu diperiksa |
 | 503 | NL2SQL_NOT_CONFIGURED, NL2SQL_READER_UNSAFE | Role database query AI perlu diperiksa |
 | 503 | DATABASE_UNAVAILABLE, REDIS_UNAVAILABLE | Tampilkan layanan belum siap |
@@ -1174,7 +1214,7 @@ Error Google seperti GOOGLE_NOT_CONFIGURED (503), SOURCE_ACCESS_DENIED (403), SO
 1. Klasifikasi master/non-master, registry dan storage master kanonis, binding/FK, pertanyaan terstruktur, serta endpoint import-review sudah tersedia melalui BE-02–BE-10. Migrasi data lama penuh, acceptance end-to-end provider nyata, dan rollout production masih terbuka.
 2. `dataset_kind` hanya diterima oleh SheetClassificationUpdate. Payload lain tetap menolak field tambahan yang tidak ada di schema; master_definition_id diterima pada MasterBindingUpdate, bukan pada payload klasifikasi.
 3. AI ETL konfigurasi membuat draft dari metadata/profile. Review AI per batch mendukung coverage, chunk cache, masking field sensitif, findings, blocker, dan pertanyaan; UI tidak boleh mengklaim semua baris diperiksa bila provider nonaktif, coverage hanya sampling, atau ada pengecualian.
-4. Query tetap dibatasi satu data product, tanpa SQL bebas atau join dinamis. FK master tersedia untuk integritas/import, tetapi belum menjadi izin join NL2SQL multi-product.
+4. Structured query dapat memakai path relationship APPROVED yang eksplisit. NL2SQL AI menerima graph relationship APPROVED yang accessible dan hanya boleh memilih kode dari konteks tersebut; root eksplisit dikunci dan hasil tetap melalui compiler/guard yang sama. SQL bebas dan join arbitrer tidak tersedia; FK master sendiri bukan izin join semantic.
 5. Belum ada list seluruh NL2SQL request, edit/delete saved template, delete source/user, reset password user lain, atau endpoint daftar distinct dimensi.
 6. Approval source data/configuration bukan jaminan semua integrasi eksternal sudah siap. Tetap tampilkan status job dan error nyata.
 7. `submit-review` wajib menerima bukti review revision/snapshot dan memvalidasi draft. Approval ditolak tanpa submission terbaru; PATCH membatalkan bukti review. Deployment/rollback ditolak bila isi Google Sheet berbeda dari snapshot yang disetujui.
@@ -1555,3 +1595,25 @@ scatter, dan heatmap. Bentuk serta referensi field divalidasi terhadap metrics/d
 terpilih. Spec dikembalikan pada meta dan tersimpan dalam saved query, tetapi tidak
 memengaruhi SQL atau cache key hasil. Opsi chart-library dan script bebas ditolak.
 [Kontrak tahap 9](FRONTEND_BE14.md#tahap-9-spesifikasi-visualisasi-tervalidasi).
+### BE15: statistik proses dan notifikasi operasional
+
+`GET /operations/summary` mengembalikan jumlah status job dan batch import untuk tenant
+aktif, jumlah notifikasi belum diakui, serta waktu pembuatan ringkasan.
+
+```json
+{
+  "jobs": {"QUEUED": 2, "RUNNING": 1, "FAILED": 1},
+  "import_reviews": {"NEEDS_INPUT": 3, "READY_FOR_APPROVAL": 1},
+  "unacknowledged_notifications": 4,
+  "generated_at": "2026-09-27T10:00:00Z"
+}
+```
+
+`GET /notifications?unacknowledged_only=true&offset=0&limit=50` mengembalikan inbox
+tenant. Kind aktif adalah `JOB_FAILED`, `IMPORT_NEEDS_INPUT`, dan `IMPORT_FAILED` dengan
+severity `WARN` atau `ERROR`. Response tidak memuat raw data sumber.
+
+`POST /notifications/{notification_id}/acknowledge` tidak memakai body. Endpoint
+mengisi pengguna/waktu acknowledge dan menulis audit. Pemanggilan ulang sukses tanpa
+menggandakan audit. Resource tenant lain menghasilkan `RESOURCE_NOT_FOUND` (404).
+Role ketiga endpoint: editor source/data, platform admin, dan technical approver.

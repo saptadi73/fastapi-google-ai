@@ -4,7 +4,7 @@ from app.repositories.base import record
 from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.semantic import QueryPlan
 from app.services.audit_service import audit
-from app.services.query_execution_service import build_query
+from app.services.query_execution_service import QueryExecutionService, build_query
 
 
 def normalize_intent(question):
@@ -99,7 +99,11 @@ class SemanticCatalogService:
     async def validate_saved(self, template_id):
         obj = await self.repo.get(SavedQuery, template_id, lock=True)
         product = await self.repo.product(obj.data_product_code, self.user)
-        build_query(product, self.user, QueryPlan.model_validate(obj.plan))
+        plan = QueryPlan.model_validate(obj.plan)
+        if plan.join_relationships:
+            await QueryExecutionService(self.session, self.user).compile(product.code, plan)
+        else:
+            build_query(product, self.user, plan)
         obj.status, obj.semantic_version = "VALIDATED", product.version
         audit(self.session, self.user, "query_template.validated", obj.id)
         return record(obj)
@@ -119,9 +123,21 @@ class SemanticCatalogService:
         products = await self.repo.list(DataProduct, limit=1000, conditions=(DataProduct.status == "ACTIVE",))
         return [record(p, exclude=("view_name",)) for p in products if self.user.role in p.allowed_roles]
 
+    async def join_relationships(self):
+        product_codes = {product["code"] for product in await self.products()}
+        relationships = await self.repo.list(JoinRelationship)
+        return [
+            record(item)
+            for item in relationships
+            if item.left_product_code in product_codes and item.right_product_code in product_codes
+        ]
+
     async def create_saved(self, data):
         product = await self.repo.product(data.data_product_code, self.user)
-        build_query(product, self.user, data.plan)
+        if data.plan.join_relationships:
+            await QueryExecutionService(self.session, self.user).compile(product.code, data.plan)
+        else:
+            build_query(product, self.user, data.plan)
         obj = await self.repo.add(
             SavedQuery,
             code=data.code,

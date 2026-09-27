@@ -1,5 +1,5 @@
 from app.core.exceptions import AppError
-from app.models.semantic import DataProduct, SavedQuery
+from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.repositories.base import TenantRepository
 
 
@@ -21,3 +21,25 @@ class SemanticRepository(TenantRepository):
         if obj is None or user.role not in obj.allowed_roles:
             raise AppError("DATA_PRODUCT_NOT_FOUND", "Data product tidak tersedia untuk akses Anda.", 404)
         return obj
+
+    async def join_relationship(self, code):
+        obj = await self.session.scalar(
+            self.query(JoinRelationship).where(
+                JoinRelationship.code == code, JoinRelationship.status == "APPROVED"
+            )
+        )
+        if obj is None:
+            raise AppError("QUERY_JOIN_NOT_FOUND", "Join relationship approved tidak tersedia.", 404)
+        return obj
+
+    async def approved_join_relationships(self):
+        return list(
+            (
+                await self.session.scalars(
+                    self.query(JoinRelationship)
+                    .where(JoinRelationship.status == "APPROVED")
+                    .order_by(JoinRelationship.code)
+                    .limit(100)
+                )
+            ).all()
+        )

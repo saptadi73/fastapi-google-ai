@@ -43,6 +43,7 @@ class VisualizationSpec(StrictModel):
 
 
 class QueryPlan(StrictModel):
+    join_relationships: list[str] = Field(default_factory=list, max_length=5)
     metrics: list[str] = Field(default_factory=list, max_length=20)
     dimensions: list[str] = Field(default_factory=list, max_length=20)
     filters: list[QueryFilter] = Field(default_factory=list, max_length=20)
@@ -54,6 +55,8 @@ class QueryPlan(StrictModel):
 
     @model_validator(mode="after")
     def valid_visualization(self):
+        if len(set(self.join_relationships)) != len(self.join_relationships):
+            raise ValueError("Join relationships must be unique")
         spec = self.visualization
         if spec is None:
             return self

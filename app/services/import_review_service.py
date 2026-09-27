@@ -32,6 +32,7 @@ from app.services.etl_compiler_service import cast_value, transform_rows
 from app.services.job_service import enqueue
 from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService, check_storage
+from app.services.notification_service import add_notification
 from app.services.openai_service import OpenAIService
 from app.services.profiling_service import digest
 from app.services.reference_service import (
@@ -46,6 +47,7 @@ from app.services.taxonomy_validation_service import (
     review_taxonomy_rows,
     taxonomy_context,
 )
+from app.services.watermark_service import incremental_values
 from app.services.workbook_service import decode, token
 
 
@@ -71,6 +73,7 @@ class ImportReviewService:
         return review
 
     def move(self, review, action, *, worker=False):
+        previous_status = review.status
         review.status = next_import_status(
             ImportStatus(review.status), action, role=None if worker else self.user.role
         ).value
@@ -83,6 +86,19 @@ class ImportReviewService:
             status=review.status,
             revision_no=review.revision_no,
         )
+        if review.status == "NEEDS_INPUT" and previous_status != review.status:
+            add_notification(
+                self.session,
+                tenant_id=review.tenant_id,
+                event_key=f"import-review:{review.id}:needs-input:{review.revision_no}",
+                kind="IMPORT_NEEDS_INPUT",
+                severity="WARN",
+                resource_type="IMPORT_REVIEW",
+                resource_id=review.id,
+                title="Batch import memerlukan input",
+                message="Periksa pertanyaan dan blocker sebelum batch dapat dilanjutkan.",
+                details={"status": review.status, "revision_no": review.revision_no},
+            )
 
     async def capture(self, data):
         sheet = await self.repo.get(SourceSheet, data.source_sheet_id)
@@ -117,6 +133,9 @@ class ImportReviewService:
                 "header_row": sheet.header_row,
                 "data_start_row": sheet.data_start_row,
                 "range_a1": sheet.range_a1,
+                "watermark_source_column": getattr(sheet, "watermark_source_column", None),
+                "watermark_kind": getattr(sheet, "watermark_kind", None),
+                "watermark_value": getattr(sheet, "watermark_value", None),
             },
         }
         master_policy = None
@@ -192,6 +211,18 @@ class ImportReviewService:
             )
         dependencies["configuration_hash"] = digest(config)
         parsed = ETLConfiguration.model_validate(config)
+        _, watermark_candidate, incremental_count = incremental_values(snapshot.values, sheet)
+        if incremental_count is not None and parsed.load_strategy == "FULL_REFRESH":
+            raise AppError(
+                "WATERMARK_STRATEGY_INVALID",
+                "Incremental watermark tidak didukung untuk FULL_REFRESH.",
+            )
+        dependencies.update(
+            watermark_revision=getattr(sheet, "watermark_revision", 1),
+            watermark_base=getattr(sheet, "watermark_value", None),
+            watermark_candidate=watermark_candidate,
+            incremental_row_count=incremental_count,
+        )
         references = await reference_context(self.session, self.user, sheet.id, parsed)
         if references:
             dependencies["reference_hash"] = reference_hash(references)
@@ -988,6 +1019,19 @@ class ImportReviewService:
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
             {"key": "import-apply:" + str(lock_key)},
         )
+        watermark_sheet = None
+        if review.dependencies.get("watermark_candidate") is not None:
+            watermark_sheet = await self.repo.get(SourceSheet, review.source_sheet_id, lock=True)
+            if (
+                watermark_sheet.watermark_revision
+                != review.dependencies.get("watermark_revision")
+                or watermark_sheet.watermark_value != review.dependencies.get("watermark_base")
+            ):
+                raise AppError(
+                    "WATERMARK_STALE",
+                    "Watermark berubah sejak batch dibuat; buat batch baru.",
+                    409,
+                )
         if config is not None and any(getattr(c, "taxonomy_id", None) for c in config.columns):
             context = await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
                                              config, lock=True)
@@ -1083,8 +1127,18 @@ class ImportReviewService:
             await self.session.execute(stmt)
             loaded += 1
         self.move(review, ImportAction.COMPLETE, worker=True)
+        if watermark_sheet is not None:
+            watermark_sheet.watermark_value = review.dependencies["watermark_candidate"]
+            watermark_sheet.watermark_updated_at = datetime.now(timezone.utc)
         review.checkpoint = {**review.checkpoint, "rows_applied": loaded, "periods_closed": len(period_closures), "applied_by": str(self.user.id)}
-        audit(self.session, self.user, "import.applied", review.id, rows_applied=loaded)
+        audit(
+            self.session,
+            self.user,
+            "import.applied",
+            review.id,
+            rows_applied=loaded,
+            watermark_value=watermark_sheet.watermark_value if watermark_sheet else None,
+        )
         return {"review": self.response(review), "rows_applied": loaded, "periods_closed": len(period_closures), "status": review.status}
 
     async def resolve_reference(self, review_id, data):
@@ -1151,21 +1205,24 @@ class ImportReviewService:
             snapshot = await self.repo.get(Snapshot, review.snapshot_id)
             try:
                 config = ETLConfiguration.model_validate(review.configuration_json)
+                review_values, _, _ = incremental_values(
+                    snapshot.values, SimpleNamespace(**review.dependencies["sheet"])
+                )
                 good, issues, warnings = transform_rows(
-                    snapshot.values, SimpleNamespace(**review.dependencies["sheet"]), config,
+                    review_values, SimpleNamespace(**review.dependencies["sheet"]), config,
                     taxonomy=await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id, config, lock=True),
                     review_mode=True,
                 )
                 headers = [
                     str(value).strip()
-                    for value in snapshot.values[review.dependencies["sheet"]["header_row"] - 1]
+                    for value in review_values[review.dependencies["sheet"]["header_row"] - 1]
                 ]
                 target_for_source = {column.target_column: column.source_column for column in config.columns}
                 outputs = {row_number: output for row_number, output in good}
                 outputs.update({issue["source_row"]: issue["transformed_data"] for issue in issues if "transformed_data" in issue})
                 staging = {}
                 for row_number, raw in enumerate(
-                    snapshot.values[review.dependencies["sheet"]["data_start_row"] - 1 :],
+                    review_values[review.dependencies["sheet"]["data_start_row"] - 1 :],
                     review.dependencies["sheet"]["data_start_row"],
                 ):
                     if not any(value is not None and value != "" for value in raw):
@@ -1386,4 +1443,16 @@ async def fail_import_job(session, job, code):
             job_id=job.id,
             error_code=code,
             revision_no=review.revision_no,
+        )
+        add_notification(
+            session,
+            tenant_id=job.tenant_id,
+            event_key=f"import-review:{review.id}:failed:{review.revision_no}",
+            kind="IMPORT_FAILED",
+            severity="ERROR",
+            resource_type="IMPORT_REVIEW",
+            resource_id=review.id,
+            title="Batch import gagal",
+            message="Batch import berhenti karena kegagalan teknis. Periksa kode kegagalan.",
+            details={"error_code": code, "job_id": job.id, "revision_no": review.revision_no},
         )

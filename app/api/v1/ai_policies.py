@@ -6,7 +6,7 @@ from app.api.dependencies import CurrentUser, Session, require_roles
 from app.core.exceptions import success
 from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
-from app.schemas.ai_policy import AITaskPolicyAction, AITaskPolicyCreate
+from app.schemas.ai_policy import AITaskPolicyAction, AITaskPolicyCreate, AITaskPolicyUpdate
 from app.services.ai_policy_service import AITaskPolicyService
 
 router = APIRouter(prefix="/ai-task-policies", tags=["AI task policies"])
@@ -22,6 +22,13 @@ async def list_policies(session: Session, user: CurrentUser):
 @router.post("", status_code=201, dependencies=edit)
 async def create_policy(data: AITaskPolicyCreate, session: Session, user: CurrentUser):
     return success(await AITaskPolicyService(session, user).create(data))
+
+
+@router.patch("/{policy_id}", dependencies=edit)
+async def update_policy(
+    policy_id: UUID, data: AITaskPolicyUpdate, session: Session, user: CurrentUser
+):
+    return success(await AITaskPolicyService(session, user).update(policy_id, data))
 
 
 @router.post("/{policy_id}/approve", dependencies=review)

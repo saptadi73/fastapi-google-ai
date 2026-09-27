@@ -160,8 +160,8 @@ SAVED_QUERY_PRODUCT_MISMATCH (422), tanpa eksekusi. Satu template cocok tetap me
 INTENT_TEMPLATE; tidak ada kecocokan tetap mengikuti alur AI existing.
 
 Tidak ada migrasi atau endpoint baru pada tahap klarifikasi. Periode relatif, parameter template, prioritas,
-expression AST, dan query join multi-product masih terbuka. Registry relationship tersedia
-terpisah dari compiler. Tes service/SQL compilation dan
+expression AST masih terbuka. Structured query multi-product dan discovery join AI
+dengan relationship APPROVED dijelaskan pada tahap 10–11. Tes service/SQL compilation dan
 browser menggunakan mock; bukan bukti integrasi PostgreSQL/provider nyata.
 
 ## Tahap 6: metadata metrik dalam konfigurasi dan workbook
@@ -254,3 +254,38 @@ Dashboard dan Chat merender spec serta menyediakan override manual. Renderer mem
 grafik ke 100 baris halaman hasil dan tabel tetap ditampilkan sebagai sumber detail.
 Pilihan manual dapat disimpan bersama template. AI boleh memilih spec allowlist dalam
 plan, tetapi tidak dapat mengirim opsi ApexCharts bebas. Tidak ada migrasi database.
+
+## Tahap 10: structured query multi-product
+
+`QueryPlan.join_relationships` menerima maksimal lima kode relationship APPROVED dalam
+urutan path terarah dari produk utama. Field pada produk sekunder ditulis
+`PRODUCT.field`; field tanpa prefix tetap merujuk produk utama. Compiler mengambil
+setiap produk melalui pemeriksaan akses yang sama, menambahkan tenant scope pada join,
+menerapkan row scope produk utama pada WHERE dan row scope produk kanan pada ON untuk
+menjaga semantik LEFT JOIN, serta menolak join atau output PII MEDIUM/HIGH.
+
+Guard agregasi menggunakan cardinality dan duplicate policy registry. Metrik sisi kanan
+MANY_TO_ONE ditolak, sedangkan ONE_TO_MANY hanya menerima metrik sisi kanan ketika
+policy `AGGREGATE_RIGHT`. Beberapa join dengan metrik wajib ONE_TO_ONE. Metrik yang
+memiliki default period memerlukan filter periode eksplisit pada query join. Cache key
+mencakup versi/freshness seluruh produk dan revision relationship.
+
+Dashboard memuat registry, menawarkan relationship APPROVED yang tersambung bertahap
+dari produk utama, dan menampilkan dimensi/metrik sekunder qualified. Saved query create/validate/run
+memakai compiler yang sama. Editor tab 13 workbook dan acceptance PostgreSQL
+multi-product tetap terbuka.
+
+## Tahap 11: discovery join NL2SQL
+
+Konteks OpenAI hanya memuat produk yang diizinkan dan relationship APPROVED dengan
+kolom yang masih ada serta bukan PII MEDIUM/HIGH. Bila `data_product_code` diberikan,
+backend mengunci root tersebut dan menyusun graph reachable terarah maksimal lima hop.
+Konteks dibatasi 10 produk dan 50 relationship; graph yang lebih luas meminta
+klarifikasi, bukan dipotong diam-diam.
+
+Prompt wajib memakai kode relationship dari `approved_join_relationships`, menjaga
+urutannya dari root, dan memberi prefix `PRODUCT_CODE.` pada seluruh field sekunder.
+Setelah respons terstruktur diterima, backend kembali memeriksa root product dan bahwa
+seluruh `plan.join_relationships` merupakan subset konteks sebelum compiler menjalankan
+guard akses, scope, PII, kardinalitas, dan SQL. Provider AI nyata tetap memerlukan
+acceptance terpisah.

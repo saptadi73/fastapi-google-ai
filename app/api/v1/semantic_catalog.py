@@ -6,7 +6,7 @@ from app.api.dependencies import CurrentUser, Session, require_roles
 from app.core.exceptions import success
 from app.core.routing import APIRouter
 from app.domain.enums import DATA_ROLES
-from app.models.semantic import JoinRelationship, SavedQuery
+from app.models.semantic import SavedQuery
 from app.repositories.base import record
 from app.schemas.semantic import (
     JoinRelationshipAction,
@@ -39,8 +39,7 @@ async def metrics(session: Session, user: CurrentUser):
 
 @router.get("/join-relationships")
 async def join_relationships(session: Session, user: CurrentUser):
-    service = SemanticCatalogService(session, user)
-    return success([record(item) for item in await service.repo.list(JoinRelationship)])
+    return success(await SemanticCatalogService(session, user).join_relationships())
 
 
 @router.post("/join-relationships", status_code=201, dependencies=admin)

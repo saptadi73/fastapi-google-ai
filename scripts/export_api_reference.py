@@ -32,6 +32,7 @@ def build_documents():
     from app.models.etl import ETLRun, Job, QualityIssue
     from app.models.import_review import ImportDecision, ImportQuestion, ImportReview, ImportReviewRow
     from app.models.master import MasterDefinition, MasterSourceBinding
+    from app.models.notification import OperationalNotification
     from app.models.semantic import DataProduct, QueryRequest, SavedQuery
     from app.models.source import DataSource, ProfilingRun, SourceSheet
     from app.models.taxonomy import Taxonomy, TaxonomyColumnBinding, TaxonomyTerm, TaxonomyVersion
@@ -203,6 +204,7 @@ def build_documents():
         (SavedQuery, set()),
         (QueryRequest, set()),
         (AuditEvent, set()),
+        (OperationalNotification, set()),
     ]:
         lines += [
             f"### Record {cls.__name__}",

@@ -81,11 +81,9 @@ melalui `scripts/prepare_test_db.py`, terpisah dari database aplikasi `googleai`
 
 ## Cakupan lanjutan dari baseline
 
-Yang belum diimplementasikan: split satu tab menjadi beberapa grain/tabel; taxonomy/reference mapper;
-FK/join lintas data product; migrasi otomatis schema evolution; incremental watermark; append event
-yang mempertahankan baris identik; DEFAULT_VALUE DQ; workflow melanjutkan batch REQUIRE_REVIEW
-(saat ini menghentikan job); semantic similarity/embedding; template dengan parameter dinamis;
-query cache statistics dashboard; SSE; Prometheus; notification; autentikasi OIDC; distributed login
+Yang belum diimplementasikan: split satu tab menjadi beberapa grain/tabel; migrasi otomatis schema
+evolution; semantic similarity/embedding; template dengan parameter dinamis; retention
+snapshot/artifact/audit; SSE; Prometheus dan kanal delivery alert eksternal; autentikasi OIDC; distributed login
 rate limiting; RLS seluruh tabel; immutable audit storage di tingkat database; pengujian beban, backup/restore,
 disaster recovery dan penetration test produksi.
 

@@ -21,7 +21,15 @@ from app.models.base import Base, TenantEntity
 
 class DataSource(TenantEntity, Base):
     __tablename__ = "data_source"
-    __table_args__ = (UniqueConstraint("tenant_id", "source_code"), {"schema": "platform"})
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "source_code"),
+        UniqueConstraint("tenant_id", "id", name="uq_data_source_tenant_id"),
+        CheckConstraint(
+            "concurrency_policy IN ('QUEUE_LATEST', 'SKIP_IF_RUNNING')",
+            name="ck_source_concurrency_policy",
+        ),
+        {"schema": "platform"},
+    )
     source_code: Mapped[str] = mapped_column(String(63))
     name: Mapped[str] = mapped_column(String(200))
     spreadsheet_id: Mapped[str] = mapped_column(String(200))
@@ -30,6 +38,9 @@ class DataSource(TenantEntity, Base):
     credential_ref: Mapped[str] = mapped_column(String(100), default="default")
     status: Mapped[str] = mapped_column(String(40), default="DISCOVERED")
     sync_schedule: Mapped[str | None] = mapped_column(String(100))
+    schedule_timezone: Mapped[str] = mapped_column(String(100), default="UTC")
+    concurrency_policy: Mapped[str] = mapped_column(String(30), default="QUEUE_LATEST")
+    schedule_revision: Mapped[int] = mapped_column(Integer, default=1)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
     last_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -39,6 +50,14 @@ class SourceSheet(TenantEntity, Base):
     __table_args__ = (
         UniqueConstraint("source_id", "sheet_id"),
         CheckConstraint("classification_revision >= 1", name="ck_sheet_classification_revision"),
+        CheckConstraint("watermark_revision >= 1", name="ck_sheet_watermark_revision"),
+        CheckConstraint(
+            "(watermark_source_column IS NULL AND watermark_kind IS NULL "
+            "AND watermark_value IS NULL AND watermark_updated_at IS NULL) OR "
+            "(watermark_source_column IS NOT NULL AND watermark_kind IN "
+            "('INTEGER', 'DECIMAL', 'DATE', 'DATETIME'))",
+            name="ck_sheet_watermark_complete",
+        ),
         CheckConstraint(
             "(classification_status = 'CLASSIFICATION_REQUIRED' AND dataset_kind IS NULL "
             "AND classification_confirmed_by IS NULL AND classification_confirmed_at IS NULL) OR "
@@ -70,6 +89,11 @@ class SourceSheet(TenantEntity, Base):
     classification_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     classification_confirmed_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     classification_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    watermark_source_column: Mapped[str | None] = mapped_column(String(200))
+    watermark_kind: Mapped[str | None] = mapped_column(String(20))
+    watermark_value: Mapped[str | None] = mapped_column(String(200))
+    watermark_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    watermark_revision: Mapped[int] = mapped_column(Integer, default=1)
     active_configuration_id: Mapped[str | None] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("platform.configuration_version.id", use_alter=True, name="fk_sheet_active_configuration"),
@@ -84,3 +108,28 @@ class ProfilingRun(TenantEntity, Base):
     fingerprint: Mapped[str] = mapped_column(String(64))
     profile_json: Mapped[dict] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(40), default="SUCCEEDED")
+
+
+class SourceDependency(TenantEntity, Base):
+    __tablename__ = "source_dependency"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "downstream_source_id", "upstream_source_id"),
+        CheckConstraint(
+            "downstream_source_id <> upstream_source_id", name="ck_source_dependency_distinct"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "downstream_source_id"],
+            ["platform.data_source.tenant_id", "platform.data_source.id"],
+            name="fk_source_dependency_downstream_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "upstream_source_id"],
+            ["platform.data_source.tenant_id", "platform.data_source.id"],
+            name="fk_source_dependency_upstream_tenant",
+            ondelete="CASCADE",
+        ),
+        {"schema": "platform"},
+    )
+    downstream_source_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    upstream_source_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))

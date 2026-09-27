@@ -84,6 +84,14 @@ Body: —.
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 
+### PATCH /api/v1/sources/{source_id}/schedule
+
+Body: [SourceScheduleUpdate](#sourcescheduleupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/sources/{source_id}/sheets
 
 Body: —.
@@ -95,6 +103,14 @@ Body: —.
 ### PATCH /api/v1/source-sheets/{sheet_id}
 
 Body: [SheetUpdate](#sheetupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `sheet_id` | path | Ya | `string (uuid)` {} |
+
+### PATCH /api/v1/source-sheets/{sheet_id}/watermark
+
+Body: [SheetWatermarkUpdate](#sheetwatermarkupdate).
 
 | Parameter | Lokasi | Wajib | Tipe / batas |
 |---|---|---|---|
@@ -1147,6 +1163,14 @@ Body: —.
 
 Body: [AITaskPolicyCreate](#aitaskpolicycreate).
 
+### PATCH /api/v1/ai-task-policies/{policy_id}
+
+Body: [AITaskPolicyUpdate](#aitaskpolicyupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/ai-task-policies/{policy_id}/approve
 
 Body: [AITaskPolicyAction](#aitaskpolicyaction).
@@ -1162,6 +1186,28 @@ Body: [AITaskPolicyAction](#aitaskpolicyaction).
 | Parameter | Lokasi | Wajib | Tipe / batas |
 |---|---|---|---|
 | `policy_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/operations/summary
+
+Body: —.
+
+### GET /api/v1/notifications
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `unacknowledged_only` | query | Tidak | `boolean` {"default":true} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### POST /api/v1/notifications/{notification_id}/acknowledge
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `notification_id` | path | Ya | `string (uuid)` {} |
 
 ### GET /health/live
 
@@ -1222,6 +1268,10 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `prompt_version` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_.-]{0,79}$"} |
 | `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
 | `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
+| `data_product_code` | Tidak | `string / null` | — | — |
+| `max_context_chars` | Tidak | `integer` | 200000 | {"maximum":2000000.0,"minimum":1000.0} |
+| `daily_budget_usd` | Tidak | `number / null` | — | — |
+| `fallback_model` | Tidak | `string / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -1232,8 +1282,47 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "prompt_version": "taxonomy_recommend_v1.md",
   "model": "gpt-5-mini",
   "allowed_models": [
-    "gpt-5-mini"
-  ]
+    "gpt-5-mini",
+    "gpt-5.1"
+  ],
+  "max_context_chars": 120000,
+  "daily_budget_usd": 5.0,
+  "fallback_model": "gpt-5.1"
+}
+```
+
+### AITaskPolicyUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `purpose` | Ya | `enum ["ETL_CONFIG","TAXONOMY_RECOMMEND","NL2SQL"]` | — | — |
+| `prompt_version` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_.-]{0,79}$"} |
+| `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
+| `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
+| `data_product_code` | Tidak | `string / null` | — | — |
+| `max_context_chars` | Tidak | `integer` | 200000 | {"maximum":2000000.0,"minimum":1000.0} |
+| `daily_budget_usd` | Tidak | `number / null` | — | — |
+| `fallback_model` | Tidak | `string / null` | — | — |
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "code": "sales_nl2sql",
+  "purpose": "NL2SQL",
+  "prompt_version": "nl2sql_v1.md",
+  "model": "gpt-5-mini",
+  "allowed_models": [
+    "gpt-5-mini",
+    "gpt-5.1"
+  ],
+  "data_product_code": "SALES",
+  "max_context_chars": 80000,
+  "daily_budget_usd": 3.5,
+  "fallback_model": "gpt-5.1",
+  "revision_no": 1
 }
 ```
 
@@ -2169,6 +2258,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
+| `join_relationships` | Tidak | `array<string>` | [] | {"maxItems":5} |
 | `metrics` | Tidak | `array<string>` | [] | {"maxItems":20} |
 | `dimensions` | Tidak | `array<string>` | [] | {"maxItems":20} |
 | `filters` | Tidak | `array<QueryFilter>` | [] | {"maxItems":20} |
@@ -2411,6 +2501,24 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### SheetWatermarkUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `source_column` | Tidak | `string / null` | — | — |
+| `kind` | Tidak | `enum ["INTEGER","DECIMAL","DATE","DATETIME"] / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "source_column": "Updated At",
+  "kind": "DATETIME"
+}
+```
+
 ### SortField
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2432,6 +2540,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `description` | Tidak | `string` | "" | {"maxLength":2000} |
 | `credential_ref` | Tidak | `string` | "default" | {"maxLength":100} |
 | `sync_schedule` | Tidak | `string / null` | — | — |
+| `schedule_timezone` | Tidak | `string` | "UTC" | {"maxLength":100,"minLength":1} |
+| `concurrency_policy` | Tidak | `enum ["QUEUE_LATEST","SKIP_IF_RUNNING"]` | "QUEUE_LATEST" | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -2442,7 +2552,33 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "spreadsheet_url": "https://docs.google.com/spreadsheets/d/ID_SPREADSHEET_ANDA/edit",
   "description": "Satu baris per transaksi penjualan",
   "credential_ref": "default",
-  "sync_schedule": "0 */6 * * *"
+  "sync_schedule": "0 */6 * * *",
+  "schedule_timezone": "Asia/Jakarta",
+  "concurrency_policy": "QUEUE_LATEST"
+}
+```
+
+### SourceScheduleUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `sync_schedule` | Tidak | `string / null` | — | — |
+| `schedule_timezone` | Tidak | `string` | "UTC" | {"maxLength":100,"minLength":1} |
+| `concurrency_policy` | Tidak | `enum ["QUEUE_LATEST","SKIP_IF_RUNNING"]` | "QUEUE_LATEST" | — |
+| `dependency_source_ids` | Tidak | `array<string (uuid)>` | [] | {"maxItems":20} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "sync_schedule": "0 7 * * 1-5",
+  "schedule_timezone": "Asia/Jakarta",
+  "concurrency_policy": "SKIP_IF_RUNNING",
+  "dependency_source_ids": [
+    "11111111-1111-4111-8111-111111111111"
+  ]
 }
 ```
 
@@ -2892,6 +3028,9 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `credential_ref` | `VARCHAR(100)` | Tidak |
 | `status` | `VARCHAR(40)` | Tidak |
 | `sync_schedule` | `VARCHAR(100)` | Ya |
+| `schedule_timezone` | `VARCHAR(100)` | Tidak |
+| `concurrency_policy` | `VARCHAR(30)` | Tidak |
+| `schedule_revision` | `INTEGER` | Tidak |
 | `paused` | `BOOLEAN` | Tidak |
 | `last_scheduled_at` | `DATETIME` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |
@@ -2915,6 +3054,11 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `classification_revision` | `INTEGER` | Tidak |
 | `classification_confirmed_by` | `CHAR(32)` | Ya |
 | `classification_confirmed_at` | `DATETIME` | Ya |
+| `watermark_source_column` | `VARCHAR(200)` | Ya |
+| `watermark_kind` | `VARCHAR(20)` | Ya |
+| `watermark_value` | `VARCHAR(200)` | Ya |
+| `watermark_updated_at` | `DATETIME` | Ya |
+| `watermark_revision` | `INTEGER` | Tidak |
 | `active_configuration_id` | `CHAR(32)` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
@@ -3262,6 +3406,24 @@ Endpoint quarantine menambahkan `data: array` berisi nilai mentah baris.
 | `event` | `VARCHAR(100)` | Tidak |
 | `resource_id` | `VARCHAR(100)` | Ya |
 | `details` | `JSONB` | Tidak |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record OperationalNotification
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `event_key` | `VARCHAR(200)` | Tidak |
+| `kind` | `VARCHAR(50)` | Tidak |
+| `severity` | `VARCHAR(10)` | Tidak |
+| `resource_type` | `VARCHAR(40)` | Tidak |
+| `resource_id` | `CHAR(32)` | Tidak |
+| `title` | `VARCHAR(200)` | Tidak |
+| `message` | `TEXT` | Tidak |
+| `details` | `JSONB` | Tidak |
+| `acknowledged_by` | `CHAR(32)` | Ya |
+| `acknowledged_at` | `DATETIME` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |

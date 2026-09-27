@@ -27,3 +27,6 @@ def test_openapi():
     assert "/api/v1/data-products/{code}/query" in spec["paths"]
     assert "/api/v1/auth/login" in spec["paths"]
     assert "HTTPBearer" in spec["components"]["securitySchemes"]
+    assert "/api/v1/operations/summary" in spec["paths"]
+    assert "/api/v1/notifications" in spec["paths"]
+    assert "/api/v1/notifications/{notification_id}/acknowledge" in spec["paths"]

@@ -1,4 +1,8 @@
 import re
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
 from pydantic import Field, model_validator
@@ -14,20 +18,52 @@ class SourceCreate(StrictModel):
     description: str = Field(default="", max_length=2000)
     credential_ref: str = Field(default="default", max_length=100)
     sync_schedule: str | None = None
+    schedule_timezone: str = Field(default="UTC", min_length=1, max_length=100)
+    concurrency_policy: Literal["QUEUE_LATEST", "SKIP_IF_RUNNING"] = "QUEUE_LATEST"
 
     @model_validator(mode="after")
     def valid_schedule(self):
+        validate_timezone(self.schedule_timezone)
         if self.sync_schedule:
-            cron_schedule(self.sync_schedule)
+            cron_schedule(self.sync_schedule, self.schedule_timezone)
         return self
 
 
-def cron_schedule(value):
+class SourceScheduleUpdate(StrictModel):
+    revision_no: int = Field(ge=1)
+    sync_schedule: str | None = None
+    schedule_timezone: str = Field(default="UTC", min_length=1, max_length=100)
+    concurrency_policy: Literal["QUEUE_LATEST", "SKIP_IF_RUNNING"] = "QUEUE_LATEST"
+    dependency_source_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def valid_schedule(self):
+        validate_timezone(self.schedule_timezone)
+        if self.sync_schedule:
+            cron_schedule(self.sync_schedule, self.schedule_timezone)
+        if len(set(self.dependency_source_ids)) != len(self.dependency_source_ids):
+            raise ValueError("dependency_source_ids must be unique")
+        return self
+
+
+def validate_timezone(value):
+    try:
+        return ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError("schedule_timezone must be a valid IANA timezone") from None
+
+
+def cron_schedule(value, timezone_name="UTC"):
     parts = value.split()
     if len(parts) != 5:
         raise ValueError("sync_schedule must contain five cron fields")
     return crontab(
-        minute=parts[0], hour=parts[1], day_of_month=parts[2], month_of_year=parts[3], day_of_week=parts[4]
+        minute=parts[0],
+        hour=parts[1],
+        day_of_month=parts[2],
+        month_of_year=parts[3],
+        day_of_week=parts[4],
+        nowfun=lambda: datetime.now(validate_timezone(timezone_name)),
     )
 
 
@@ -41,6 +77,18 @@ class SheetUpdate(StrictModel):
 class SheetClassificationUpdate(StrictModel):
     revision_no: int = Field(ge=1)
     dataset_kind: DatasetKind
+
+
+class SheetWatermarkUpdate(StrictModel):
+    revision_no: int = Field(ge=1)
+    source_column: str | None = Field(default=None, min_length=1, max_length=200)
+    kind: Literal["INTEGER", "DECIMAL", "DATE", "DATETIME"] | None = None
+
+    @model_validator(mode="after")
+    def complete_watermark(self):
+        if (self.source_column is None) != (self.kind is None):
+            raise ValueError("source_column and kind must both be set or both be null")
+        return self
 
 
 def spreadsheet_id(value: str) -> str:

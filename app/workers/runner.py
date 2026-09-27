@@ -1,7 +1,7 @@
 import asyncio
 from datetime import timedelta
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from app.core.config import get_settings
 from app.core.database import SessionFactory
@@ -10,13 +10,47 @@ from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.auth import User
 from app.models.base import now
 from app.models.etl import Job
-from app.models.source import DataSource
+from app.models.source import DataSource, SourceDependency
 from app.schemas.source import cron_schedule
 from app.services.ai_configuration_service import AIConfigurationService
 from app.services.configuration_service import ConfigurationService
 from app.services.etl_execution_service import ETLExecutionService
 from app.services.import_review_service import ImportReviewService, fail_import_job
+from app.services.notification_service import add_notification
 from app.services.source_service import SourceService
+
+
+async def dependencies_ready(session, source):
+    dependency_ids = list(
+        await session.scalars(
+            select(SourceDependency.upstream_source_id).where(
+                SourceDependency.tenant_id == source.tenant_id,
+                SourceDependency.downstream_source_id == source.id,
+            )
+        )
+    )
+    if not dependency_ids:
+        return True
+    rows = await session.execute(
+        select(Job.source_id, func.max(Job.finished_at))
+        .where(
+            Job.tenant_id == source.tenant_id,
+            Job.source_id.in_([source.id, *dependency_ids]),
+            Job.kind.in_(["ETL", "SYNC_REVIEW"]),
+            Job.status == "SUCCEEDED",
+        )
+        .group_by(Job.source_id)
+    )
+    latest = {str(source_id): finished_at for source_id, finished_at in rows}
+    downstream_finished = latest.get(str(source.id))
+    return all(
+        latest.get(str(dependency_id)) is not None
+        and (
+            downstream_finished is None
+            or latest[str(dependency_id)] > downstream_finished
+        )
+        for dependency_id in dependency_ids
+    )
 
 
 async def execute_job(session, job):
@@ -78,6 +112,18 @@ async def run_pending(tenant_id=None):
                 if isinstance(exc, AppError)
                 else "Job gagal. Periksa konfigurasi dan koneksi layanan."
             )
+            add_notification(
+                session,
+                tenant_id=job.tenant_id,
+                event_key=f"job:{job.id}:failed",
+                kind="JOB_FAILED",
+                severity="ERROR",
+                resource_type="JOB",
+                resource_id=job.id,
+                title="Job gagal",
+                message="Job berhenti karena kegagalan teknis. Periksa kode kegagalan.",
+                details={"error_code": job.error_code, "job_kind": job.kind},
+            )
             await fail_import_job(session, job, job.error_code)
             if job.source_id and job.kind in ("DISCOVER", "PROFILE", "AI_CONFIG"):
                 source = await session.get(DataSource, job.source_id)
@@ -105,6 +151,18 @@ async def schedule_sources():
                 "Worker terputus atau melewati batas durasi; retry job secara eksplisit.",
                 now(),
             )
+            add_notification(
+                session,
+                tenant_id=job.tenant_id,
+                event_key=f"job:{job.id}:failed",
+                kind="JOB_FAILED",
+                severity="ERROR",
+                resource_type="JOB",
+                resource_id=job.id,
+                title="Job worker terputus",
+                message="Job melewati batas durasi dan perlu diperiksa sebelum retry.",
+                details={"error_code": job.error_code, "job_kind": job.kind},
+            )
             await fail_import_job(session, job, job.error_code)
         sources = await session.scalars(
             select(DataSource)
@@ -117,21 +175,26 @@ async def schedule_sources():
         )
         for source in sources:
             last = source.last_scheduled_at or source.created_at
-            if not cron_schedule(source.sync_schedule).is_due(last).is_due:
+            if not cron_schedule(source.sync_schedule, source.schedule_timezone).is_due(last).is_due:
+                continue
+            if not await dependencies_ready(session, source):
                 continue
             pending = await session.scalar(
                 select(Job.id)
                 .where(Job.source_id == source.id, Job.kind.in_(["ETL", "SYNC_REVIEW"]), Job.status.in_(["QUEUED", "RUNNING"]))
                 .limit(1)
             )
-            if not pending:
-                session.add(
-                    Job(
-                        tenant_id=source.tenant_id,
-                        source_id=source.id,
-                        requested_by=source.owner_user_id,
-                        kind="SYNC_REVIEW",
-                        payload={},
-                    )
+            if pending:
+                if source.concurrency_policy == "SKIP_IF_RUNNING":
+                    source.last_scheduled_at = now()
+                continue
+            session.add(
+                Job(
+                    tenant_id=source.tenant_id,
+                    source_id=source.id,
+                    requested_by=source.owner_user_id,
+                    kind="SYNC_REVIEW",
+                    payload={},
                 )
-                source.last_scheduled_at = now()
+            )
+            source.last_scheduled_at = now()

@@ -21,7 +21,7 @@ from app.services.schema_compiler_service import TYPE_MAP
 from app.services.sql_guard_service import validate_readonly_sql
 
 
-def cache_key(user, product, plan, default_period=None):
+def cache_key(user, product, plan, default_period=None, joined_products=(), relationships=()):
     return "query:" + digest(
         [
             user.tenant_id,
@@ -30,6 +30,8 @@ def cache_key(user, product, plan, default_period=None):
             product.code,
             product.version,
             product.freshness_version,
+            [(item.code, item.version, item.freshness_version) for item in joined_products],
+            [(item.code, item.revision_no) for item in relationships],
             plan.model_dump(mode="json", exclude={"visualization"}),
             default_period,
         ]
@@ -195,6 +197,192 @@ def build_query(product, user, plan, *, today=None):
     return stmt.limit(min(plan.limit, get_settings().nl2sql_max_rows)).offset(plan.offset)
 
 
+def build_join_query(root, products, relationships, user, plan, *, today=None):
+    """Compile an explicit approved join path. Secondary fields use PRODUCT.field names."""
+    today = today or datetime.now(timezone.utc).date()
+    product_map = {item.code: item for item in products}
+    if root.code not in product_map:
+        product_map[root.code] = root
+    tables, columns_by_product, metrics_by_product = {}, {}, {}
+    for product in product_map.values():
+        columns = {item["target_column"]: item for item in product.columns}
+        columns_by_product[product.code] = columns
+        metrics_by_product[product.code] = {item["code"]: item for item in product.metrics}
+        tables[product.code] = Table(
+            product.view_name,
+            MetaData(),
+            Column("_tenant_id", Uuid(as_uuid=False)),
+            *(Column(name, TYPE_MAP[item["target_type"]]()) for name, item in columns.items()),
+            schema="semantic",
+        ).alias(product.code.lower())
+
+    included = {root.code}
+    for relationship in relationships:
+        if relationship.left_product_code not in included or relationship.right_product_code in included:
+            raise AppError(
+                "QUERY_JOIN_PATH_INVALID",
+                "Join harus berupa graf terarah dari produk utama tanpa siklus atau produk duplikat.",
+                422,
+            )
+        if relationship.right_product_code not in product_map:
+            raise AppError("QUERY_JOIN_PATH_INVALID", "Produk join tidak tersedia.", 422)
+        left_columns = columns_by_product[relationship.left_product_code]
+        right_columns = columns_by_product[relationship.right_product_code]
+        if relationship.left_column not in left_columns or relationship.right_column not in right_columns:
+            raise AppError("QUERY_JOIN_STALE", "Kolom join tidak lagi tersedia.", 409)
+        if any(
+            columns.get(column, {}).get("pii_classification") in ("MEDIUM", "HIGH")
+            for columns, column in (
+                (left_columns, relationship.left_column),
+                (right_columns, relationship.right_column),
+            )
+        ):
+            raise AppError("QUERY_JOIN_FORBIDDEN", "Join pada kolom sensitif tidak diizinkan.", 403)
+        included.add(relationship.right_product_code)
+    if included != set(product_map):
+        raise AppError("QUERY_JOIN_PATH_INVALID", "Produk join tidak terhubung penuh.", 422)
+
+    def resolve(identifier, kind):
+        if "." in identifier:
+            code, name = identifier.split(".", 1)
+        else:
+            code, name = root.code, identifier
+        if code not in product_map:
+            raise AppError("QUERY_INVALID", f"Produk field '{identifier}' tidak tersedia.")
+        allowed = product_map[code].dimensions if kind == "dimension" else metrics_by_product[code]
+        if name not in allowed:
+            raise AppError("QUERY_INVALID", f"{kind.title()} '{identifier}' tidak tersedia.")
+        column_name = name if kind == "dimension" else metrics_by_product[code][name]["column"]
+        column = columns_by_product[code].get(column_name)
+        if column is None or column.get("pii_classification") in ("MEDIUM", "HIGH"):
+            raise AppError("QUERY_FIELD_FORBIDDEN", f"Field '{identifier}' tidak tersedia.", 403)
+        return code, name, column
+
+    def convert(code, field, value):
+        try:
+            return cast_value(value, columns_by_product[code][field]["target_type"])
+        except (KeyError, ValueError, TypeError, ArithmeticError):
+            raise AppError("QUERY_INVALID", "Tipe nilai filter tidak valid.") from None
+
+    def predicate(item, *, default_code=None):
+        if "." in item.field:
+            code, field = item.field.split(".", 1)
+        else:
+            code, field = default_code or root.code, item.field
+        if code not in product_map or field not in product_map[code].dimensions:
+            raise AppError("QUERY_INVALID", "Filter harus menggunakan dimension yang diizinkan.")
+        column = columns_by_product[code].get(field)
+        if column is None or column.get("pii_classification") in ("MEDIUM", "HIGH"):
+            raise AppError("QUERY_FIELD_FORBIDDEN", "Filter sensitif tidak diizinkan.", 403)
+        expression = tables[code].c[field]
+        if item.operator == "in":
+            return expression.in_([convert(code, field, value) for value in item.value])
+        if item.operator == "between":
+            return expression.between(
+                convert(code, field, item.value[0]), convert(code, field, item.value[1])
+            )
+        value = convert(code, field, item.value)
+        if value is None and item.operator != "eq":
+            raise AppError("QUERY_INVALID", "Null hanya didukung untuk operator eq.")
+        operations = {
+            "eq": lambda: expression == value,
+            "gte": lambda: expression >= value,
+            "lte": lambda: expression <= value,
+            "gt": lambda: expression > value,
+            "lt": lambda: expression < value,
+        }
+        return operations[item.operator]()
+
+    if len(set(plan.dimensions)) != len(plan.dimensions) or len(set(plan.metrics)) != len(plan.metrics):
+        raise AppError("QUERY_INVALID", "Metric/dimension duplikat.")
+    resolved_metrics = [(identifier, *resolve(identifier, "metric")) for identifier in plan.metrics]
+    if len(relationships) > 1 and resolved_metrics and any(r.cardinality != "ONE_TO_ONE" for r in relationships):
+        raise AppError("QUERY_AGGREGATION_AMBIGUOUS", "Agregasi lintas beberapa join memerlukan relasi one-to-one.", 422)
+    for relationship in relationships:
+        metric_products = {code for _, code, _, _ in resolved_metrics}
+        if relationship.cardinality == "MANY_TO_ONE" and relationship.right_product_code in metric_products:
+            raise AppError("QUERY_AGGREGATION_AMBIGUOUS", "Metrik sisi many-to-one dapat terhitung ganda.", 422)
+        if relationship.cardinality == "ONE_TO_MANY" and metric_products:
+            if relationship.duplicate_policy != "AGGREGATE_RIGHT" or metric_products != {relationship.right_product_code}:
+                raise AppError("QUERY_AGGREGATION_AMBIGUOUS", "Metrik one-to-many tidak sesuai duplicate policy.", 422)
+
+    selected, groups, outputs = [], [], {}
+    dimensions = plan.dimensions or ([] if plan.metrics else list(root.dimensions))
+    for identifier in dimensions:
+        code, name, column = resolve(identifier, "dimension")
+        expression = tables[code].c[name]
+        if plan.time_grain != "none" and column["target_type"] in ("date", "timestamp", "timestamptz"):
+            expression = func.date_trunc(plan.time_grain, expression)
+        selected.append(expression.label(identifier))
+        groups.append(expression)
+        outputs[identifier] = expression
+    for identifier, code, name, _ in resolved_metrics:
+        metric = metrics_by_product[code][name]
+        if metric.get("aggregation") not in {"sum", "avg", "min", "max", "count", "count_distinct"}:
+            raise AppError("SEMANTIC_METRIC_INVALID", f"Definisi metric '{identifier}' tidak valid.")
+        period = metric.get("default_period")
+        period_field = (
+            f"{code}.{period['dimension']}" if period and code != root.code else period and period["dimension"]
+        )
+        if period and period_field not in {item.field for item in plan.filters}:
+            raise AppError(
+                "QUERY_JOIN_DEFAULT_PERIOD_REQUIRED",
+                "Query join dengan default period memerlukan filter periode eksplisit.",
+                422,
+            )
+        expression = tables[code].c[metric["column"]]
+        expression = (
+            func.count(expression.distinct())
+            if metric["aggregation"] == "count_distinct"
+            else getattr(func, metric["aggregation"])(expression)
+        )
+        for item in metric.get("filters", []):
+            expression = expression.filter(predicate(MetricFilter.model_validate(item), default_code=code))
+        if metric.get("null_handling", "PRESERVE") == "ZERO_RESULT":
+            expression = func.coalesce(expression, 0)
+        selected.append(expression.label(identifier))
+        outputs[identifier] = expression
+    if not selected:
+        raise AppError("QUERY_INVALID", "Pilih setidaknya satu dimension atau metric.")
+
+    root_table = tables[root.code]
+    stmt = select(*selected).select_from(root_table)
+    for relationship in relationships:
+        left, right = tables[relationship.left_product_code], tables[relationship.right_product_code]
+        join_conditions = [
+            left.c[relationship.left_column] == right.c[relationship.right_column],
+            left.c._tenant_id == right.c._tenant_id,
+        ]
+        right_code = relationship.right_product_code
+        for field, allowed in user.row_scope.get(right_code, {}).items():
+            if field not in columns_by_product[right_code]:
+                raise AppError("SCOPE_INVALID", "Scope akun tidak kompatibel dengan data product.", 403)
+            join_conditions.append(
+                right.c[field].in_([convert(right_code, field, value) for value in allowed])
+            )
+        on_clause = and_(*join_conditions)
+        stmt = stmt.join(right, on_clause, isouter=relationship.join_type == "LEFT")
+    conditions = [root_table.c._tenant_id == user.tenant_id]
+    conditions.extend(predicate(item) for item in plan.filters)
+    for field, allowed in user.row_scope.get(root.code, {}).items():
+        if field not in columns_by_product[root.code]:
+            raise AppError("SCOPE_INVALID", "Scope akun tidak kompatibel dengan data product.", 403)
+        conditions.append(
+            root_table.c[field].in_([convert(root.code, field, value) for value in allowed])
+        )
+    stmt = stmt.where(and_(*conditions))
+    if plan.metrics and groups:
+        stmt = stmt.group_by(*groups)
+    for sort in plan.sort:
+        if sort.field not in outputs:
+            raise AppError("QUERY_INVALID", "Sorting harus memakai field output.")
+        stmt = stmt.order_by(outputs[sort.field].desc() if sort.direction == "desc" else outputs[sort.field].asc())
+    if not plan.sort:
+        for expression in groups or selected:
+            stmt = stmt.order_by(expression)
+    return stmt.limit(min(plan.limit, get_settings().nl2sql_max_rows)).offset(plan.offset)
+
+
 async def assert_reader(conn):
     privileged = await conn.scalar(
         text(
@@ -219,21 +407,47 @@ class QueryExecutionService:
         self.session, self.user = session, user
         self.repo = SemanticRepository(session, user.tenant_id)
 
+    async def compile(self, product_code, plan, *, today=None):
+        root = await self.repo.product(product_code, self.user)
+        relationships, joined, included = [], [], {root.code}
+        for code in plan.join_relationships:
+            relationship = await self.repo.join_relationship(code)
+            if relationship.left_product_code not in included or relationship.right_product_code in included:
+                raise AppError(
+                    "QUERY_JOIN_PATH_INVALID",
+                    "Urutan relationship harus membentuk path dari produk utama.",
+                    422,
+                )
+            product = await self.repo.product(relationship.right_product_code, self.user)
+            relationships.append(relationship)
+            joined.append(product)
+            included.add(product.code)
+        if relationships:
+            return (
+                root,
+                joined,
+                relationships,
+                build_join_query(root, [root, *joined], relationships, self.user, plan, today=today),
+                None,
+            )
+        return root, joined, relationships, build_query(root, self.user, plan, today=today), resolve_default_period(root, plan, today)
+
     async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL"):
-        product = await self.repo.product(product_code, self.user)
         today = datetime.now(timezone.utc).date()
-        stmt = build_query(product, self.user, plan, today=today)
-        default_period = resolve_default_period(product, plan, today)
+        product, joined, relationships, stmt, default_period = await self.compile(
+            product_code, plan, today=today
+        )
         sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
         validate_readonly_sql(
             sql,
-            {"semantic." + product.view_name},
-            {"_tenant_id", *(c["target_column"] for c in product.columns)},
+            {"semantic." + item.view_name for item in [product, *joined]},
+            {"_tenant_id", *(c["target_column"] for item in [product, *joined] for c in item.columns)},
+            allow_joins=bool(relationships),
         )
         s = get_settings()
         if ai and not s.database_nl2sql_url.get_secret_value():
             raise AppError("NL2SQL_NOT_CONFIGURED", "Isi DATABASE_NL2SQL_URL dengan role read-only.", 503)
-        key = cache_key(self.user, product, plan, default_period)
+        key = cache_key(self.user, product, plan, default_period, joined, relationships)
         redis = Redis.from_url(s.redis_url.get_secret_value(), socket_connect_timeout=0.3, socket_timeout=0.3)
         try:
             cached = await redis.get(key)
@@ -288,6 +502,8 @@ class QueryExecutionService:
             "rows": rows,
             "meta": {
                 "data_product": product.code,
+                "joined_products": [item.code for item in joined],
+                "join_relationships": [item.code for item in relationships],
                 "query_source": query_source,
                 "row_count": len(rows),
                 "cached": cached_result,

@@ -11,6 +11,7 @@ from app.models.source import DataSource
 from app.repositories.base import TenantRepository, record
 from app.services.job_service import enqueue
 from app.services.monitoring_service import MonitoringService
+from app.services.source_service import source_records
 
 router = APIRouter(
     tags=["Jobs and ETL"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))]
@@ -43,7 +44,8 @@ async def retry(job_id: UUID, session: Session, user: CurrentUser):
 
 @router.get("/etl-jobs")
 async def schedules(session: Session, user: CurrentUser):
-    return success([record(s) for s in await TenantRepository(session, user.tenant_id).list(DataSource)])
+    sources = await TenantRepository(session, user.tenant_id).list(DataSource)
+    return success(await source_records(session, sources))
 
 
 @router.post("/etl-jobs/{job_id}/run", status_code=202, dependencies=[Depends(require_roles(*EDIT_ROLES))])

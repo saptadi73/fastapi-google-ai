@@ -281,12 +281,22 @@ Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](docs/PANDUA
 
 ## Storage master BE-04
 
-Storage master kanonis, UUID record stabil, deployment schema dan pencarian record sudah tersedia. Lihat [panduan BE-04](docs/STORAGE_MASTER_BE04.md). Import master tetap menunggu alur review/apply BE-05 dan seterusnya.
+Storage master kanonis, UUID record stabil, deployment schema dan pencarian record sudah tersedia. Lihat [panduan BE-04](docs/STORAGE_MASTER_BE04.md). Review/preview/approval/apply import master tersedia melalui BE-05–BE-10.
 
 ## Batch review import BE-05
 
-Batch persisten, checkpoint worker, idempotency, temuan deterministik dan recovery tersedia. Lihat [panduan BE-05](docs/IMPORT_REVIEW_BE05.md). Migrasi baru: `5ab90e816eee`. Pertanyaan/jawaban dan review AI/apply masih tahap berikutnya.
+Batch persisten, checkpoint worker, idempotency, temuan deterministik dan recovery tersedia. Lihat [panduan BE-05](docs/IMPORT_REVIEW_BE05.md). Pertanyaan, review AI, preview/approval/apply, dan recovery lanjutan kini tersedia.
 
 ## Pertanyaan batch BE-06
 
 Pertanyaan dan keputusan per baris, staging koreksi, serta proteksi kandidat/revisi tersedia. Lihat [panduan BE-06](docs/IMPORT_QUESTIONS_BE06.md). Migrasi baru: `6d1305460956`. Koreksi tidak menulis balik Google Sheet atau memuat data ke target.
+
+## Operasional BE-15
+
+Registry AI task policy, jadwal timezone IANA, dependency/concurrency source, watermark
+incremental, statistik proses, serta notifikasi persisten `NEEDS_INPUT`/`FAILED` tersedia.
+Lihat [AI task policy](docs/AI_TASK_POLICIES_BE15.md),
+[jadwal source](docs/SOURCE_SCHEDULING_BE15.md),
+[watermark](docs/INCREMENTAL_WATERMARK_BE15.md), dan
+[notifikasi operasional](docs/OPERATIONAL_NOTIFICATIONS_BE15.md). Head migration saat ini
+`i9e2a5b8d0f7`; database aplikasi harus dimigrasikan melalui proses rollout terkontrol.

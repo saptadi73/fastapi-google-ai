@@ -1,4 +1,4 @@
-from sqlalchemy import Float, Integer, String, Uuid
+from sqlalchemy import Float, ForeignKey, Integer, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,9 @@ class AIUsage(TenantEntity, Base):
     __tablename__ = "ai_usage_log"
     __table_args__ = {"schema": "audit"}
     user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    policy_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.ai_task_policy.id", ondelete="SET NULL")
+    )
     purpose: Mapped[str] = mapped_column(String(40))
     model: Mapped[str] = mapped_column(String(100))
     response_id: Mapped[str | None] = mapped_column(String(200))

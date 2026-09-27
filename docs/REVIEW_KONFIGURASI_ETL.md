@@ -54,16 +54,16 @@ Tampilkan status setiap rekomendasi: belum diperiksa, diterima, diubah pengguna,
 | 01 Sumber Sheet | Identitas file/tab dan pengaturan baca | Source/tab/range/header tersedia; timezone/locale/owner bisnis per dataset belum lengkap |
 | 02 Struktur Kolom | Tabel pemetaan dan arti bisnis | Mapping, tipe dasar, nullable, key, PII, confidence/reason tersedia; domain/entity/unit/currency/format detail belum lengkap |
 | 03 Aturan Cleansing | Tabel transform berurutan dengan contoh | Daftar transform terbatas dan parameter `prefix`/`suffix`/`replace` tersedia; condition/on_error/parameter bebas belum tersedia |
-| 04 Taxonomy Mapping | Padanan nilai dan kategori baku | Registry taxonomy dan approval mapping belum tersedia |
-| 05 Data Quality | Form aturan dan hasil uji | not_null/unique/min/max/allowed_values tersedia; threshold persen, in_taxonomy, max_age_days, severity/owner belum lengkap |
-| 06 Target Database | Preview target/load dan panel teknis | Satu tabel trusted per tab, strategi load tersedia; multi-target, FK master, ekspresi/default/update_condition belum tersedia |
+| 04 Taxonomy Mapping | Padanan nilai dan kategori baku | Registry, version draft/publish, binding approved, resolver, dan rule `in_taxonomy` tersedia |
+| 05 Data Quality | Form aturan dan hasil uji | Rule dasar, format/domain, threshold, `in_taxonomy`, max_age_days, default bertipe, severity/owner tersedia; severity/owner belum menjadi assignment otomatis |
+| 06 Target Database | Preview target/load dan panel teknis | Strategi load, storage master, reference binding, dependency plan, dan FK fisik tersedia; multi-target/schema evolution tetap terbuka |
 | 07 OpenAI Config | Kebijakan AI, masking, pertanyaan ambigu | Model/prompt global dan registry task/prompt/model approved tersedia; trigger/threshold per task belum tersedia |
-| 08 Operasional | Jadwal, sync, status job, audit | Cron UTC, antrean, pause/resume, audit tersedia; watermark incremental, timezone per job, notifikasi/retention per job belum tersedia |
+| 08 Operasional | Jadwal, sync, status job, audit | Cron timezone IANA, dependency, concurrency policy, watermark incremental, statistik, inbox NEEDS_INPUT/FAILED, acknowledge dan audit tersedia; retention belum tersedia |
 | 09 Kamus Parameter | Help text, validasi input, daftar enum | Perlu kamus pemetaan template ke schema API |
-| 10 Data Product Catalog | Ringkasan dataset untuk laporan | Product, dimensi, metric, allowed_roles tersedia; beberapa field bisnis/default periode belum tersedia |
-| 11 Metric Definitions | Editor definisi hitungan | Kolom, agregasi, code/label tersedia; expression/filter/null handling/unit/sinonim/approval metric terpisah belum tersedia |
-| 12 Intent Query Mapping | Contoh pertanyaan dan rencana query | Saved query dan pencocokan contoh teks tersedia; periode relatif dinamis/output type/priority/ambiguity policy belum lengkap |
-| 13 Join Relationships | Review relasi dan kardinalitas | Registry join allowlist tenant-scoped tersedia; query multi-product dan enforcement akses tiap sisi belum tersedia |
+| 10 Data Product Catalog | Ringkasan dataset untuk laporan | Product, dimensi, metric, allowed_roles, metadata bisnis dan version tersedia |
+| 11 Metric Definitions | Editor definisi hitungan | Agregasi, filter tetap, null handling, unit, sinonim, deskripsi, dan default period tersedia; arithmetic expression/approval metric terpisah belum tersedia |
+| 12 Intent Query Mapping | Contoh pertanyaan dan rencana query | Saved query, ambiguity flow, default period, visualisasi, dan pencocokan contoh tersedia; parameter/priority/output timezone masih terbuka |
+| 13 Join Relationships | Review relasi dan kardinalitas | Registry tenant-scoped dan structured query multi-product melalui relationship APPROVED tersedia; editor workbook tab 13 dan join otomatis AI belum tersedia |
 
 Template tidak dapat diperlakukan sebagai payload API saat ini. Contoh perbedaan yang harus ditangani adapter:
 

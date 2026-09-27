@@ -22,6 +22,7 @@ from app.services.job_service import enqueue
 from app.services.profiling_service import canonical_json, digest, profile_values
 from app.services.schema_compiler_service import compile_table
 from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
+from app.services.watermark_service import incremental_values
 
 
 class ETLExecutionService:
@@ -100,7 +101,20 @@ class ETLExecutionService:
                 audit(self.session, self.user, "source.schema_drift", source.id, sheet_id=sheet.id)
                 results.append({"source_sheet_id": sheet.id, "status": "CHANGE_DETECTED"})
                 continue
-            run_key = digest([source.id, sheet.id, digest(values), config.id])
+            load_values, watermark_candidate, incremental_count = incremental_values(values, sheet)
+            if incremental_count is not None and parsed.load_strategy == "FULL_REFRESH":
+                raise AppError(
+                    "WATERMARK_STRATEGY_INVALID",
+                    "Incremental watermark tidak didukung untuk FULL_REFRESH.",
+                )
+            if incremental_count == 0:
+                results.append(
+                    {"source_sheet_id": sheet.id, "status": "SKIPPED_NO_NEW_ROWS"}
+                )
+                continue
+            run_key = digest(
+                [source.id, sheet.id, digest(load_values), config.id, getattr(sheet, "watermark_value", None)]
+            )
             previous = await self.session.scalar(self.repo.query(ETLRun).where(ETLRun.run_key == run_key))
             if previous:
                 results.append({"etl_run_id": previous.id, "status": "SKIPPED_DUPLICATE"})
@@ -120,9 +134,9 @@ class ETLExecutionService:
                 configuration_id=config.id,
                 snapshot_id=snapshot.id,
                 run_key=run_key,
-                rows_extracted=profile["row_count"],
+                rows_extracted=incremental_count if incremental_count is not None else profile["row_count"],
             )
-            good, issues, warnings = transform_rows(values, sheet, parsed,
+            good, issues, warnings = transform_rows(load_values, sheet, parsed,
                 taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
             good = await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
             # Never replace trusted data with a partial/invalid FULL_REFRESH snapshot.
@@ -173,6 +187,9 @@ class ETLExecutionService:
             )
             if product:
                 product.freshness_version += 1
+            if watermark_candidate and not issues:
+                sheet.watermark_value = watermark_candidate
+                sheet.watermark_updated_at = now()
             audit(
                 self.session,
                 self.user,
@@ -181,6 +198,7 @@ class ETLExecutionService:
                 loaded=run.rows_loaded,
                 quarantined=len(issues),
                 warning_count=len(warnings),
+                watermark_value=sheet.watermark_value if watermark_candidate and not issues else None,
             )
             results.append(
                 {

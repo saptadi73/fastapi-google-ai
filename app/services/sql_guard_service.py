@@ -17,7 +17,7 @@ SAFE_FUNCTIONS = {
 }
 
 
-def validate_readonly_sql(sql, allowed_objects, allowed_columns):
+def validate_readonly_sql(sql, allowed_objects, allowed_columns, *, allow_joins=False):
     def reject():
         raise AppError("NL2SQL_UNSAFE_QUERY", "Query tidak memenuhi kebijakan SELECT semantic.")
 
@@ -32,11 +32,13 @@ def validate_readonly_sql(sql, allowed_objects, allowed_columns):
         reject()
     if tree.args.get("into") or tree.args.get("locks") or tree.args.get("with_"):
         reject()
-    # The supported plan compiler emits a single select over one semantic view, without subqueries or joins.
-    if len(list(tree.find_all(exp.Select))) != 1 or list(tree.find_all(exp.Join)):
+    joins = list(tree.find_all(exp.Join))
+    if len(list(tree.find_all(exp.Select))) != 1 or (joins and not allow_joins):
         reject()
     tables = list(tree.find_all(exp.Table))
-    if len(tables) != 1 or any(t.catalog or f"{t.db}.{t.name}" not in allowed_objects for t in tables):
+    if not 1 <= len(tables) <= (6 if allow_joins else 1) or len(joins) != len(tables) - 1:
+        reject()
+    if any(t.catalog or f"{t.db}.{t.name}" not in allowed_objects for t in tables):
         reject()
     aliases = {a.alias for a in tree.find_all(exp.Alias)}
     for column in tree.find_all(exp.Column):
