@@ -54,8 +54,11 @@ Jangan menimpa `.env` yang sudah terisi. `.env` dan folder `secrets/` tidak masu
 - Readiness: http://127.0.0.1:8000/health/ready
 
 Host/port, CORS, JWT, Google/OpenAI, database, Redis, batas query dan storage dibaca dari `.env`.
-Migration dan bootstrap dijalankan eksplisit, bukan setiap startup API. Bootstrap idempotent dan tidak
-mengubah password akun yang sudah ada. Password admin lokal ada pada `BOOTSTRAP_PASSWORD` di `.env`.
+Migration dan bootstrap dijalankan eksplisit, bukan setiap startup API. Bootstrap idempotent: akun
+`BOOTSTRAP_USERNAME` dibuat atau dipastikan aktif dengan role `PLATFORM_ADMIN`, tetapi password akun
+yang sudah ada tidak diubah. Untuk pemulihan terencana, jalankan
+`python -m app.cli bootstrap --reset-existing-password`; tindakan ini juga mencabut token akun lama.
+Password admin lokal hanya disimpan pada `BOOTSTRAP_PASSWORD` di `.env`.
 
 ## Health check dan koneksi database
 
@@ -102,7 +105,7 @@ Panggil `POST /api/v1/auth/login` dengan JSON:
 ```json
 {
   "tenant_code": "default",
-  "username": "admin",
+  "username": "admin_etl@kanjabung.com",
   "password": "ISI_DARI_BOOTSTRAP_PASSWORD_DI_ENV"
 }
 ```

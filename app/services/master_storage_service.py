@@ -126,7 +126,8 @@ class MasterStorageService(MasterService):
         }
 
     async def records(self, master_id, search="", offset=0, limit=50, active_only=True, record_id=None, as_of=None):
-        _, definition, table = await self.target(master_id)
+        master, definition, table = await self.target(master_id)
+        await self.guard_policy_read(master)
         connection = await self.session.connection()
         await connection.run_sync(lambda sync: check_storage(sync, table))
         sensitive = {f.name for f in definition.fields if f.pii_classification in ("MEDIUM", "HIGH")}

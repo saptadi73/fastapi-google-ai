@@ -140,3 +140,53 @@ class AccessPolicyBinding(TenantEntity, Base):
     )
     resource_type: Mapped[str] = mapped_column(String(30), index=True)
     resource_id: Mapped[str] = mapped_column(String(100), index=True)
+
+
+class AccessRequest(TenantEntity, Base):
+    __tablename__ = "access_request"
+    __table_args__ = (
+        CheckConstraint(
+            "request_type IN ('ATTRIBUTE','PERMISSION_BUNDLE')",
+            name="ck_access_request_type",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING','APPROVED','REJECTED','CANCELLED','REVOKED')",
+            name="ck_access_request_status",
+        ),
+        CheckConstraint("valid_to > valid_from", name="ck_access_request_period"),
+        CheckConstraint(
+            "(request_type = 'ATTRIBUTE' AND attribute_id IS NOT NULL AND bundle_id IS NULL) OR "
+            "(request_type = 'PERMISSION_BUNDLE' AND bundle_id IS NOT NULL AND attribute_id IS NULL)",
+            name="ck_access_request_target",
+        ),
+        {"schema": "platform"},
+    )
+    requester_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.app_user.id"), index=True
+    )
+    subject_user_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.app_user.id"), index=True
+    )
+    request_type: Mapped[str] = mapped_column(String(30), index=True)
+    attribute_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.access_attribute.id"), nullable=True, index=True
+    )
+    bundle_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.permission_bundle.id"), nullable=True, index=True
+    )
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    valid_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    business_reason: Mapped[str] = mapped_column(String(1000))
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    reviewed_by: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.app_user.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str] = mapped_column(String(500), default="")
+    assignment_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.user_assignment.id"), nullable=True
+    )
+    permission_grant_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.user_permission_grant.id"), nullable=True
+    )

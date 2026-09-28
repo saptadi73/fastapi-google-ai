@@ -153,6 +153,66 @@ Body: [AssignmentRevoke](#assignmentrevoke).
 |---|---|---|---|
 | `grant_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/access/request-options
+
+Body: —.
+
+### POST /api/v1/access/requests
+
+Body: [AccessRequestCreate](#accessrequestcreate).
+
+### GET /api/v1/access/requests
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `status` | query | Tidak | `enum ["PENDING","APPROVED","REJECTED","CANCELLED","REVOKED"] / null` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
+
+### GET /api/v1/access/requests/mine
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `status` | query | Tidak | `enum ["PENDING","APPROVED","REJECTED","CANCELLED","REVOKED"] / null` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
+
+### POST /api/v1/access/requests/{request_id}/approve
+
+Body: [AccessRequestDecision](#accessrequestdecision).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `request_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/requests/{request_id}/reject
+
+Body: [AccessRequestReject](#accessrequestreject).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `request_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/requests/{request_id}/cancel
+
+Body: [AccessRequestDecision](#accessrequestdecision).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `request_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/access/requests/{request_id}/revoke
+
+Body: [AccessRequestReject](#accessrequestreject).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `request_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/access/policies
 
 Body: —.
@@ -1722,6 +1782,63 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
     "QUERY"
   ],
   "revision": 1
+}
+```
+
+### AccessRequestCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `request_type` | Ya | `enum ["ATTRIBUTE","PERMISSION_BUNDLE"]` | — | — |
+| `subject_user_id` | Tidak | `string (uuid) / null` | — | — |
+| `attribute_id` | Tidak | `string (uuid) / null` | — | — |
+| `bundle_id` | Tidak | `string (uuid) / null` | — | — |
+| `valid_from` | Tidak | `string (date-time)` | — | — |
+| `valid_to` | Ya | `string (date-time)` | — | — |
+| `business_reason` | Ya | `string` | — | {"maxLength":1000,"minLength":10} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "request_type": "ATTRIBUTE",
+  "subject_user_id": "22222222-2222-4222-8222-222222222222",
+  "attribute_id": "11111111-1111-4111-8111-111111111111",
+  "valid_from": "2026-10-01T00:00:00Z",
+  "valid_to": "2027-01-01T00:00:00Z",
+  "business_reason": "Membutuhkan laporan finance untuk penutupan triwulan."
+}
+```
+
+### AccessRequestDecision
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision": 1,
+  "note": "Kebutuhan bisnis telah diverifikasi"
+}
+```
+
+### AccessRequestReject
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `note` | Ya | `string` | — | {"maxLength":500,"minLength":3} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision": 1,
+  "note": "Kebutuhan akses tidak lagi berlaku"
 }
 ```
 
@@ -3670,6 +3787,29 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |
 
+### Record AccessRequest
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `requester_id` | `CHAR(32)` | Tidak |
+| `subject_user_id` | `CHAR(32)` | Tidak |
+| `request_type` | `VARCHAR(30)` | Tidak |
+| `attribute_id` | `CHAR(32)` | Ya |
+| `bundle_id` | `CHAR(32)` | Ya |
+| `valid_from` | `DATETIME` | Tidak |
+| `valid_to` | `DATETIME` | Tidak |
+| `business_reason` | `VARCHAR(1000)` | Tidak |
+| `status` | `VARCHAR(20)` | Tidak |
+| `revision` | `INTEGER` | Tidak |
+| `reviewed_by` | `CHAR(32)` | Ya |
+| `reviewed_at` | `DATETIME` | Ya |
+| `decision_note` | `VARCHAR(500)` | Tidak |
+| `assignment_id` | `CHAR(32)` | Ya |
+| `permission_grant_id` | `CHAR(32)` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
 ### Record UserAssignment
 
 | Field | Tipe penyimpanan | Nullable |
@@ -4120,6 +4260,7 @@ Endpoint quarantine menambahkan `data: array` berisi nilai mentah baris.
 | `title` | `VARCHAR(200)` | Tidak |
 | `message` | `TEXT` | Tidak |
 | `details` | `JSONB` | Tidak |
+| `recipient_user_id` | `CHAR(32)` | Ya |
 | `acknowledged_by` | `CHAR(32)` | Ya |
 | `acknowledged_at` | `DATETIME` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |

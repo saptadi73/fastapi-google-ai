@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 from redis.asyncio import Redis
-from sqlalchemy import Column, MetaData, Table, Uuid, and_, func, select, text
+from sqlalchemy import Column, MetaData, Table, Uuid, and_, case, func, literal, select, text
 from sqlalchemy.dialects import postgresql
 
 from app.core.config import get_settings
@@ -21,17 +21,21 @@ from app.services.schema_compiler_service import TYPE_MAP
 from app.services.sql_guard_service import validate_readonly_sql
 
 
-def cache_key(user, product, plan, default_period=None, joined_products=(), relationships=()):
+def cache_key(
+    user, product, plan, default_period=None, joined_products=(), relationships=(), authorization_revisions=()
+):
     return "query:" + digest(
         [
             user.tenant_id,
             user.role,
+            getattr(user, "token_version", 0),
             user.row_scope,
             product.code,
             product.version,
             product.freshness_version,
             [(item.code, item.version, item.freshness_version) for item in joined_products],
             [(item.code, item.revision_no) for item in relationships],
+            sorted(authorization_revisions),
             plan.model_dump(mode="json", exclude={"visualization"}),
             default_period,
         ]
@@ -58,8 +62,40 @@ def resolve_default_period(product, plan, today=None):
     return {**period, "start": (today - timedelta(days=period["days"] - 1)).isoformat(), "end": today.isoformat()}
 
 
-def build_query(product, user, plan, *, today=None):
+def _policy_controls(product, user, decision):
     columns = {c["target_column"]: c for c in product.columns}
+    row_scope = dict(user.row_scope.get(product.code, {}))
+    visibility = {}
+    if decision:
+        for field, values in decision.get("row_scope", {}).items():
+            if field in row_scope:
+                row_scope[field] = sorted(set(row_scope[field]) & set(values))
+            else:
+                row_scope[field] = values
+        visibility = decision.get("columns", {})
+        for field, column in columns.items():
+            if column.get("pii_classification") in ("MEDIUM", "HIGH"):
+                visibility.setdefault(field, "HIDDEN")
+    for field, values in row_scope.items():
+        column = columns.get(field)
+        if column is None or column.get("pii_classification") in ("MEDIUM", "HIGH"):
+            raise AppError("SCOPE_INVALID", "Scope policy tidak kompatibel dengan data product.", 403)
+        if not isinstance(values, list) or not values:
+            raise AppError("SCOPE_INVALID", "Scope policy harus berisi daftar nilai.", 403)
+    for field, rule in visibility.items():
+        if field not in columns or rule not in ("VISIBLE", "MASKED", "HIDDEN"):
+            raise AppError("COLUMN_POLICY_INVALID", "Policy kolom tidak kompatibel dengan data product.", 403)
+    return columns, row_scope, visibility
+
+
+def _require_visible(field, visibility, *, purpose):
+    if visibility.get(field, "VISIBLE") != "VISIBLE":
+        raise AppError("QUERY_FIELD_FORBIDDEN", f"Field '{field}' tidak tersedia untuk {purpose}.", 403)
+
+
+def build_query(product, user, plan, *, today=None, access_decision=None):
+    columns = {c["target_column"]: c for c in product.columns}
+    columns, policy_scope, visibility = _policy_controls(product, user, access_decision)
     table = Table(
         product.view_name,
         MetaData(),
@@ -123,6 +159,7 @@ def build_query(product, user, plan, *, today=None):
             raise AppError("SEMANTIC_METRIC_INVALID", f"Filter metric '{code}' tidak valid.") from None
         if any(item.field not in columns for item in metric_filters):
             raise AppError("SEMANTIC_METRIC_INVALID", f"Filter metric '{code}' tidak valid.")
+        _require_visible(metric["column"], visibility, purpose="metric")
         # Metric expressions are intentionally limited to a column plus an allowlisted aggregation.
         if set(metric) - {"code", "name", "label", "column", "aggregation", "description", "unit", "synonyms", "default_period", "filters", "null_handling"}:
             raise AppError("SEMANTIC_METRIC_INVALID", f"Expression metric '{code}' tidak diizinkan.")
@@ -133,11 +170,15 @@ def build_query(product, user, plan, *, today=None):
     selected, groups, outputs = [], [], {}
     dimensions = plan.dimensions
     if not dimensions and not plan.metrics:
-        dimensions = list(product.dimensions)
+        dimensions = [field for field in product.dimensions if visibility.get(field, "VISIBLE") != "HIDDEN"]
     for name in dimensions:
+        if visibility.get(name, "VISIBLE") == "HIDDEN":
+            raise AppError("QUERY_FIELD_FORBIDDEN", f"Field '{name}' tidak tersedia untuk dimension.", 403)
         expression = table.c[name]
         if plan.time_grain != "none" and columns[name]["target_type"] in ("date", "timestamp", "timestamptz"):
             expression = func.date_trunc(plan.time_grain, expression)
+        if visibility.get(name) == "MASKED":
+            expression = case((expression.is_not(None), literal("[MASKED]")), else_=None)
         selected.append(expression.label(name))
         groups.append(expression)
         outputs[name] = expression
@@ -161,6 +202,7 @@ def build_query(product, user, plan, *, today=None):
     for f in plan.filters:
         if f.field not in product.dimensions:
             raise AppError("QUERY_INVALID", "Filter harus menggunakan dimension yang diizinkan.")
+        _require_visible(f.field, visibility, purpose="filter")
         conditions.append(predicate(f))
     default_period = resolve_default_period(product, plan, today)
     if default_period:
@@ -182,12 +224,15 @@ def build_query(product, user, plan, *, today=None):
         if field not in columns:
             raise AppError("SCOPE_INVALID", "Scope akun tidak kompatibel dengan data product.", 403)
         conditions.append(table.c[field].in_([convert(field, v) for v in allowed]))
+    for field, allowed in policy_scope.items():
+        conditions.append(table.c[field].in_([convert(field, v) for v in allowed]))
     stmt = select(*selected).where(and_(*conditions))
     if plan.metrics and groups:
         stmt = stmt.group_by(*groups)
     for sort in plan.sort:
         if sort.field not in outputs:
             raise AppError("QUERY_INVALID", "Sorting harus memakai field output.")
+        _require_visible(sort.field, visibility, purpose="sorting")
         stmt = stmt.order_by(
             outputs[sort.field].desc() if sort.direction == "desc" else outputs[sort.field].asc()
         )
@@ -197,17 +242,22 @@ def build_query(product, user, plan, *, today=None):
     return stmt.limit(min(plan.limit, get_settings().nl2sql_max_rows)).offset(plan.offset)
 
 
-def build_join_query(root, products, relationships, user, plan, *, today=None):
+def build_join_query(root, products, relationships, user, plan, *, today=None, access_decisions=None):
     """Compile an explicit approved join path. Secondary fields use PRODUCT.field names."""
     today = today or datetime.now(timezone.utc).date()
     product_map = {item.code: item for item in products}
     if root.code not in product_map:
         product_map[root.code] = root
     tables, columns_by_product, metrics_by_product = {}, {}, {}
+    controls_by_product = {}
     for product in product_map.values():
         columns = {item["target_column"]: item for item in product.columns}
         columns_by_product[product.code] = columns
         metrics_by_product[product.code] = {item["code"]: item for item in product.metrics}
+        _, policy_scope, visibility = _policy_controls(
+            product, user, (access_decisions or {}).get(product.code)
+        )
+        controls_by_product[product.code] = (policy_scope, visibility)
         tables[product.code] = Table(
             product.view_name,
             MetaData(),
@@ -230,6 +280,16 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
         right_columns = columns_by_product[relationship.right_product_code]
         if relationship.left_column not in left_columns or relationship.right_column not in right_columns:
             raise AppError("QUERY_JOIN_STALE", "Kolom join tidak lagi tersedia.", 409)
+        _require_visible(
+            relationship.left_column,
+            controls_by_product[relationship.left_product_code][1],
+            purpose="join",
+        )
+        _require_visible(
+            relationship.right_column,
+            controls_by_product[relationship.right_product_code][1],
+            purpose="join",
+        )
         if any(
             columns.get(column, {}).get("pii_classification") in ("MEDIUM", "HIGH")
             for columns, column in (
@@ -256,6 +316,9 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
         column = columns_by_product[code].get(column_name)
         if column is None or column.get("pii_classification") in ("MEDIUM", "HIGH"):
             raise AppError("QUERY_FIELD_FORBIDDEN", f"Field '{identifier}' tidak tersedia.", 403)
+        rule = controls_by_product[code][1].get(column_name, "VISIBLE")
+        if rule == "HIDDEN" or (kind != "dimension" and rule != "VISIBLE"):
+            raise AppError("QUERY_FIELD_FORBIDDEN", f"Field '{identifier}' tidak tersedia.", 403)
         return code, name, column
 
     def convert(code, field, value):
@@ -274,6 +337,7 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
         column = columns_by_product[code].get(field)
         if column is None or column.get("pii_classification") in ("MEDIUM", "HIGH"):
             raise AppError("QUERY_FIELD_FORBIDDEN", "Filter sensitif tidak diizinkan.", 403)
+        _require_visible(field, controls_by_product[code][1], purpose="filter")
         expression = tables[code].c[field]
         if item.operator == "in":
             return expression.in_([convert(code, field, value) for value in item.value])
@@ -313,6 +377,8 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
         expression = tables[code].c[name]
         if plan.time_grain != "none" and column["target_type"] in ("date", "timestamp", "timestamptz"):
             expression = func.date_trunc(plan.time_grain, expression)
+        if controls_by_product[code][1].get(name) == "MASKED":
+            expression = case((expression.is_not(None), literal("[MASKED]")), else_=None)
         selected.append(expression.label(identifier))
         groups.append(expression)
         outputs[identifier] = expression
@@ -331,6 +397,7 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
                 422,
             )
         expression = tables[code].c[metric["column"]]
+        _require_visible(metric["column"], controls_by_product[code][1], purpose="metric")
         expression = (
             func.count(expression.distinct())
             if metric["aggregation"] == "count_distinct"
@@ -360,6 +427,10 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
             join_conditions.append(
                 right.c[field].in_([convert(right_code, field, value) for value in allowed])
             )
+        for field, allowed in controls_by_product[right_code][0].items():
+            join_conditions.append(
+                right.c[field].in_([convert(right_code, field, value) for value in allowed])
+            )
         on_clause = and_(*join_conditions)
         stmt = stmt.join(right, on_clause, isouter=relationship.join_type == "LEFT")
     conditions = [root_table.c._tenant_id == user.tenant_id]
@@ -370,12 +441,21 @@ def build_join_query(root, products, relationships, user, plan, *, today=None):
         conditions.append(
             root_table.c[field].in_([convert(root.code, field, value) for value in allowed])
         )
+    for field, allowed in controls_by_product[root.code][0].items():
+        conditions.append(
+            root_table.c[field].in_([convert(root.code, field, value) for value in allowed])
+        )
     stmt = stmt.where(and_(*conditions))
     if plan.metrics and groups:
         stmt = stmt.group_by(*groups)
     for sort in plan.sort:
         if sort.field not in outputs:
             raise AppError("QUERY_INVALID", "Sorting harus memakai field output.")
+        if "." in sort.field:
+            sort_code, sort_field = sort.field.split(".", 1)
+        else:
+            sort_code, sort_field = root.code, sort.field
+        _require_visible(sort_field, controls_by_product[sort_code][1], purpose="sorting")
         stmt = stmt.order_by(outputs[sort.field].desc() if sort.direction == "desc" else outputs[sort.field].asc())
     if not plan.sort:
         for expression in groups or selected:
@@ -427,10 +507,30 @@ class QueryExecutionService:
                 root,
                 joined,
                 relationships,
-                build_join_query(root, [root, *joined], relationships, self.user, plan, today=today),
+                build_join_query(
+                    root,
+                    [root, *joined],
+                    relationships,
+                    self.user,
+                    plan,
+                    today=today,
+                    access_decisions=self.repo.product_access_decisions,
+                ),
                 None,
             )
-        return root, joined, relationships, build_query(root, self.user, plan, today=today), resolve_default_period(root, plan, today)
+        return (
+            root,
+            joined,
+            relationships,
+            build_query(
+                root,
+                self.user,
+                plan,
+                today=today,
+                access_decision=self.repo.product_access_decisions.get(root.code),
+            ),
+            resolve_default_period(root, plan, today),
+        )
 
     async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL", action="QUERY"):
         today = datetime.now(timezone.utc).date()
@@ -447,7 +547,15 @@ class QueryExecutionService:
         s = get_settings()
         if ai and not s.database_nl2sql_url.get_secret_value():
             raise AppError("NL2SQL_NOT_CONFIGURED", "Isi DATABASE_NL2SQL_URL dengan role read-only.", 503)
-        key = cache_key(self.user, product, plan, default_period, joined, relationships)
+        key = cache_key(
+            self.user,
+            product,
+            plan,
+            default_period,
+            joined,
+            relationships,
+            self.repo.authorization_revisions,
+        )
         redis = Redis.from_url(s.redis_url.get_secret_value(), socket_connect_timeout=0.3, socket_timeout=0.3)
         try:
             cached = await redis.get(key)

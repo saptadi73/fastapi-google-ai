@@ -5,7 +5,7 @@ from app.repositories.base import record
 from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.semantic import QueryPlan
 from app.services.audit_service import audit
-from app.services.query_execution_service import QueryExecutionService, build_query
+from app.services.query_execution_service import QueryExecutionService
 
 
 def normalize_intent(question):
@@ -53,9 +53,13 @@ class SemanticCatalogService:
         if left.id == right.id:
             raise AppError("JOIN_PRODUCT_INVALID", "Relationship harus menghubungkan dua product berbeda.", 422)
         for product, column in ((left, data.left_column), (right, data.right_column)):
-            columns = {item["target_column"] for item in product.columns}
-            if column not in columns:
+            view = await self.repo.product_record(product.code, self.user)
+            columns = {item["target_column"]: item for item in view["columns"]}
+            selected = columns.get(column)
+            if selected is None:
                 raise AppError("JOIN_COLUMN_INVALID", "Kolom relationship tidak tersedia pada product.", 422)
+            if selected.get("access_visibility") == "MASKED" or selected.get("pii_classification") in ("MEDIUM", "HIGH"):
+                raise AppError("QUERY_JOIN_FORBIDDEN", "Join pada kolom non-visible tidak diizinkan.", 403)
         obj = await self.repo.add(
             JoinRelationship, **data.model_dump(), created_by=self.user.id
         )
@@ -71,8 +75,12 @@ class SemanticCatalogService:
         if left.id == right.id:
             raise AppError("JOIN_PRODUCT_INVALID", "Relationship harus menghubungkan dua product berbeda.", 422)
         for product, column in ((left, data.left_column), (right, data.right_column)):
-            if column not in {item["target_column"] for item in product.columns}:
+            view = await self.repo.product_record(product.code, self.user)
+            selected = next((item for item in view["columns"] if item["target_column"] == column), None)
+            if selected is None:
                 raise AppError("JOIN_COLUMN_INVALID", "Kolom relationship tidak tersedia pada product.", 422)
+            if selected.get("access_visibility") == "MASKED" or selected.get("pii_classification") in ("MEDIUM", "HIGH"):
+                raise AppError("QUERY_JOIN_FORBIDDEN", "Join pada kolom non-visible tidak diizinkan.", 403)
         for key, value in data.model_dump(exclude={"revision_no"}).items():
             setattr(obj, key, value)
         obj.revision_no += 1
@@ -84,6 +92,16 @@ class SemanticCatalogService:
         obj = await self.repo.get(JoinRelationship, relationship_id, lock=True)
         if obj.revision_no != data.revision_no or obj.status != "DRAFT":
             raise AppError("JOIN_RELATIONSHIP_REVISION_CONFLICT", "Relationship berubah atau bukan draft.", 409)
+        for product_code, column in (
+            (obj.left_product_code, obj.left_column),
+            (obj.right_product_code, obj.right_column),
+        ):
+            view = await self.repo.product_record(product_code, self.user)
+            selected = next((item for item in view["columns"] if item["target_column"] == column), None)
+            if selected is None:
+                raise AppError("QUERY_JOIN_STALE", "Kolom join tidak lagi tersedia atau tidak dapat diakses.", 409)
+            if selected.get("access_visibility") == "MASKED" or selected.get("pii_classification") in ("MEDIUM", "HIGH"):
+                raise AppError("QUERY_JOIN_FORBIDDEN", "Join pada kolom non-visible tidak diizinkan.", 403)
         obj.status, obj.approved_by = "APPROVED", self.user.id
         obj.revision_no += 1
         audit(self.session, self.user, "join_relationship.approved", obj.id, revision_no=obj.revision_no)
@@ -101,10 +119,7 @@ class SemanticCatalogService:
         obj = await self.repo.get(SavedQuery, template_id, lock=True)
         product = await self.repo.product(obj.data_product_code, self.user)
         plan = QueryPlan.model_validate(obj.plan)
-        if plan.join_relationships:
-            await QueryExecutionService(self.session, self.user).compile(product.code, plan)
-        else:
-            build_query(product, self.user, plan)
+        await QueryExecutionService(self.session, self.user).compile(product.code, plan)
         obj.status, obj.semantic_version = "VALIDATED", product.version
         audit(self.session, self.user, "query_template.validated", obj.id)
         return record(obj)
@@ -125,11 +140,14 @@ class SemanticCatalogService:
             self.repo.visible_products().add_columns(DataSource)
             .order_by(DataProduct.created_at.desc()).limit(1000)
         )).all())
-        return [
-            record(product, exclude=("view_name",)) for product, source in products
-            if self.user.role in product.allowed_roles
-            and await self.repo.source_allowed(source, self.user, "DISCOVER")
-        ]
+        result = []
+        for product, source in products:
+            if self.user.role not in product.allowed_roles:
+                continue
+            if not await self.repo.source_allowed(source, self.user, "DISCOVER"):
+                continue
+            result.append(await self.repo.product_record(product.code, self.user))
+        return result
 
     async def join_relationships(self):
         product_codes = {product["code"] for product in await self.products()}
@@ -142,10 +160,7 @@ class SemanticCatalogService:
 
     async def create_saved(self, data):
         product = await self.repo.product(data.data_product_code, self.user)
-        if data.plan.join_relationships:
-            await QueryExecutionService(self.session, self.user).compile(product.code, data.plan)
-        else:
-            build_query(product, self.user, data.plan)
+        await QueryExecutionService(self.session, self.user).compile(product.code, data.plan)
         obj = await self.repo.add(
             SavedQuery,
             code=data.code,

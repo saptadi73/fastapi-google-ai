@@ -16,6 +16,9 @@ from app.schemas.access import (
     AccessPolicyCreate,
     AccessPolicyTransition,
     AccessPolicyUpdate,
+    AccessRequestCreate,
+    AccessRequestDecision,
+    AccessRequestReject,
     AssignmentRevoke,
     PermissionBundleCreate,
     PermissionBundleUpdate,
@@ -120,6 +123,78 @@ async def create_permission_grant(
 @router.post("/permission-grants/{grant_id}/revoke", dependencies=admin)
 async def revoke_permission_grant(grant_id: UUID, data: AssignmentRevoke, session: Session, user: CurrentUser):
     return success(await AccessService(session, user).revoke_permission_grant(grant_id, data))
+
+
+@router.get("/request-options")
+async def access_request_options(session: Session, user: CurrentUser):
+    return success(await AccessService(session, user).request_options())
+
+
+@router.post("/requests", status_code=201)
+async def create_access_request(data: AccessRequestCreate, session: Session, user: CurrentUser):
+    return success(await AccessService(session, user).create_access_request(data))
+
+
+@router.get("/requests/mine")
+async def list_my_access_requests(
+    session: Session,
+    user: CurrentUser,
+    status: Literal["PENDING", "APPROVED", "REJECTED", "CANCELLED", "REVOKED"] | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+):
+    return success(
+        await AccessService(session, user).list_access_requests(
+            mine=True, status=status, offset=offset, limit=limit
+        ),
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get("/requests", dependencies=admin)
+async def list_access_requests(
+    session: Session,
+    user: CurrentUser,
+    status: Literal["PENDING", "APPROVED", "REJECTED", "CANCELLED", "REVOKED"] | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+):
+    return success(
+        await AccessService(session, user).list_access_requests(
+            status=status, offset=offset, limit=limit
+        ),
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.post("/requests/{request_id}/approve", dependencies=admin)
+async def approve_access_request(
+    request_id: UUID, data: AccessRequestDecision, session: Session, user: CurrentUser
+):
+    return success(await AccessService(session, user).decide_access_request(request_id, data, "approve"))
+
+
+@router.post("/requests/{request_id}/reject", dependencies=admin)
+async def reject_access_request(
+    request_id: UUID, data: AccessRequestReject, session: Session, user: CurrentUser
+):
+    return success(await AccessService(session, user).decide_access_request(request_id, data, "reject"))
+
+
+@router.post("/requests/{request_id}/cancel")
+async def cancel_access_request(
+    request_id: UUID, data: AccessRequestDecision, session: Session, user: CurrentUser
+):
+    return success(await AccessService(session, user).cancel_access_request(request_id, data))
+
+
+@router.post("/requests/{request_id}/revoke")
+async def revoke_access_request(
+    request_id: UUID, data: AccessRequestReject, session: Session, user: CurrentUser
+):
+    return success(await AccessService(session, user).revoke_access_request(request_id, data))
 
 
 @router.get("/policies", dependencies=admin)

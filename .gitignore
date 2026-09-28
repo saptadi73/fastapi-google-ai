@@ -1,5 +1,6 @@
 .env
 .env.*
+!.env.example
 requirements.txt
 venv/
 venv-py310-backup/

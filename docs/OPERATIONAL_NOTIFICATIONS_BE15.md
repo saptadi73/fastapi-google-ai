@@ -14,7 +14,8 @@ memakai endpoint berikut:
 
 Summary mengembalikan jumlah per status pada `jobs` dan `import_reviews`, jumlah
 notifikasi yang belum diakui, serta `generated_at`. Semua query selalu dibatasi
-`tenant_id` pengguna.
+`tenant_id` pengguna. Notifikasi dengan `recipient_user_id` hanya dihitung, ditampilkan,
+dan dapat diakui oleh penerima tersebut; nilai `null` mempertahankan inbox tenant-wide.
 
 Notifikasi dibuat dalam transaksi yang sama saat job berubah ke `FAILED`, worker dianggap
 terputus, batch import berubah ke `NEEDS_INPUT`, atau job import gagal dan batch terkait
@@ -27,8 +28,14 @@ idempotent, dan mencatat `notification.acknowledged` pada audit log. Acknowledge
 menandai bahwa operator sudah membaca event; tindakan ini tidak me-retry job, menjawab
 pertanyaan import, atau mengubah status resource.
 
+BE-16 memakai inbox yang sama untuk `ACCESS_REQUEST_PENDING`. Request membuat satu
+notifikasi terarah bagi setiap admin aktif yang boleh mereview dan mengecualikan admin
+pemohon. Approve, reject, atau cancel menyelesaikan semua notifikasi pending resource itu.
+
 Migration `h8d1f4a7c9e6` membuat `platform.operational_notification`, unique key tenant,
 indeks inbox, serta foreign key tenant-aware untuk pengguna yang mengakui. Retention
 snapshot/artifact/audit dan kanal push/SSE tetap pekerjaan BE-15 berikutnya.
 Migration lanjutan `i9e2a5b8d0f7` merekonsiliasi constraint tenant dari dependency
 source dan ledger AI policy yang ditemukan saat validasi schema head.
+Migration `s9i2e5f8a0d7` menambahkan penerima notifikasi opsional beserta foreign key
+tenant-aware tanpa mengubah visibilitas notifikasi lama.

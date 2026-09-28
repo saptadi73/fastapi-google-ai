@@ -6,7 +6,6 @@ from fastapi.responses import Response
 from app.api.dependencies import CurrentUser, Session
 from app.core.exceptions import success
 from app.core.routing import APIRouter
-from app.repositories.base import record
 from app.schemas.semantic import QueryPlan
 from app.services.query_execution_service import QueryExecutionService
 from app.services.semantic_catalog_service import SemanticCatalogService
@@ -21,19 +20,19 @@ async def products(session: Session, user: CurrentUser):
 
 @router.get("/data-products/{code}")
 async def product(code: str, session: Session, user: CurrentUser):
-    return success(
-        record(await SemanticCatalogService(session, user).repo.product(code, user), exclude=("view_name",))
-    )
+    return success(await SemanticCatalogService(session, user).repo.product_record(code, user))
 
 
 @router.get("/data-products/{code}/dimensions")
 async def dimensions(code: str, session: Session, user: CurrentUser):
-    return success((await SemanticCatalogService(session, user).repo.product(code, user)).dimensions)
+    product = await SemanticCatalogService(session, user).repo.product_record(code, user)
+    return success(product["dimensions"])
 
 
 @router.get("/data-products/{code}/metrics")
 async def metrics(code: str, session: Session, user: CurrentUser):
-    return success((await SemanticCatalogService(session, user).repo.product(code, user)).metrics)
+    product = await SemanticCatalogService(session, user).repo.product_record(code, user)
+    return success(product["metrics"])
 
 
 @router.post("/data-products/{code}/query")

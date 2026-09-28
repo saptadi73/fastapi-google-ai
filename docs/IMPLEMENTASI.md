@@ -56,8 +56,8 @@ actor. Admin lain dapat mengaktifkan sumber setelah review metadata dan policy S
 ALLOW approved yang mencakup unit, domain, dan yurisdiksi sumber.
 
 Untuk sumber dengan metadata, katalog DataProduct, query, export, saved query, join,
-laporan berbasis produk dan NL2SQL memeriksa SOURCE policy per pengguna sebelum akses
-hasil cache. Row/column controls yang belum diterapkan ditolak. Sumber legacy
+laporan berbasis produk, NL2SQL, dan artefak konfigurasi memeriksa SOURCE policy per
+pengguna sebelum akses hasil/cache atau download. Row/column controls yang belum diterapkan ditolak. Sumber legacy
 `access_metadata=null` **masih memakai role/row_scope lama**; jalur admin, artefak,
 resource lain, access request, masking, dan default-deny penuh belum tercakup.
 Implementasi BE16 saat ini dibuktikan pada database test, bukan rollout produksi.

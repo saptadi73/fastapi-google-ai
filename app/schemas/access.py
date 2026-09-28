@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -141,3 +141,34 @@ class AccessEvaluationRequest(StrictModel):
     resource_type: Literal["DATA_PRODUCT", "SOURCE", "MASTER", "TAXONOMY"]
     resource_id: str = Field(min_length=1, max_length=100)
     at: datetime = Field(default_factory=now)
+
+
+class AccessRequestCreate(StrictModel):
+    request_type: Literal["ATTRIBUTE", "PERMISSION_BUNDLE"]
+    subject_user_id: UUID | None = None
+    attribute_id: UUID | None = None
+    bundle_id: UUID | None = None
+    valid_from: datetime = Field(default_factory=now)
+    valid_to: datetime
+    business_reason: str = Field(min_length=10, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_request(self):
+        attribute_request = self.request_type == "ATTRIBUTE" and self.attribute_id and not self.bundle_id
+        bundle_request = self.request_type == "PERMISSION_BUNDLE" and self.bundle_id and not self.attribute_id
+        if not (attribute_request or bundle_request):
+            raise ValueError("Pilih tepat satu atribut atau permission bundle sesuai request_type")
+        if self.valid_to <= self.valid_from:
+            raise ValueError("valid_to harus setelah valid_from")
+        if self.valid_to - self.valid_from > timedelta(days=366):
+            raise ValueError("Masa akses maksimal 366 hari")
+        return self
+
+
+class AccessRequestDecision(StrictModel):
+    revision: int = Field(ge=1)
+    note: str = Field(default="", max_length=500)
+
+
+class AccessRequestReject(AccessRequestDecision):
+    note: str = Field(min_length=3, max_length=500)

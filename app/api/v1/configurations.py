@@ -4,11 +4,13 @@ from fastapi import Depends
 from fastapi.responses import Response
 
 from app.api.dependencies import CurrentUser, Session, require_roles
-from app.core.exceptions import success
+from app.core.exceptions import AppError, success
 from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.configuration import Artifact, Configuration
+from app.models.source import DataSource
 from app.repositories.base import record
+from app.schemas.access import AccessEvaluationRequest
 from app.schemas.configuration import (
     ConfigurationCreate,
     ConfigurationPatch,
@@ -20,6 +22,7 @@ from app.schemas.configuration import (
     WorkbookApplyRequest,
     WorkbookPreviewRequest,
 )
+from app.services.access_service import AccessService
 from app.services.configuration_review_service import CAPABILITIES, ConfigurationReviewService
 from app.services.configuration_service import ConfigurationService
 
@@ -30,6 +33,21 @@ router = APIRouter(
 )
 edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
+
+
+async def _guard_configuration_source(session, user, config):
+    source = await session.scalar(
+        ConfigurationService(session, user).repo.query(DataSource).where(DataSource.id == config.source_id)
+    )
+    if source is None or source.access_metadata is None:
+        return
+    decision = await AccessService(session, user).evaluate(
+        AccessEvaluationRequest(
+            action="DISCOVER", resource_type="SOURCE", resource_id=source.source_code
+        )
+    )
+    if not decision["allowed"]:
+        raise AppError("CONFIGURATION_NOT_FOUND", "Konfigurasi tidak tersedia untuk akses Anda.", 404)
 
 
 @router.get("/parameter-catalog")
@@ -171,7 +189,8 @@ async def rollback(config_id: UUID, session: Session, user: CurrentUser):
 @router.get("/{config_id}/artifacts")
 async def artifacts(config_id: UUID, session: Session, user: CurrentUser):
     service = ConfigurationService(session, user)
-    await service.repo.get(Configuration, config_id)
+    config = await service.repo.get(Configuration, config_id)
+    await _guard_configuration_source(session, user, config)
     return success(
         [
             record(a, exclude=("storage_uri",))
@@ -186,6 +205,7 @@ async def artifacts(config_id: UUID, session: Session, user: CurrentUser):
 async def export(config_id: UUID, data: ExportRequest, session: Session, user: CurrentUser):
     service = ConfigurationService(session, user)
     config = await service.repo.get(Configuration, config_id)
+    await _guard_configuration_source(session, user, config)
     artifact = await service.artifacts.create(config, "EXPORT_" + data.format, data.format)
     return success(record(artifact, exclude=("storage_uri",)))
 
@@ -194,6 +214,7 @@ async def export(config_id: UUID, data: ExportRequest, session: Session, user: C
 async def download(config_id: UUID, artifact_id: UUID, session: Session, user: CurrentUser):
     service = ConfigurationService(session, user)
     config = await service.repo.get(Configuration, config_id)
+    await _guard_configuration_source(session, user, config)
     artifact, content = await service.artifacts.read(config, artifact_id)
     return Response(
         content,

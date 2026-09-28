@@ -7,14 +7,17 @@ from sqlalchemy import Text, cast, or_, select, text
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
+from app.models.access import AccessPolicy, AccessPolicyBinding
 from app.models.base import now
 from app.models.configuration import Configuration
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
 from app.models.source import SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.repositories.source_repository import SourceRepository
+from app.schemas.access import AccessEvaluationRequest
 from app.schemas.configuration import ETLConfiguration
 from app.schemas.master import MasterSchema
+from app.services.access_service import AccessService
 from app.services.audit_service import audit
 from app.services.classification_service import ClassificationService
 from app.services.configuration_service import ConfigurationService
@@ -28,6 +31,25 @@ class MasterService:
     def require_role(self, roles):
         if self.user.role not in roles:
             raise AppError("FORBIDDEN", "Peran tidak diizinkan mengubah master.", 403)
+
+    async def guard_policy_read(self, master):
+        has_policy = await self.session.scalar(
+            self.repo.query(AccessPolicy.id)
+            .join(AccessPolicyBinding, AccessPolicyBinding.policy_id == AccessPolicy.id)
+            .where(
+                AccessPolicyBinding.resource_type == "MASTER",
+                AccessPolicyBinding.resource_id == master.code,
+                AccessPolicy.status == "APPROVED",
+            )
+            .limit(1)
+        )
+        if has_policy is None:
+            return
+        decision = await AccessService(self.session, self.user).evaluate(
+            AccessEvaluationRequest(action="READ", resource_type="MASTER", resource_id=master.code)
+        )
+        if not decision["allowed"]:
+            raise AppError("MASTER_NOT_FOUND", "Master tidak tersedia untuk akses Anda.", 404)
 
     async def lock_master(self, master_id):
         result = await self.session.scalar(

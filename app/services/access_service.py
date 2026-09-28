@@ -7,6 +7,7 @@ from app.models.access import (
     AccessAttribute,
     AccessPolicy,
     AccessPolicyBinding,
+    AccessRequest,
     PermissionBundle,
     UserAssignment,
     UserPermissionGrant,
@@ -19,6 +20,7 @@ from app.models.source import DataSource
 from app.models.taxonomy import Taxonomy
 from app.repositories.base import TenantRepository, record
 from app.services.audit_service import audit
+from app.services.notification_service import add_notification, resolve_notifications
 
 ROLE_ACTIONS = {
     "PLATFORM_ADMIN": ["DISCOVER", "READ", "QUERY", "EXPORT", "EDIT", "APPROVE", "OPERATE", "ADMIN"],
@@ -63,6 +65,24 @@ def policy_record(item):
     return record(item)
 
 
+def access_request_record(item, requester, subject, attribute=None, bundle=None):
+    result = record(item)
+    result["requester"] = {
+        "id": requester.id,
+        "username": requester.username,
+        "full_name": requester.full_name,
+    }
+    result["subject_user"] = {
+        "id": subject.id,
+        "username": subject.username,
+        "full_name": subject.full_name,
+        "role": subject.role,
+    }
+    result["attribute"] = attribute_record(attribute) if attribute else None
+    result["bundle"] = bundle_record(bundle) if bundle else None
+    return result
+
+
 class AccessService:
     def __init__(self, session, actor):
         self.session, self.actor = session, actor
@@ -79,6 +99,297 @@ class AccessService:
 
     async def _policy(self, policy_id, *, lock=False):
         return await self.repo.get(AccessPolicy, policy_id, lock=lock)
+
+    async def _access_request(self, request_id, *, lock=False):
+        return await self.repo.get(AccessRequest, request_id, lock=lock)
+
+    async def _access_request_record(self, item):
+        requester = await self._user(item.requester_id)
+        subject = (
+            requester if item.subject_user_id == requester.id else await self._user(item.subject_user_id)
+        )
+        attribute = await self._attribute(item.attribute_id) if item.attribute_id else None
+        bundle = await self._bundle(item.bundle_id) if item.bundle_id else None
+        return access_request_record(item, requester, subject, attribute, bundle)
+
+    async def request_options(self):
+        attributes = await self.repo.list(
+            AccessAttribute,
+            limit=500,
+            conditions=[AccessAttribute.is_active.is_(True)],
+        )
+        bundles = await self.repo.list(
+            PermissionBundle,
+            limit=500,
+            conditions=[PermissionBundle.is_active.is_(True)],
+        )
+        requestable_users = [self.actor]
+        if self.actor.role == "PLATFORM_ADMIN":
+            requestable_users = await self.repo.list(
+                User,
+                limit=500,
+                conditions=[User.is_active.is_(True)],
+            )
+        return {
+            "attributes": [attribute_record(item) for item in attributes],
+            "permission_bundles": [bundle_record(item) for item in bundles],
+            "requestable_users": [
+                {
+                    "id": item.id,
+                    "username": item.username,
+                    "full_name": item.full_name,
+                    "role": item.role,
+                }
+                for item in requestable_users
+            ],
+            "max_duration_days": 366,
+        }
+
+    async def create_access_request(self, data):
+        if not self.actor.is_active:
+            raise AppError("USER_INACTIVE", "Pengguna nonaktif tidak dapat meminta akses.")
+        subject_id = str(data.subject_user_id) if data.subject_user_id else self.actor.id
+        if subject_id != self.actor.id and self.actor.role != "PLATFORM_ADMIN":
+            raise AppError(
+                "ACCESS_REQUEST_DELEGATION_FORBIDDEN", "Hanya admin yang dapat meminta untuk user lain.", 403
+            )
+        subject = await self._user(subject_id)
+        if not subject.is_active:
+            raise AppError("USER_INACTIVE", "Akses tidak dapat diminta untuk pengguna nonaktif.")
+        attribute = None
+        bundle = None
+        target_condition = None
+        if data.request_type == "ATTRIBUTE":
+            attribute = await self._attribute(data.attribute_id)
+            if not attribute.is_active:
+                raise AppError("ACCESS_ATTRIBUTE_INACTIVE", "Atribut akses tidak aktif.")
+            target_condition = AccessRequest.attribute_id == attribute.id
+        else:
+            bundle = await self._bundle(data.bundle_id)
+            if not bundle.is_active:
+                raise AppError("PERMISSION_BUNDLE_INACTIVE", "Permission bundle tidak aktif.")
+            target_condition = AccessRequest.bundle_id == bundle.id
+        duplicate = await self.session.scalar(
+            self.repo.query(AccessRequest).where(
+                AccessRequest.subject_user_id == subject.id,
+                AccessRequest.status == "PENDING",
+                target_condition,
+            )
+        )
+        if duplicate:
+            raise AppError("ACCESS_REQUEST_DUPLICATE", "Permintaan untuk akses tersebut masih menunggu.", 409)
+        item = await self.repo.add(
+            AccessRequest,
+            requester_id=self.actor.id,
+            subject_user_id=subject.id,
+            request_type=data.request_type,
+            attribute_id=attribute.id if attribute else None,
+            bundle_id=bundle.id if bundle else None,
+            valid_from=data.valid_from,
+            valid_to=data.valid_to,
+            business_reason=data.business_reason,
+        )
+        audit(
+            self.session,
+            self.actor,
+            "access.request_created",
+            item.id,
+            request_type=item.request_type,
+            subject_user_id=subject.id,
+        )
+        reviewers = await self.repo.list(
+            User,
+            limit=500,
+            conditions=[
+                User.role == "PLATFORM_ADMIN",
+                User.is_active.is_(True),
+                User.id != self.actor.id,
+            ],
+        )
+        for reviewer in reviewers:
+            add_notification(
+                self.session,
+                tenant_id=self.actor.tenant_id,
+                event_key=f"access-request:{item.id}:pending:{reviewer.id}",
+                kind="ACCESS_REQUEST_PENDING",
+                severity="INFO",
+                resource_type="ACCESS_REQUEST",
+                resource_id=item.id,
+                title="Permintaan akses menunggu keputusan",
+                message="Tinjau permintaan akses sementara dan periode yang diajukan.",
+                details={"request_type": item.request_type, "subject_user_id": subject.id},
+                recipient_user_id=reviewer.id,
+            )
+        return access_request_record(item, self.actor, subject, attribute, bundle)
+
+    async def list_access_requests(self, *, mine=False, status=None, offset=0, limit=100):
+        conditions = []
+        if mine:
+            conditions.append(
+                or_(
+                    AccessRequest.requester_id == self.actor.id,
+                    AccessRequest.subject_user_id == self.actor.id,
+                )
+            )
+        if status:
+            conditions.append(AccessRequest.status == status)
+        items = await self.repo.list(AccessRequest, offset=offset, limit=limit, conditions=conditions)
+        return [await self._access_request_record(item) for item in items]
+
+    async def decide_access_request(self, request_id, data, decision):
+        item = await self._access_request(request_id, lock=True)
+        if item.revision != data.revision:
+            raise AppError("STALE_REVISION", "Permintaan akses telah berubah; muat ulang.", 409)
+        if item.status != "PENDING":
+            raise AppError("ACCESS_REQUEST_NOT_PENDING", "Permintaan akses tidak lagi menunggu.", 409)
+        if item.requester_id == self.actor.id:
+            raise AppError("ACCESS_REQUEST_APPROVER_CONFLICT", "Permintaan harus diputuskan admin lain.")
+        target = await self._user(item.subject_user_id)
+        if not target.is_active:
+            raise AppError("USER_INACTIVE", "Akses tidak dapat diberikan kepada pengguna nonaktif.")
+        item.reviewed_by = self.actor.id
+        item.reviewed_at = now()
+        item.decision_note = data.note
+        if decision == "reject":
+            item.status = "REJECTED"
+        else:
+            if item.valid_to <= now():
+                raise AppError("ACCESS_REQUEST_EXPIRED", "Periode permintaan akses telah berakhir.", 409)
+            if item.request_type == "ATTRIBUTE":
+                attribute = await self._attribute(item.attribute_id)
+                if not attribute.is_active:
+                    raise AppError("ACCESS_ATTRIBUTE_INACTIVE", "Atribut akses tidak aktif.")
+                overlap = await self.session.scalar(
+                    self.repo.query(UserAssignment).where(
+                        UserAssignment.user_id == target.id,
+                        UserAssignment.attribute_id == attribute.id,
+                        UserAssignment.status == "ACTIVE",
+                        or_(UserAssignment.valid_to.is_(None), UserAssignment.valid_to > item.valid_from),
+                        UserAssignment.valid_from < item.valid_to,
+                    )
+                )
+                if overlap:
+                    raise AppError(
+                        "ASSIGNMENT_PERIOD_OVERLAP", "Assignment pada periode tersebut sudah ada.", 409
+                    )
+                assignment = await self.repo.add(
+                    UserAssignment,
+                    user_id=target.id,
+                    attribute_id=attribute.id,
+                    valid_from=item.valid_from,
+                    valid_to=item.valid_to,
+                    granted_by=self.actor.id,
+                    note=f"Access request {item.id}",
+                )
+                item.assignment_id = assignment.id
+            else:
+                bundle = await self._bundle(item.bundle_id)
+                if not bundle.is_active:
+                    raise AppError("PERMISSION_BUNDLE_INACTIVE", "Permission bundle tidak aktif.")
+                overlap = await self.session.scalar(
+                    self.repo.query(UserPermissionGrant).where(
+                        UserPermissionGrant.user_id == target.id,
+                        UserPermissionGrant.bundle_id == bundle.id,
+                        UserPermissionGrant.status == "ACTIVE",
+                        or_(
+                            UserPermissionGrant.valid_to.is_(None),
+                            UserPermissionGrant.valid_to > item.valid_from,
+                        ),
+                        UserPermissionGrant.valid_from < item.valid_to,
+                    )
+                )
+                if overlap:
+                    raise AppError(
+                        "PERMISSION_GRANT_PERIOD_OVERLAP",
+                        "Permission bundle pada periode tersebut sudah ada.",
+                        409,
+                    )
+                grant = await self.repo.add(
+                    UserPermissionGrant,
+                    user_id=target.id,
+                    bundle_id=bundle.id,
+                    valid_from=item.valid_from,
+                    valid_to=item.valid_to,
+                    granted_by=self.actor.id,
+                    note=f"Access request {item.id}",
+                )
+                item.permission_grant_id = grant.id
+            item.status = "APPROVED"
+        item.revision += 1
+        audit(
+            self.session,
+            self.actor,
+            f"access.request_{'approved' if decision == 'approve' else 'rejected'}",
+            item.id,
+            requester_id=item.requester_id,
+            subject_user_id=item.subject_user_id,
+        )
+        await resolve_notifications(
+            self.session,
+            tenant_id=self.actor.tenant_id,
+            resource_type="ACCESS_REQUEST",
+            resource_id=item.id,
+            actor_id=self.actor.id,
+        )
+        return await self._access_request_record(item)
+
+    async def cancel_access_request(self, request_id, data):
+        item = await self._access_request(request_id, lock=True)
+        if self.actor.id not in (item.requester_id, item.subject_user_id):
+            raise AppError("FORBIDDEN", "Hanya pemohon atau user tujuan yang dapat membatalkan.", 403)
+        if item.revision != data.revision:
+            raise AppError("STALE_REVISION", "Permintaan akses telah berubah; muat ulang.", 409)
+        if item.status != "PENDING":
+            raise AppError(
+                "ACCESS_REQUEST_NOT_PENDING", "Hanya permintaan menunggu yang dapat dibatalkan.", 409
+            )
+        item.status = "CANCELLED"
+        item.revision += 1
+        item.decision_note = data.note
+        audit(self.session, self.actor, "access.request_cancelled", item.id)
+        await resolve_notifications(
+            self.session,
+            tenant_id=self.actor.tenant_id,
+            resource_type="ACCESS_REQUEST",
+            resource_id=item.id,
+            actor_id=self.actor.id,
+        )
+        return await self._access_request_record(item)
+
+    async def revoke_access_request(self, request_id, data):
+        item = await self._access_request(request_id, lock=True)
+        if self.actor.role != "PLATFORM_ADMIN" and self.actor.id not in (
+            item.requester_id,
+            item.subject_user_id,
+        ):
+            raise AppError("FORBIDDEN", "Hanya pemohon, user tujuan, atau admin yang dapat mencabut.", 403)
+        if item.revision != data.revision:
+            raise AppError("STALE_REVISION", "Permintaan akses telah berubah; muat ulang.", 409)
+        if item.status != "APPROVED":
+            raise AppError("ACCESS_REQUEST_NOT_APPROVED", "Hanya akses approved yang dapat dicabut.", 409)
+        target = await self._user(item.subject_user_id)
+        if item.assignment_id:
+            assignment = await self.repo.get(UserAssignment, item.assignment_id, lock=True)
+            if assignment.status == "ACTIVE":
+                assignment.status = "REVOKED"
+                assignment.revision += 1
+                assignment.revoked_by = self.actor.id
+                assignment.revoked_at = now()
+        if item.permission_grant_id:
+            grant = await self.repo.get(UserPermissionGrant, item.permission_grant_id, lock=True)
+            if grant.status == "ACTIVE":
+                grant.status = "REVOKED"
+                grant.revision += 1
+                grant.revoked_by = self.actor.id
+                grant.revoked_at = now()
+        target.token_version += 1
+        item.status = "REVOKED"
+        item.revision += 1
+        item.reviewed_by = self.actor.id
+        item.reviewed_at = now()
+        item.decision_note = data.note
+        audit(self.session, self.actor, "access.request_revoked", item.id, requester_id=target.id)
+        return await self._access_request_record(item)
 
     async def list_policy_resources(self, resource_type, search="", offset=0, limit=100):
         model, code = POLICY_RESOURCES[resource_type]
@@ -194,9 +505,13 @@ class AccessService:
             item.submitted_at = now()
         elif action == "approve":
             if item.status != "IN_REVIEW":
-                raise AppError("POLICY_TRANSITION_INVALID", "Hanya policy IN_REVIEW yang dapat disetujui.", 409)
+                raise AppError(
+                    "POLICY_TRANSITION_INVALID", "Hanya policy IN_REVIEW yang dapat disetujui.", 409
+                )
             if item.created_by == self.actor.id:
-                raise AppError("POLICY_APPROVER_CONFLICT", "Pembuat policy tidak boleh menyetujui policy sendiri.")
+                raise AppError(
+                    "POLICY_APPROVER_CONFLICT", "Pembuat policy tidak boleh menyetujui policy sendiri."
+                )
             item.status = "APPROVED"
             item.approved_by = self.actor.id
             item.approved_at = now()
@@ -230,7 +545,9 @@ class AccessService:
     async def update_bundle(self, bundle_id, data):
         item = await self._bundle(bundle_id, lock=True)
         if item.revision != data.revision:
-            raise AppError("STALE_REVISION", "Permission bundle telah berubah; muat ulang sebelum menyimpan.", 409)
+            raise AppError(
+                "STALE_REVISION", "Permission bundle telah berubah; muat ulang sebelum menyimpan.", 409
+            )
         changes = data.model_dump(exclude={"revision"}, exclude_unset=True)
         if changes.get("actions") is not None:
             changes["actions"] = sorted(set(changes["actions"]))
@@ -259,7 +576,9 @@ class AccessService:
             )
         )
         if overlap:
-            raise AppError("PERMISSION_GRANT_PERIOD_OVERLAP", "Permission aktif pada periode tersebut sudah ada.", 409)
+            raise AppError(
+                "PERMISSION_GRANT_PERIOD_OVERLAP", "Permission aktif pada periode tersebut sudah ada.", 409
+            )
         item = await self.repo.add(
             UserPermissionGrant,
             user_id=target.id,
@@ -302,7 +621,9 @@ class AccessService:
         if item.user_id == self.actor.id:
             raise AppError("SELF_ACCESS_CHANGE", "Permission bundle harus dicabut oleh admin lain.")
         if item.revision != data.revision:
-            raise AppError("STALE_REVISION", "Permission grant telah berubah; muat ulang sebelum mencabut.", 409)
+            raise AppError(
+                "STALE_REVISION", "Permission grant telah berubah; muat ulang sebelum mencabut.", 409
+            )
         if item.status == "REVOKED":
             raise AppError("PERMISSION_GRANT_ALREADY_REVOKED", "Permission grant sudah dicabut.", 409)
         item.status = "REVOKED"
@@ -329,7 +650,9 @@ class AccessService:
         if data.parent_id:
             parent = await self._attribute(data.parent_id)
             if parent.kind != data.kind:
-                raise AppError("ACCESS_HIERARCHY_KIND_MISMATCH", "Induk harus memiliki jenis atribut yang sama.")
+                raise AppError(
+                    "ACCESS_HIERARCHY_KIND_MISMATCH", "Induk harus memiliki jenis atribut yang sama."
+                )
         item = await self.repo.add(
             AccessAttribute,
             kind=data.kind,
@@ -353,15 +676,18 @@ class AccessService:
     async def registration_options(self):
         effective = await self.effective_access(self.actor.id)
         scopes = [
-            item["attribute"] for item in effective["assignments"]
+            item["attribute"]
+            for item in effective["assignments"]
             if item["attribute"]["kind"] in ("DEPARTMENT", "BUSINESS_DOMAIN", "JURISDICTION")
         ]
         purposes = await self.repo.list(
-            AccessAttribute, limit=500,
+            AccessAttribute,
+            limit=500,
             conditions=[AccessAttribute.kind == "PURPOSE", AccessAttribute.is_active.is_(True)],
         )
         people = await self.repo.list(
-            User, limit=500,
+            User,
+            limit=500,
             conditions=[
                 User.is_active.is_(True),
                 or_(User.id == self.actor.id, User.role.in_(("SOURCE_OWNER", "DATA_STEWARD"))),
@@ -377,19 +703,25 @@ class AccessService:
     async def update_attribute(self, attribute_id, data):
         item = await self._attribute(attribute_id, lock=True)
         if item.revision != data.revision:
-            raise AppError("STALE_REVISION", "Atribut akses telah berubah; muat ulang sebelum menyimpan.", 409)
+            raise AppError(
+                "STALE_REVISION", "Atribut akses telah berubah; muat ulang sebelum menyimpan.", 409
+            )
         changes = data.model_dump(exclude={"revision"}, exclude_unset=True)
         if "parent_id" in changes and changes["parent_id"] is not None:
             if str(changes["parent_id"]) == item.id:
                 raise AppError("ACCESS_HIERARCHY_CYCLE", "Atribut tidak dapat menjadi induknya sendiri.")
             parent = await self._attribute(changes["parent_id"])
             if parent.kind != item.kind:
-                raise AppError("ACCESS_HIERARCHY_KIND_MISMATCH", "Induk harus memiliki jenis atribut yang sama.")
+                raise AppError(
+                    "ACCESS_HIERARCHY_KIND_MISMATCH", "Induk harus memiliki jenis atribut yang sama."
+                )
             ancestor = parent
             visited = {item.id}
             while ancestor is not None:
                 if ancestor.id in visited:
-                    raise AppError("ACCESS_HIERARCHY_CYCLE", "Hierarchy atribut tidak boleh membentuk siklus.")
+                    raise AppError(
+                        "ACCESS_HIERARCHY_CYCLE", "Hierarchy atribut tidak boleh membentuk siklus."
+                    )
                 visited.add(ancestor.id)
                 ancestor = await self._attribute(ancestor.parent_id) if ancestor.parent_id else None
             changes["parent_id"] = parent.id
@@ -401,6 +733,8 @@ class AccessService:
 
     async def create_assignment(self, user_id, data):
         target = await self._user(user_id)
+        if target.id == self.actor.id:
+            raise AppError("SELF_ACCESS_CHANGE", "Assignment harus diberikan oleh admin lain.", 422)
         if not target.is_active:
             raise AppError("USER_INACTIVE", "Assignment tidak dapat diberikan kepada pengguna nonaktif.")
         attribute = await self._attribute(data.attribute_id)
@@ -416,7 +750,11 @@ class AccessService:
             )
         )
         if overlap:
-            raise AppError("ASSIGNMENT_PERIOD_OVERLAP", "Assignment aktif pada atribut dan periode tersebut sudah ada.", 409)
+            raise AppError(
+                "ASSIGNMENT_PERIOD_OVERLAP",
+                "Assignment aktif pada atribut dan periode tersebut sudah ada.",
+                409,
+            )
         item = await self.repo.add(
             UserAssignment,
             user_id=target.id,
@@ -455,6 +793,8 @@ class AccessService:
 
     async def revoke_assignment(self, assignment_id, data):
         item = await self.repo.get(UserAssignment, assignment_id, lock=True)
+        if item.user_id == self.actor.id:
+            raise AppError("SELF_ACCESS_CHANGE", "Assignment harus dicabut oleh admin lain.", 422)
         if item.revision != data.revision:
             raise AppError("STALE_REVISION", "Assignment telah berubah; muat ulang sebelum mencabut.", 409)
         if item.status == "REVOKED":
@@ -483,7 +823,12 @@ class AccessService:
         instant = at or now()
         if not target.is_active:
             return {
-                "user": {"id": target.id, "username": target.username, "role": target.role, "is_active": False},
+                "user": {
+                    "id": target.id,
+                    "username": target.username,
+                    "role": target.role,
+                    "is_active": False,
+                },
                 "as_of": instant,
                 "actions": [],
                 "dimensions": {},
@@ -529,7 +874,12 @@ class AccessService:
         for _, bundle in grant_rows:
             actions.update(bundle.actions)
         return {
-            "user": {"id": target.id, "username": target.username, "role": target.role, "is_active": target.is_active},
+            "user": {
+                "id": target.id,
+                "username": target.username,
+                "role": target.role,
+                "is_active": target.is_active,
+            },
             "as_of": instant,
             "actions": sorted(actions),
             "dimensions": dimensions,
@@ -542,6 +892,7 @@ class AccessService:
         effective = await self.effective_access(target_id, data.at)
 
         def finish(decision):
+            decision.setdefault("policy_revisions", [])
             audit(
                 self.session,
                 self.actor,
@@ -557,14 +908,16 @@ class AccessService:
             return decision
 
         if not effective["user"]["is_active"]:
-            return finish({
-                "allowed": False,
-                "reason_code": "USER_INACTIVE",
-                "policy_ids": [],
-                "row_scope": {},
-                "columns": {},
-                "export_allowed": False,
-            })
+            return finish(
+                {
+                    "allowed": False,
+                    "reason_code": "USER_INACTIVE",
+                    "policy_ids": [],
+                    "row_scope": {},
+                    "columns": {},
+                    "export_allowed": False,
+                }
+            )
 
         query = (
             select(AccessPolicy)
@@ -601,58 +954,76 @@ class AccessService:
         ]
         denied = [policy for policy in matched if policy.effect == "DENY"]
         if denied:
-            return finish({
-                "allowed": False,
-                "reason_code": "EXPLICIT_DENY",
-                "policy_ids": [policy.id for policy in denied],
-                "row_scope": {},
-                "columns": {},
-                "export_allowed": False,
-            })
+            return finish(
+                {
+                    "allowed": False,
+                    "reason_code": "EXPLICIT_DENY",
+                    "policy_ids": [policy.id for policy in denied],
+                    "policy_revisions": [{"id": policy.id, "revision": policy.revision} for policy in denied],
+                    "row_scope": {},
+                    "columns": {},
+                    "export_allowed": False,
+                }
+            )
         if data.action not in effective["actions"]:
-            return finish({
-                "allowed": False,
-                "reason_code": "ACTION_NOT_GRANTED",
-                "policy_ids": [],
-                "row_scope": {},
-                "columns": {},
-                "export_allowed": False,
-            })
+            return finish(
+                {
+                    "allowed": False,
+                    "reason_code": "ACTION_NOT_GRANTED",
+                    "policy_ids": [],
+                    "row_scope": {},
+                    "columns": {},
+                    "export_allowed": False,
+                }
+            )
         allowed = [policy for policy in matched if policy.effect == "ALLOW"]
         if not allowed:
-            return finish({
-                "allowed": False,
-                "reason_code": "DEFAULT_DENY",
-                "policy_ids": [],
-                "row_scope": {},
-                "columns": {},
-                "export_allowed": False,
-            })
+            return finish(
+                {
+                    "allowed": False,
+                    "reason_code": "DEFAULT_DENY",
+                    "policy_ids": [],
+                    "row_scope": {},
+                    "columns": {},
+                    "export_allowed": False,
+                }
+            )
         if data.action == "EXPORT" and not all(policy.export_allowed for policy in allowed):
-            return finish({
-                "allowed": False,
-                "reason_code": "EXPORT_NOT_ALLOWED",
-                "policy_ids": [policy.id for policy in allowed],
-                "row_scope": {},
-                "columns": {},
-                "export_allowed": False,
-            })
+            return finish(
+                {
+                    "allowed": False,
+                    "reason_code": "EXPORT_NOT_ALLOWED",
+                    "policy_ids": [policy.id for policy in allowed],
+                    "policy_revisions": [
+                        {"id": policy.id, "revision": policy.revision} for policy in allowed
+                    ],
+                    "row_scope": {},
+                    "columns": {},
+                    "export_allowed": False,
+                }
+            )
         row_scope = {}
         for policy in allowed:
             for field, values in policy.row_scope.items():
                 permitted = set(values)
-                row_scope[field] = sorted(permitted if field not in row_scope else set(row_scope[field]) & permitted)
+                row_scope[field] = sorted(
+                    permitted if field not in row_scope else set(row_scope[field]) & permitted
+                )
         rank = {"VISIBLE": 0, "MASKED": 1, "HIDDEN": 2}
         columns = {}
         for policy in allowed:
             for field, visibility in policy.column_rules.items():
                 if field not in columns or rank[visibility] > rank[columns[field]]:
                     columns[field] = visibility
-        return finish({
-            "allowed": True,
-            "reason_code": "POLICY_MATCH",
-            "policy_ids": [policy.id for policy in allowed],
-            "row_scope": row_scope,
-            "columns": columns,
-            "export_allowed": data.action == "EXPORT" and all(policy.export_allowed for policy in allowed),
-        })
+        return finish(
+            {
+                "allowed": True,
+                "reason_code": "POLICY_MATCH",
+                "policy_ids": [policy.id for policy in allowed],
+                "policy_revisions": [{"id": policy.id, "revision": policy.revision} for policy in allowed],
+                "row_scope": row_scope,
+                "columns": columns,
+                "export_allowed": data.action == "EXPORT"
+                and all(policy.export_allowed for policy in allowed),
+            }
+        )

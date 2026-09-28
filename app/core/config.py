@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     jwt_access_minutes: int = Field(30, ge=1, le=1440)
     jwt_refresh_days: int = Field(7, ge=1, le=90)
     bootstrap_tenant: str = "default"
-    bootstrap_username: str = "admin"
+    bootstrap_username: str = "admin_etl@kanjabung.com"
+    bootstrap_full_name: str = "ETL Administrator"
     bootstrap_password: SecretStr = SecretStr("")
     google_service_account_file: str = "secrets/google-service-account.json"
     google_credential_ref: str = "default"

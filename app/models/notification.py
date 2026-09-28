@@ -22,6 +22,9 @@ class OperationalNotification(TenantEntity, Base):
     title: Mapped[str] = mapped_column(String(200))
     message: Mapped[str] = mapped_column(Text)
     details: Mapped[dict] = mapped_column(JSONB, default=dict)
+    recipient_user_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.app_user.id"), nullable=True, index=True
+    )
     acknowledged_by: Mapped[str | None] = mapped_column(
         Uuid(as_uuid=False), ForeignKey("platform.app_user.id")
     )

@@ -31,6 +31,7 @@ def test_import_needs_input_creates_persistent_notification():
 
 async def test_acknowledge_is_idempotent_and_audited():
     session = Mock()
+    session.scalar = AsyncMock()
     user = SimpleNamespace(
         tenant_id="11111111-1111-4111-8111-111111111111",
         id="33333333-3333-4333-8333-333333333333",
@@ -46,11 +47,12 @@ async def test_acknowledge_is_idempotent_and_audited():
         title="Job gagal",
         message="Periksa kode kegagalan.",
         details={"error_code": "JOB_EXECUTION_FAILED"},
+        recipient_user_id=user.id,
         acknowledged_by=None,
         acknowledged_at=None,
     )
     service = NotificationService(session, user)
-    service.repo.get = AsyncMock(return_value=notification)
+    session.scalar.return_value = notification
 
     result = await service.acknowledge(notification.id)
 

@@ -147,12 +147,25 @@ Role UI bukan hierarki bebas: misalnya `TECHNICAL_APPROVER` dapat approve tetapi
 | GET | `/access/users/{user_id}/effective` | A | —; query at opsional | 200 | Effective access user |
 | GET | `/access/me/effective` | Auth | —; query at opsional | 200 | Effective access akun aktif |
 
+| GET | `/access/request-options` | Auth | — | 200 | Atribut/bundle aktif yang dapat diminta |
+| POST | `/access/requests` | Auth | AccessRequestCreate | 201 | AccessRequest PENDING |
+| GET | `/access/requests/mine` | Auth | —; status/offset/limit | 200 | AccessRequest[] milik akun |
+| GET | `/access/requests` | A | —; status/offset/limit | 200 | AccessRequest[] tenant |
+| POST | `/access/requests/{request_id}/approve` | A | AccessRequestDecision | 200 | Request APPROVED + grant |
+| POST | `/access/requests/{request_id}/reject` | A | AccessRequestReject | 200 | Request REJECTED |
+| POST | `/access/requests/{request_id}/cancel` | Pemohon | AccessRequestDecision | 200 | Request CANCELLED |
+| POST | `/access/requests/{request_id}/revoke` | Pemohon/A | AccessRequestReject | 200 | Request/grant REVOKED |
+
+Assignment tidak boleh diberikan atau dicabut oleh admin terhadap dirinya sendiri;
+kedua operasi mengembalikan `422 SELF_ACCESS_CHANGE`. Validasi ini tetap ditegakkan
+backend walaupun tombol frontend sudah dinonaktifkan.
+
 ### Login, refresh, dan logout
 
 Login adalah JSON biasa, bukan OAuth form:
 
 ```json
-{"tenant_code":"default","username":"admin","password":"PASSWORD_LOGIN_ANDA"}
+{"tenant_code":"default","username":"admin_etl@kanjabung.com","password":"PASSWORD_LOGIN_ANDA"}
 ```
 
 Respons lengkap:
@@ -181,6 +194,36 @@ Refresh body:
 Refresh token **sekali pakai dan dirotasi**: simpan kedua token baru, jangan memakai refresh lama lagi. Jika beberapa request mendapat 401 bersamaan, lakukan satu refresh bersama (single-flight), lalu retry request yang memang ditolak autentikasi satu kali. Jika refresh gagal, hapus session dan arahkan login. Jangan me-refresh berulang untuk 403/422 atau otomatis mengulangi mutation yang timeout tanpa mengetahui apakah sudah berhasil.
 
 Logout menaikkan token version akun dan mencabut **semua token akun**, bukan hanya tab browser saat ini. Ubah password juga mencabut token dan meminta login ulang.
+
+Tidak ada endpoint registrasi publik. `PLATFORM_ADMIN` mendaftarkan akun tenant melalui
+`POST /users`, memilih role awal, lalu melengkapi assignment/bundle BE-16. Admin pertama
+dibuat dari variabel `BOOTSTRAP_*` dengan `python -m app.cli bootstrap`. Perintah ulang
+tidak mengubah password; pemulihan eksplisit memakai
+`python -m app.cli bootstrap --reset-existing-password` dan mencabut token akun lama.
+Frontend menyediakan `/login`, registrasi internal `/register` (alias
+`/admin/users/new`), serta pengaturan role/status/row scope di `/admin/users`.
+
+AccessRequestCreate memilih tepat satu target sesuai `request_type`:
+
+```json
+{
+  "request_type": "ATTRIBUTE",
+  "subject_user_id": "22222222-2222-4222-8222-222222222222",
+  "attribute_id": "11111111-1111-4111-8111-111111111111",
+  "valid_from": "2026-10-01T00:00:00Z",
+  "valid_to": "2027-01-01T00:00:00Z",
+  "business_reason": "Membutuhkan laporan finance untuk penutupan triwulan."
+}
+```
+
+`request_type` adalah `ATTRIBUTE` atau `PERMISSION_BUNDLE`; tipe kedua memakai
+`bundle_id`. `subject_user_id` opsional dan default ke akun pemohon; hanya
+`PLATFORM_ADMIN` yang dapat mengisinya untuk pengguna lain. Periode wajib berurutan dan maksimum 366 hari. Request `PENDING` tidak
+memberi akses. Approval hanya oleh `PLATFORM_ADMIN` berbeda dari pemohon dan secara
+atomik membuat assignment/grant bertanggal. Duplicate pending menghasilkan
+`409 ACCESS_REQUEST_DUPLICATE`; revision lama menghasilkan `409 STALE_REVISION`.
+Reject dan revoke memerlukan `note` minimal 3 karakter. Revoke mencabut grant terkait
+dan seluruh token lama pengguna.
 
 PasswordChange:
 
@@ -1732,10 +1775,13 @@ aktif, jumlah notifikasi belum diakui, serta waktu pembuatan ringkasan.
 ```
 
 `GET /notifications?unacknowledged_only=true&offset=0&limit=50` mengembalikan inbox
-tenant. Kind aktif adalah `JOB_FAILED`, `IMPORT_NEEDS_INPUT`, dan `IMPORT_FAILED` dengan
-severity `WARN` atau `ERROR`. Response tidak memuat raw data sumber.
+tenant. Kind aktif adalah `JOB_FAILED`, `IMPORT_NEEDS_INPUT`, `IMPORT_FAILED`, dan
+`ACCESS_REQUEST_PENDING`. Notifikasi dapat tenant-wide atau diarahkan melalui
+`recipient_user_id`; notifikasi terarah hanya dihitung dan dikembalikan kepada penerima.
+Response tidak memuat raw data sumber.
 
 `POST /notifications/{notification_id}/acknowledge` tidak memakai body. Endpoint
 mengisi pengguna/waktu acknowledge dan menulis audit. Pemanggilan ulang sukses tanpa
-menggandakan audit. Resource tenant lain menghasilkan `RESOURCE_NOT_FOUND` (404).
+menggandakan audit. Resource tenant lain atau notifikasi yang ditujukan kepada pengguna
+lain menghasilkan `RESOURCE_NOT_FOUND` (404).
 Role ketiga endpoint: editor source/data, platform admin, dan technical approver.

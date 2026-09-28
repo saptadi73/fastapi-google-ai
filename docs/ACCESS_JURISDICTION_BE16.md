@@ -9,17 +9,17 @@ pada evaluator dan produk dari sumber yang memiliki metadata BE16; sumber legacy
 metadata masih memakai kontrol lama. Kepemilikan, role platform, dan keberadaan
 relationship tidak otomatis memberi akses membaca produk BE16.
 
-## Status audit 27 September 2026
+## Status audit 28 September 2026
 
 Tahap 1–3 dan enforcement SOURCE tahap 4 tersedia di kode, Vue, dan database test.
-Migrasi `j0f3b6c9e1a8` sampai `p6f9b2c5d7a4` belum dibuktikan pada database aplikasi
+Migrasi `j0f3b6c9e1a8` sampai `s9i2e5f8a0d7` belum dibuktikan pada database aplikasi
 atau deployment production. Status `POLICY_APPROVED` hanya catatan aktivasi sumber;
 izin pengguna, policy yang masih berlaku, serta deny diperiksa ulang pada setiap
 lookup produk sebelum cache. Implementasi ini **belum memenuhi default-deny penuh**.
 
 Terbuka: policy template sumber, backfill/review semua sumber legacy, kebijakan
 baris/kolom dan masking yang benar-benar diterapkan, klasifikasi sensitivitas/clearance,
-akses admin/artefak serta resource non-DataProduct, access request/delegasi,
+akses admin/artefak serta resource non-DataProduct,
 invalidasi cache lintas jalur, emergency break-glass, dan acceptance security/owner.
 Tes browser memakai mock API; tes PostgreSQL memakai database test terpisah.
 
@@ -41,7 +41,7 @@ Pemetaan implementasi saat ini:
 | Penugasan pengguna | `platform.user_assignment` bertanggal efektif dan teraudit | Delegasi admin dan approval assignment berisiko belum ada. |
 | Metadata/kepemilikan sumber | `platform.data_source.access_metadata` JSONB + `access_review_status`/`access_revision` | Belum model `resource_classification` terpisah; legacy dapat bernilai null. `owner_user_id` lama adalah pendaftar operasional, bukan otomatis pemilik bisnis. |
 | Policy dan binding | `platform.access_policy` dan `platform.access_policy_binding` | Binding baru divalidasi tenant/kode saat dibuat; binding lama belum diaudit ulang. |
-| Permintaan akses sementara | Belum ada model/API `access_request` | Tidak boleh disamakan dengan permission grant atau review metadata sumber. |
+| Permintaan akses sementara | `platform.access_request` dan API `/access/requests` | Mendukung atribut/bundle, delegasi admin, approval admin berbeda, expiry, cancel/reject/revoke, serta inbox reviewer terarah. |
 
 ## User Access Management
 
@@ -64,6 +64,16 @@ Permission bundle hanya menentukan aksi; bundle tidak otomatis memberikan datase
 Registry tenant-scoped memakai UUID stabil dan kode unik. Assignment dan policy memakai
 `valid_from`, `valid_to`, status, revision, actor, serta audit.
 
+Login tersedia untuk seluruh akun aktif. Registrasi akun bersifat internal dan hanya
+dapat dilakukan `PLATFORM_ADMIN` melalui `POST /users` atau halaman frontend `/register`;
+pengaturan role/status/row scope tersedia di `/admin/users`. Tidak ada registrasi publik
+yang dapat memilih role sendiri. Instalasi awal membuat admin dari
+`BOOTSTRAP_TENANT`, `BOOTSTRAP_USERNAME`, `BOOTSTRAP_FULL_NAME`, dan
+`BOOTSTRAP_PASSWORD` melalui `python -m app.cli bootstrap`. Perintah ini idempotent,
+memastikan akun aktif dan ber-role `PLATFORM_ADMIN`, serta tidak mengubah password akun
+yang sudah ada kecuali operator menambahkan `--reset-existing-password`. Reset tersebut
+menaikkan `token_version`, sehingga seluruh token akun lama tidak dapat dipakai lagi.
+
 ## Evaluasi
 
 Target evaluator memakai `subject`, `action`, `resource`, dan `context`. Respons
@@ -74,19 +84,40 @@ preview yang tersedia saat ini berbentuk:
   "allowed": true,
   "reason_code": "POLICY_MATCH",
   "policy_ids": ["UUID"],
+  "policy_revisions": [{"id": "UUID", "revision": 3}],
   "row_scope": {},
   "columns": {},
   "export_allowed": false
 }
 ```
 
-Preview dapat menghasilkan `row_scope` dan `columns` dari policy, tetapi compiler
-BE16 belum menerapkannya: jalur produk BE16 menolak keputusan dengan kontrol tersebut.
-Policy tidak menerima SQL mentah. Hasil saat ini memakai `policy_ids`, bukan satu
-`policy_id`, dan belum memuat `policy_revision` atau export limit. Masking di preview,
+Preview dapat menghasilkan `row_scope` dan `columns` dari policy. Compiler structured
+query produk/join BE16 menerapkan row scope secara parameterized dan menghasilkan
+placeholder `[MASKED]` untuk dimension masked; field hidden/non-visible ditolak pada
+metric, filter, sort, dan join key. Kolom klasifikasi PII `MEDIUM/HIGH` default hidden
+pada produk BE16 kecuali policy memberi visibility eksplisit. Policy tidak menerima SQL
+mentah. Hasil memakai `policy_ids` dan pasangan
+`policy_revisions` agar perubahan policy dapat ditelusuri. Export limit belum tersedia.
+Masking di preview,
 error, filter, sort, join, lineage, artefak, dan export masih target berikutnya.
 Join produk yang diizinkan memakai lookup setiap sisi; policy kolom paling ketat belum
 diterapkan.
+
+## Permintaan akses sementara
+
+Migration `q7g0c3d6e8b5` menambahkan permintaan atribut yurisdiksi atau permission bundle;
+`r8h1d4e7f9c6` menambah `subject_user_id` untuk delegasi oleh admin. Pengguna biasa hanya
+dapat meminta untuk dirinya sendiri. Pemohon wajib memberi alasan bisnis dan periode maksimum 366 hari.
+Status awal `PENDING` tidak memberi akses. `PLATFORM_ADMIN` lain dapat approve/reject;
+approval membuat `user_assignment` atau `user_permission_grant` dalam transaksi yang
+sama. Permintaan dapat dibatalkan sebelum keputusan, dan akses approved dapat dicabut
+oleh pemohon atau admin. Revoke mencabut grant terkait dan menaikkan `token_version`.
+Semua lookup tenant-scoped, revision conflict menghasilkan 409, serta target lintas
+tenant/tidak ada tetap 404. Request delegasi tetap harus diputuskan admin kedua.
+Migration `s9i2e5f8a0d7` menambahkan penerima spesifik pada notifikasi operasional. Setiap
+admin aktif yang boleh mereview, selain admin pemohon, memperoleh notifikasi
+`ACCESS_REQUEST_PENDING`. Notifikasi tidak terlihat dan tidak dapat diakui pengguna lain,
+lalu diselesaikan otomatis ketika request di-approve, reject, atau cancel.
 
 ## Registrasi Google Sheet
 
@@ -102,9 +133,10 @@ di katalog/query bisnis sampai aktivasi SOURCE, lalu hak setiap pengguna diperik
 Untuk produk BE16, katalog dan template/relationship yang dikirim ke NL2SQL dibatasi
 berdasarkan SOURCE yang dapat diakses; plan model diperiksa ulang oleh compiler.
 Lookup otorisasi dilakukan sebelum membaca cache hasil query, sehingga revoke dan
-expiry menolak akses meskipun hasil lama masih ada di cache. Revision policy/assignment
-belum masuk semua cache key atau mekanisme invalidasi lintas jalur. Audit keputusan
-menyimpan reason code aman tanpa nilai baris/PII mentah.
+expiry menolak akses meskipun hasil lama masih ada di cache. Cache query memasukkan
+`token_version` serta pasangan policy/revision SOURCE untuk produk dan join; cache
+lintas jalur lain masih memerlukan invalidasi terpusat. Audit keputusan menyimpan
+reason code aman tanpa nilai baris/PII mentah.
 
 ## Tahapan rollout
 
@@ -245,6 +277,11 @@ PostgreSQL memeriksa bypass query/export langsung, katalog/NL2SQL, SoD aktivasi,
 perubahan assignment, ketiga scope, DENY override, row-scope, dan revoke. Klasifikasi
 sensitivitas belum otomatis memberi masking/clearance. Rollout production dan
 acceptance security tetap terpisah.
+
+Guard SoD assignment kini konsisten dengan permission grant: admin tidak dapat membuat
+atau mencabut assignment miliknya sendiri. Backend mengembalikan `422
+SELF_ACCESS_CHANGE`; UI Vue menonaktifkan aksi yang sama untuk menghindari request yang
+jelas akan ditolak, tetapi validasi server tetap wajib untuk direct API.
 
 ### Matriks enforcement saat ini
 
