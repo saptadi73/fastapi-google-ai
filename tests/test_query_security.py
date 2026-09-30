@@ -146,16 +146,18 @@ def test_be16_catalog_hides_columns_and_metrics_without_access():
             {"target_column": "public_field", "pii_classification": "NONE"},
             {"target_column": "secret_field", "pii_classification": "HIGH"},
             {"target_column": "masked_field", "pii_classification": "LOW"},
+            {"target_column": "policy_hidden_field", "pii_classification": "LOW"},
         ],
-        dimensions=["public_field", "secret_field", "masked_field"],
+        dimensions=["public_field", "secret_field", "masked_field", "policy_hidden_field"],
         metrics=[
             {"code": "public_metric", "column": "public_field"},
             {"code": "secret_metric", "column": "secret_field"},
+            {"code": "policy_hidden_metric", "column": "policy_hidden_field"},
         ],
     )
     view = SemanticRepository._sanitize_product(
         product,
-        {"columns": {"masked_field": "MASKED"}},
+        {"columns": {"masked_field": "MASKED", "policy_hidden_field": "HIDDEN"}},
     )
     assert [item["target_column"] for item in view["columns"]] == ["public_field", "masked_field"]
     assert view["columns"][1]["access_visibility"] == "MASKED"

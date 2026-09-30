@@ -2312,3 +2312,135 @@ async def test_scheduled_sync_review_refreshes_and_reuses_batch(context, config_
         ).all()
         assert len(scheduled_jobs) == 2
         assert scheduled_jobs[-1].result["reviews"][0]["reused"] is True
+
+
+async def test_ai_task_policy_version_history_is_tenant_scoped(context, monkeypatch):
+    ctx = context
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_allowed_models", ["history-model"])
+    body = {
+        "code": "history_policy",
+        "purpose": "ETL_CONFIG",
+        "prompt_version": "etl_configuration_v1.md",
+        "model": "history-model",
+        "allowed_models": ["history-model"],
+        "data_product_code": None,
+        "max_context_chars": 10000,
+        "daily_budget_usd": None,
+        "fallback_model": None,
+    }
+
+    created = await request(ctx, "POST", "/ai-task-policies", expected=201, data=body)
+    policy_id = created["data"]["id"]
+    initial = await request(ctx, "GET", f"/ai-task-policies/{policy_id}/versions")
+    assert [(item["revision_no"], item["action"]) for item in initial["data"]] == [(1, "CREATED")]
+
+    updated = await request(
+        ctx,
+        "PATCH",
+        f"/ai-task-policies/{policy_id}",
+        data={**body, "model": "history-model", "revision_no": 1},
+    )
+    assert updated["data"]["revision_no"] == 2
+    await request(
+        ctx,
+        "POST",
+        f"/ai-task-policies/{policy_id}/approve",
+        who="approver",
+        data={"revision_no": 2, "comment": "reviewed"},
+    )
+
+    latest = await request(
+        ctx, "GET", f"/ai-task-policies/{policy_id}/versions?offset=0&limit=2"
+    )
+    assert [(item["revision_no"], item["action"]) for item in latest["data"]] == [
+        (3, "APPROVED"),
+        (2, "UPDATED"),
+    ]
+    assert latest["meta"] == {"offset": 0, "limit": 2}
+    assert "api_key" not in latest["data"][0]["snapshot_json"]
+    await request(ctx, "GET", f"/ai-task-policies/{policy_id}/versions", who="outsider", expected=404)
+
+
+async def test_ai_task_policy_etl_and_taxonomy_scopes(context, config_data, monkeypatch):
+    ctx = context
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_allowed_models", ["scoped-policy-model"])
+    source_id, _, _ = await onboard(ctx, config_data, legacy_source=False)
+    taxonomy = await request(
+        ctx,
+        "POST",
+        "/taxonomies",
+        expected=201,
+        data={"code": "scoped_regions", "name": "Scoped regions"},
+    )
+    taxonomy_id = taxonomy["data"]["id"]
+    await request(ctx, "POST", f"/taxonomies/{taxonomy_id}/approve", who="approver")
+
+    source_policy = await request(
+        ctx,
+        "POST",
+        "/ai-task-policies",
+        expected=201,
+        data={
+            "code": "source_scoped_etl",
+            "purpose": "ETL_CONFIG",
+            "prompt_version": "etl_configuration_v1.md",
+            "model": "scoped-policy-model",
+            "allowed_models": ["scoped-policy-model"],
+            "data_source_id": source_id,
+            "max_context_chars": 10000,
+        },
+    )
+    await request(
+        ctx,
+        "POST",
+        "/ai-task-policies",
+        who="outsider",
+        expected=404,
+        data={
+            "code": "foreign_taxonomy_scope",
+            "purpose": "TAXONOMY_RECOMMEND",
+            "prompt_version": "taxonomy_recommend_v1.md",
+            "model": "scoped-policy-model",
+            "allowed_models": ["scoped-policy-model"],
+            "taxonomy_id": taxonomy_id,
+            "max_context_chars": 10000,
+        },
+    )
+    taxonomy_policy = await request(
+        ctx,
+        "POST",
+        "/ai-task-policies",
+        expected=201,
+        data={
+            "code": "taxonomy_scoped_recommend",
+            "purpose": "TAXONOMY_RECOMMEND",
+            "prompt_version": "taxonomy_recommend_v1.md",
+            "model": "scoped-policy-model",
+            "allowed_models": ["scoped-policy-model"],
+            "taxonomy_id": taxonomy_id,
+            "max_context_chars": 10000,
+        },
+    )
+
+    assert source_policy["data"]["data_source_id"] == source_id
+    assert source_policy["data"]["taxonomy_id"] is None
+    assert taxonomy_policy["data"]["taxonomy_id"] == taxonomy_id
+    assert taxonomy_policy["data"]["data_source_id"] is None
+    await request(
+        ctx,
+        "POST",
+        "/ai-task-policies",
+        who="outsider",
+        expected=404,
+        data={
+            "code": "foreign_source_scope",
+            "purpose": "ETL_CONFIG",
+            "prompt_version": "etl_configuration_v1.md",
+            "model": "scoped-policy-model",
+            "allowed_models": ["scoped-policy-model"],
+            "data_source_id": source_id,
+            "max_context_chars": 10000,
+        },
+    )

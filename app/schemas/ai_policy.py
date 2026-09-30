@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, model_validator
 
@@ -18,6 +19,8 @@ class AITaskPolicyCreate(StrictModel):
     model: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$")
     allowed_models: list[str] = Field(min_length=1, max_length=20)
     data_product_code: str | None = Field(default=None, pattern=r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
+    data_source_id: UUID | None = None
+    taxonomy_id: UUID | None = None
     max_context_chars: int = Field(default=200_000, ge=1_000, le=2_000_000)
     daily_budget_usd: float | None = Field(default=None, gt=0, le=1_000_000)
     fallback_model: str | None = Field(
@@ -34,6 +37,10 @@ class AITaskPolicyCreate(StrictModel):
             raise ValueError("allowed_models must be unique")
         if self.data_product_code is not None and self.purpose != "NL2SQL":
             raise ValueError("data_product_code is only supported for NL2SQL")
+        if self.data_source_id is not None and self.purpose != "ETL_CONFIG":
+            raise ValueError("data_source_id is only supported for ETL_CONFIG")
+        if self.taxonomy_id is not None and self.purpose != "TAXONOMY_RECOMMEND":
+            raise ValueError("taxonomy_id is only supported for TAXONOMY_RECOMMEND")
         if self.fallback_model is not None:
             if self.fallback_model == self.model:
                 raise ValueError("fallback_model must differ from model")

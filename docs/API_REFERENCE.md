@@ -971,9 +971,10 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | POST | `/semantic/query-templates/{template_id}/validate` | D | — | 200 | SavedQuery VALIDATED |
 | POST | `/semantic/query-templates/{template_id}/activate` | D | — | 200 | SavedQuery ACTIVE |
 | GET | `/ai-task-policies` | Auth | — | 200 | Policy task AI tenant-scoped |
-| POST | `/ai-task-policies` | E | AITaskPolicyCreate | 201 | Policy DRAFT; model harus allowlist server |
-| PATCH | `/ai-task-policies/{policy_id}` | E | AITaskPolicyUpdate | 200 | Edit hanya DRAFT; optimistic revision; approval dibersihkan |
-| POST | `/ai-task-policies/{policy_id}/approve` | R | AITaskPolicyAction | 200 | Policy APPROVED |
+| GET | `/ai-task-policies/{policy_id}/versions` | Auth | offset, limit | 200 | Snapshot immutable; baseline dan revision terbaru lebih dahulu, tenant-scoped |
+| POST | `/ai-task-policies` | E | AITaskPolicyCreate | 201 | Policy DRAFT; semua model assignment harus allowlist server |
+| PATCH | `/ai-task-policies/{policy_id}` | E | AITaskPolicyUpdate | 200 | Edit hanya DRAFT; optimistic revision; semua model divalidasi; approval dibersihkan |
+| POST | `/ai-task-policies/{policy_id}/approve` | R | AITaskPolicyAction | 200 | Policy APPROVED setelah validasi ulang assignment dan prompt |
 | POST | `/ai-task-policies/{policy_id}/reject` | R | AITaskPolicyAction | 200 | Policy REJECTED |
 
 | GET | `/reports/sales/summary` | Auth | start_date, end_date wajib | 200 | QueryRow[] total sales |
@@ -982,15 +983,17 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | GET | `/reports/inventory/stock-position` | Auth | — | 200 | QueryRow[] stock |
 | GET | `/reports/data-quality/summary` | D | — | 200 | map status → jumlah issue |
 
-`data_product_code` pada AI task policy bersifat nullable dan hanya didukung untuk
-purpose `NL2SQL`. Nilai harus menunjuk DataProduct aktif yang accessible dalam tenant.
-Runtime memprioritaskan policy APPROVED yang cocok dengan produk, lalu policy global
-(`data_product_code=null`) sebagai fallback.
+AI task policy mendukung scope opsional per purpose: `data_source_id` untuk `ETL_CONFIG`,
+`taxonomy_id` untuk `TAXONOMY_RECOMMEND`, atau `data_product_code` untuk `NL2SQL`.
+Maksimal satu scope boleh diisi; masing-masing harus milik tenant aktif, dan taxonomy
+harus aktif/APPROVED. Runtime memprioritaskan policy APPROVED yang exact, lalu policy
+global (semua scope null) sebagai fallback.
 
 Payload policy juga menerima `max_context_chars` (1.000-2.000.000),
-`daily_budget_usd` opsional, dan `fallback_model` opsional. Fallback wajib berbeda dari
-model utama serta berada dalam allowlist policy dan server. Runtime menolak konteks
-berlebih sebelum provider dipanggil, mereservasi estimasi biaya seluruh percobaan,
+`daily_budget_usd` opsional, dan `fallback_model` opsional. Semua model dalam
+`allowed_models` harus ada pada allowlist server; fallback wajib berbeda dari model utama
+serta berada dalam allowlist policy dan server. Runtime menolak konteks berlebih sebelum
+provider dipanggil, mereservasi estimasi biaya prompt + konteks dan seluruh percobaan,
 membatasi budget harian policy mulai 00:00 UTC, dan mencoba fallback paling banyak satu
 kali. Ledger `audit.ai_usage_log.policy_id` mengaitkan biaya dengan policy yang dipakai.
 

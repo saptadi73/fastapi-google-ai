@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timezone
 
 from openai import AsyncOpenAI
-from sqlalchemy import case, func, or_, select, text
+from sqlalchemy import and_, case, func, or_, select, text
 
 from app.core.config import ROOT, get_settings
 from app.core.database import SessionFactory
@@ -18,8 +18,26 @@ PROMPT_PATHS = {
 
 
 class OpenAIService:
-    async def generate(self, user, purpose, context, schema, *, data_product_code=None):
+    async def generate(
+        self,
+        user,
+        purpose,
+        context,
+        schema,
+        *,
+        data_product_code=None,
+        data_source_id=None,
+        taxonomy_id=None,
+    ):
         s = get_settings()
+        if sum(value is not None for value in (data_product_code, data_source_id, taxonomy_id)) > 1:
+            raise AppError("AI_TASK_SCOPE_INVALID", "Satu task AI hanya menerima satu scope dataset.", 422)
+        if data_product_code is not None and purpose != "NL2SQL":
+            raise AppError("AI_TASK_SCOPE_INVALID", "Scope DataProduct hanya untuk NL2SQL.", 422)
+        if data_source_id is not None and purpose != "ETL_CONFIG":
+            raise AppError("AI_TASK_SCOPE_INVALID", "Scope source hanya untuk ETL_CONFIG.", 422)
+        if taxonomy_id is not None and purpose != "TAXONOMY_RECOMMEND":
+            raise AppError("AI_TASK_SCOPE_INVALID", "Scope taxonomy hanya untuk TAXONOMY_RECOMMEND.", 422)
         model = s.openai_model_etl_config if purpose in ("ETL_CONFIG", "TAXONOMY_RECOMMEND") else s.openai_model_nl2sql
         if not s.openai_api_key.get_secret_value() or not model:
             raise AppError("OPENAI_NOT_CONFIGURED", "Isi OPENAI_API_KEY dan OPENAI_MODEL_* pada .env.", 503)
@@ -31,14 +49,20 @@ class OpenAIService:
         fallback_model = None
         # A separate committed ledger persists usage even if downstream validation fails.
         async with SessionFactory() as usage_session, usage_session.begin():
-            policy_scope = (
-                or_(
-                    AITaskPolicy.data_product_code == data_product_code,
-                    AITaskPolicy.data_product_code.is_(None),
-                )
-                if data_product_code
-                else AITaskPolicy.data_product_code.is_(None)
+            requested_scope = []
+            if data_product_code is not None:
+                requested_scope.append(AITaskPolicy.data_product_code == data_product_code)
+            if data_source_id is not None:
+                requested_scope.append(AITaskPolicy.data_source_id == str(data_source_id))
+            if taxonomy_id is not None:
+                requested_scope.append(AITaskPolicy.taxonomy_id == str(taxonomy_id))
+            global_scope = and_(
+                AITaskPolicy.data_product_code.is_(None),
+                AITaskPolicy.data_source_id.is_(None),
+                AITaskPolicy.taxonomy_id.is_(None),
             )
+            policy_scope = or_(*requested_scope, global_scope)
+            scope_priority = case(*((condition, 1) for condition in requested_scope), else_=0)
             policy = await usage_session.scalar(
                 select(AITaskPolicy).where(
                     AITaskPolicy.tenant_id == user.tenant_id,
@@ -46,7 +70,7 @@ class OpenAIService:
                     AITaskPolicy.status == "APPROVED",
                     policy_scope,
                 ).order_by(
-                    case((AITaskPolicy.data_product_code == data_product_code, 1), else_=0).desc(),
+                    scope_priority.desc(),
                     AITaskPolicy.approved_at.desc(),
                     AITaskPolicy.created_at.desc(),
                 ).limit(1)
@@ -55,13 +79,23 @@ class OpenAIService:
                 policy_id = getattr(policy, "id", None)
                 policy_budget = getattr(policy, "daily_budget_usd", None)
                 fallback_model = getattr(policy, "fallback_model", None)
+                stored_scopes = [
+                    getattr(policy, "data_product_code", None),
+                    getattr(policy, "data_source_id", None),
+                    getattr(policy, "taxonomy_id", None),
+                ]
                 allowed_models = getattr(policy, "allowed_models", [])
                 server_models = (
                     set(s.openai_allowed_models)
                     | {s.openai_model_etl_config, s.openai_model_nl2sql}
                 ) - {""}
                 if (
-                    policy.model not in allowed_models
+                    sum(value is not None for value in stored_scopes) > 1
+                    or (stored_scopes[0] is not None and purpose != "NL2SQL")
+                    or (stored_scopes[1] is not None and purpose != "ETL_CONFIG")
+                    or (stored_scopes[2] is not None and purpose != "TAXONOMY_RECOMMEND")
+                    or policy.model not in allowed_models
+                    or not set(allowed_models).issubset(server_models)
                     or policy.model not in server_models
                     or policy.prompt_version != PROMPT_PATHS.get(purpose)
                     or (fallback_model and fallback_model == policy.model)
@@ -101,7 +135,8 @@ class OpenAIService:
                 reserve = (
                     attempts
                     * (
-                        len(context.encode()) * s.openai_input_usd_per_million
+                        (len(prompt.encode()) + len(context.encode()))
+                        * s.openai_input_usd_per_million
                         + s.openai_max_output_tokens * s.openai_output_usd_per_million
                     )
                 ) / 1_000_000

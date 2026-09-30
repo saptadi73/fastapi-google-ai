@@ -32,8 +32,8 @@ class TenantRepository:
             ).all()
         )
 
-    async def add(self, model, **values):
-        obj = model(tenant_id=self.tenant_id, **values)
+    async def add(self, entity_type, **values):
+        obj = entity_type(tenant_id=self.tenant_id, **values)
         self.session.add(obj)
         await self.session.flush()
         return obj

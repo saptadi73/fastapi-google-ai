@@ -1,8 +1,12 @@
 # Registry AI task policy BE-15
 
-Status: registry task/prompt/version, assignment model, batas konteks, budget harian,
-dan fallback model per task tersedia pada kode. Trigger sumber, masking khusus task,
-retention, dan provider live masih pekerjaan lanjutan. Jadwal, dependency, watermark,
+Status 30 September 2026: registry task/prompt/version, assignment model, batas konteks,
+budget harian, dan fallback model per task tersedia pada kode. Setiap model yang dicantumkan
+di assignment harus termasuk allowlist server; simpan dan approval menolak daftar yang
+tidak valid. Estimasi budget mencakup prompt terdaftar, konteks, output maksimum, serta
+jumlah percobaan fallback. Runtime menolak policy APPROVED tersimpan yang assignment
+modelnya tidak valid. Trigger sumber, masking khusus task, retention, scope dataset
+dan provider live masih pekerjaan lanjutan. Jadwal, dependency, watermark,
 statistik proses, serta notifikasi operasional persisten sudah tersedia pada BE-15.
 
 ## Endpoint
@@ -12,16 +16,25 @@ Semua path relatif terhadap `/api/v1` dan tenant-scoped.
 | Method | Path | Hak | Body | Hasil |
 |---|---|---|---|---|
 | GET | `/ai-task-policies` | Auth | - | Policy tenant |
+| GET | `/ai-task-policies/{policy_id}/versions` | Auth | `offset`, `limit` | Riwayat immutable; baseline dan revision terbaru lebih dahulu |
 | POST | `/ai-task-policies` | Editor | `AITaskPolicyCreate` | Policy `DRAFT` |
 | PATCH | `/ai-task-policies/{policy_id}` | Editor | `AITaskPolicyUpdate` | Edit policy `DRAFT` |
 | POST | `/ai-task-policies/{policy_id}/approve` | Reviewer | `AITaskPolicyAction` | Policy `APPROVED` |
 | POST | `/ai-task-policies/{policy_id}/reject` | Reviewer | `AITaskPolicyAction` | Policy `REJECTED` |
 
 PATCH mengganti assignment draft secara utuh dan wajib membawa `revision_no` terbaru.
+Riwayat versi menyimpan snapshot immutable untuk `BASELINE`, `CREATED`, `UPDATED`,
+`APPROVED`, dan `REJECTED`, berurutan berdasarkan revision. Snapshot memuat assignment
+policy dan status, bukan secret provider. Migration `t0j3f6a9c1e8` membuat baseline dari
+kondisi policy saat migration; perubahan sebelum baseline tidak direkonstruksi.
+
 Edit ditolak untuk policy yang bukan DRAFT, menaikkan revision, membersihkan bukti
-approval, dan menulis audit `ai_task_policy.updated`. Approval menaikkan revision dan
-membutuhkan role reviewer sesuai kebijakan role aplikasi. API key tidak pernah diterima
-oleh payload ini dan tidak disimpan di workbook atau tabel policy.
+approval, dan menulis audit `ai_task_policy.updated`. Create/edit memeriksa seluruh
+`allowed_models`, model utama, dan fallback terhadap allowlist server. Approval mengulang
+validasi allowlist, konsistensi model dengan daftar, fallback, serta mapping prompt purpose
+agar assignment tersimpan yang tidak valid tidak dapat disetujui. Approval menaikkan
+revision dan membutuhkan role reviewer sesuai kebijakan role aplikasi. API key tidak
+pernah diterima oleh payload ini dan tidak disimpan di workbook atau tabel policy.
 
 ## Purpose dan prompt
 
@@ -52,33 +65,42 @@ yang sempat diterima dan mengaitkannya ke `policy_id`.
 `max_context_chars` membatasi konteks antara 1.000 dan 2.000.000 karakter. Runtime
 menolak konteks berlebih dengan `AI_CONTEXT_LIMIT_EXCEEDED` sebelum memanggil provider.
 `daily_budget_usd` opsional membatasi estimasi biaya harian policy. Pemeriksaan memakai
-ledger policy sejak 00:00 UTC dan reservasi worst-case untuk model utama plus fallback.
+ledger policy sejak 00:00 UTC dan reservasi worst-case untuk prompt developer terdaftar,
+konteks, output maksimum, serta model utama plus fallback.
 Pricing input/output harus dikonfigurasi jika budget policy aktif. Pelanggaran budget
 policy menghasilkan `AI_TASK_BUDGET_EXCEEDED`; budget tenant tetap diperiksa terpisah.
 
-## Scope data product NL2SQL
+## Scope dataset per purpose
 
-`data_product_code` opsional mengikat policy purpose `NL2SQL` ke satu DataProduct aktif
-yang dapat diakses editor. Purpose lain wajib memakai null karena runtime ETL/taxonomy
-belum mempunyai identitas DataProduct yang konsisten. Foreign key mencakup tenant dan
-kode produk sehingga assignment lintas tenant tidak dapat disimpan.
+Policy dapat bersifat global atau diikat ke satu dataset dengan tepat satu scope field:
 
-Saat NL2SQL dipanggil dengan produk eksplisit, runtime memilih policy APPROVED untuk
-produk tersebut terlebih dahulu lalu policy global purpose NL2SQL sebagai fallback.
-Jika pertanyaan hanya memiliki satu produk accessible, kode itu juga dipakai untuk
-pemilihan policy. Tanpa produk yang pasti, hanya policy global yang dipertimbangkan.
+- `ETL_CONFIG`: `data_source_id` menunjuk source tenant yang sama. Scope dipakai saat
+  membuat draft AI konfigurasi dan saat review import dari source tersebut.
+- `TAXONOMY_RECOMMEND`: `taxonomy_id` menunjuk taxonomy tenant yang aktif dan APPROVED.
+- `NL2SQL`: `data_product_code` menunjuk DataProduct aktif yang dapat diakses editor.
+
+Scope yang tidak cocok dengan purpose ditolak oleh schema. Foreign key tenant-aware dan
+validasi service mencegah scope lintas tenant. Runtime memilih policy APPROVED yang exact
+lebih dahulu, lalu policy global purpose sebagai fallback; tanpa identitas dataset hanya
+policy global yang dipertimbangkan.
+
+Saat NL2SQL dipanggil dengan produk eksplisit, atau taxonomy/ETL dipanggil dengan
+resource ID yang diketahui, runtime memilih policy scoped APPROVED terlebih dahulu.
+NL2SQL juga memakai satu-satunya produk accessible bila tidak ada produk eksplisit.
 
 Quota pengguna, timeout, structured output, dan ledger `audit.ai_usage_log` tetap
 berlaku. Registry ini belum mengatur trigger, masking per task, retry lebih dari satu
-fallback, atau assignment dataset ETL/taxonomy. Version history rinci belum tersedia;
-audit event menyimpan revision dan daftar field pada edit.
+fallback. Riwayat sebelum baseline tidak direkonstruksi; perubahan lifecycle setelah
+baseline memiliki snapshot lengkap.
 
 ## Rollout
 
 Migration `b2d5f8a1c3e7` membuat `platform.ai_task_policy`; migration
 `c3e6a9b2d4f1` menambahkan scope DataProduct tenant-aware; migration
 `d4f7b0c3e5a2` menambah kontrol runtime dan relasi ledger ke policy. Jalankan upgrade pada
-database test/target sesuai prosedur deployment dan verifikasi `alembic check`. Provider
+database test/target sesuai prosedur deployment dan verifikasi `alembic check`.
+Migration `t0j3f6a9c1e8` menambahkan history table/baseline dan `u1k4g7b0d2f9`
+menambahkan source/taxonomy scope. Provider
 OpenAI nyata belum dipanggil oleh test registry; test menggunakan provider fixture/mock.
 DDL migration diverifikasi offline per revision; penerapan pada PostgreSQL target tetap
 bagian rollout.

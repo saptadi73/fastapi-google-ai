@@ -7,7 +7,7 @@ from app.models.access import (
     UserAssignment,
     UserPermissionGrant,
 )
-from app.models.ai_policy import AITaskPolicy
+from app.models.ai_policy import AITaskPolicy, AITaskPolicyVersion
 from app.models.audit import AIUsage, AuditEvent
 from app.models.auth import RefreshToken, Tenant, User
 from app.models.base import Base
@@ -41,6 +41,7 @@ __all__ = [
     "OperationalNotification",
     "AIUsage",
     "AITaskPolicy",
+    "AITaskPolicyVersion",
     "AuditEvent",
     "RefreshToken",
     "Tenant",

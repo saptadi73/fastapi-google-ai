@@ -27,7 +27,13 @@ class AIConfigurationService:
                 "profile": profile.profile_json,
             }
         )
-        parsed, metadata = await OpenAIService().generate(self.user, "ETL_CONFIG", context, ETLConfiguration)
+        parsed, metadata = await OpenAIService().generate(
+            self.user,
+            "ETL_CONFIG",
+            context,
+            ETLConfiguration,
+            data_source_id=source.id,
+        )
         config = await ConfigurationService(self.session, self.user).create(
             sheet.id, parsed, "AI_DRAFT", **metadata
         )

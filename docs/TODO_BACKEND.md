@@ -1,6 +1,6 @@
 # TODO implementasi backend
 
-Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 27 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
+Acuan pengerjaan bertahap `fastapi-googlesheet-ai`, ditinjau ulang 30 September 2026. Dokumen ini adalah checklist pekerjaan, bukan pernyataan bahwa endpoint usulan sudah tersedia. Urutan utama: **klasifikasi → master baku → review import → referensi/FK → validasi AI setiap import → taxonomy → semantic/query lanjutan**.
 
 Gunakan ID `BE-xx` saat meminta implementasi, membuat PR, atau mencatat progres. Centang item hanya setelah kode, migrasi yang diperlukan, pengujian, dan kontrak API selesai. Tandai tahap sedang dikerjakan pada catatan progres; jangan mencentang hanya karena desainnya sudah dibuat.
 
@@ -316,27 +316,45 @@ PostgreSQL/deployment tetap pekerjaan berikutnya.
 
 Prasyarat: BE-10 dan BE-11; kontrak parameter mengikuti BE-12.
 
-- [~] Buat registry task/prompt/version dan assignment model melalui allowlist server; registry tenant-scoped, create/edit DRAFT dengan optimistic revision, approval, prompt mapping internal, runtime override OpenAI, audit edit, frontend, serta assignment DataProduct khusus NL2SQL dengan fallback global tersedia. API key tetap hanya dari environment; scope dataset ETL/taxonomy dan version history rinci masih terbuka.
-- [~] Tambahkan trigger, threshold, masking, budget, dan fallback policy per task dengan approval/audit perubahan; batas karakter konteks, budget harian policy, fallback model allowlisted satu kali, ledger policy, frontend, dan audit edit tersedia. Trigger sumber dan masking khusus task masih terbuka.
+- [~] Buat registry task/prompt/version dan assignment model melalui allowlist server; registry tenant-scoped, create/edit DRAFT dengan optimistic revision, approval, prompt mapping internal, runtime override OpenAI, audit edit, frontend, serta assignment per-purpose: DataProduct untuk NL2SQL, source untuk ETL_CONFIG, taxonomy APPROVED untuk TAXONOMY_RECOMMEND, semuanya dengan fallback global. Semua model divalidasi terhadap allowlist server saat simpan dan approval; snapshot immutable serta endpoint riwayat tersedia. API key tetap hanya dari environment.
+- [~] Tambahkan trigger, threshold, masking, budget, dan fallback policy per task dengan approval/audit perubahan; batas karakter konteks, budget harian policy yang mengestimasi prompt + konteks + output, fallback model allowlisted satu kali, ledger policy, frontend, dan audit edit tersedia. Trigger sumber dan masking khusus task masih terbuka.
 - [x] Tambahkan edit jadwal, timezone, dependency job, concurrency policy, dan incremental watermark yang commit hanya setelah load sukses; cron/timezone/revision/audit, policy `QUEUE_LATEST`/`SKIP_IF_RUNNING`, graph dependency tenant-aware, serta watermark INTEGER/DECIMAL/DATE/DATETIME pada ETL dan import review tersedia pada backend/frontend.
 - [~] Implementasikan retention snapshot/artifact/audit sesuai kebutuhan, statistik proses, dan notifikasi NEEDS_INPUT/FAILED; statistik tenant, inbox persisten, event transaksional, acknowledge teraudit, frontend, dan migration tersedia. Policy/worker retention masih terbuka.
 - [ ] Pertimbangkan SSE untuk progres serta similarity/embedding/query cache hanya dengan kebutuhan dan invalidation yang jelas.
-- [ ] Aktifkan parameter tab 07/08 bertahap; uji jadwal, retry, perubahan policy, batas biaya, dan pergantian kredensial.
+- [~] Aktifkan parameter tab 07/08 bertahap; keduanya tetap read-only pada XLSX. Tab 07 memuat trigger bebas serta alias model/prompt yang harus berasal dari registry server; tab 08 mencampur jadwal/watermark (sudah tersedia lewat API terpisah) dengan batch/retry yang belum memiliki kontrak runtime. Regression workbook memastikan edit kedua tab ditolak. Acceptance rotasi kredensial/provider nyata tetap memerlukan deployment.
 
 Selesai jika operasi berulang dapat dikonfigurasi, diamati, dan dipulihkan tanpa menghilangkan bukti review.
 
-Progres BE-15 (27 September 2026): registry `platform.ai_task_policy` dan endpoint
+Progres audit BE-15 (30 September 2026): registry `platform.ai_task_policy` dan endpoint
 list/create/edit/approve/reject tersedia untuk purpose `ETL_CONFIG`, `TAXONOMY_RECOMMEND`,
 dan `NL2SQL`. Prompt version hanya menerima file prompt yang dipetakan server;
-model harus termasuk allowlist server dari settings atau model purpose terkait.
+model dan seluruh `allowed_models` harus termasuk allowlist server dari settings atau model purpose terkait.
 `OpenAIService` memakai policy APPROVED bila tersedia dan tetap mengambil API key dari
 environment, bukan workbook/database. Kontrak lengkap: [AI task policy BE-15](AI_TASK_POLICIES_BE15.md).
 Migration `c3e6a9b2d4f1` menambahkan assignment DataProduct tenant-aware untuk NL2SQL;
 policy scoped diprioritaskan sebelum policy global. Migration `d4f7b0c3e5a2` menambah
 batas konteks, budget harian, fallback model, dan `audit.ai_usage_log.policy_id`.
-Runtime mereservasi estimasi biaya worst-case, menolak konteks sebelum provider, serta
-mencoba fallback allowlisted satu kali. Bukti tes dan dokumentasi diperbarui bersama
-frontend Governance; provider nyata belum dipanggil.
+Migration `t0j3f6a9c1e8` menambah `ai_task_policy_version`, baseline snapshot policy
+existing, serta GET versi tenant-scoped dengan pagination.
+Migration `u1k4g7b0d2f9` menambah scope source/taxonomy dengan foreign key tenant-aware;
+runtime memakai source ID untuk ETL/import review dan taxonomy ID untuk rekomendasi.
+Runtime mereservasi estimasi biaya worst-case termasuk prompt terdaftar, menolak konteks
+atau budget sebelum provider, serta mencoba fallback allowlisted satu kali. Validasi
+service kini menolak entri `allowed_models` yang tidak ada di allowlist server dan
+approval memeriksa ulang daftar model, model utama/fallback, serta mapping prompt.
+Runtime menolak policy APPROVED tersimpan yang assignment modelnya tidak valid.
+Verifikasi terarah: 77 tes backend policy/runtime/query-security/scheduler/watermark/
+notifikasi/workbook lulus; integrasi PostgreSQL/API history, scope source/taxonomy, dan
+scheduler `SYNC_REVIEW` reuse juga lulus. Governance browser test lulus. Frontend regression:
+54 unit test, 73 skenario browser, dan build/typecheck lulus. Provider nyata belum dipanggil.
+
+Belum ada definisi retensi per jenis data/masa simpan, trigger task yang disepakati,
+atau aturan masking khusus purpose; karena itu policy/worker penghapusan dan aktivasi
+import workbook tab 07/08 belum boleh dianggap selesai. Jadwal/watermark
+tetap dikelola melalui endpoint khusus; batch/retry XLSX belum memiliki kontrak runtime.
+SSE/embedding tetap opsi, bukan backlog wajib tanpa kebutuhan/invalidation yang jelas.
+Rotasi secret terdokumentasi sebagai update environment lalu restart seluruh proses;
+acceptance rotasi dan provider nyata tetap bagian deployment BE-17.
 
 Kontrol operasional source kini dapat diedit melalui
 `PATCH /sources/{source_id}/schedule`. Migration `e5a8c1d4f6b3` menambah timezone IANA,
@@ -486,7 +504,7 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 | BE-12 | Sebagian selesai | Backend dan frontend mendukung DQ, precision/varchar, locale angka, unit, timezone, currency, effective dating, APPEND policy, serta editor transform parameter statis; multi-target/schema evolution tetap pending backend |
 | BE-13 | Tersedia di kode/frontend | Taxonomy, binding, resolver, rekomendasi dan integrasi UI tersedia; acceptance provider/deployment nyata masih terbuka |
 | BE-14 | Tahap 1–11 tersedia; hardening join berlanjut | Frontend mencakup metadata semantic, periode, metrik, ambiguity flow, visualisasi dinamis, lifecycle registry, dan query join approved; backend menyediakan discovery join NL2SQL tervalidasi. Approval metrik, AST lanjutan, template lengkap, provider acceptance, dan PostgreSQL join E2E masih terbuka |
-| BE-15 | Sebagian selesai | Backend dan frontend registry AI, budget/fallback, cron/timezone/concurrency, dependency freshness, incremental watermark transaksional, statistik proses, serta notifikasi persisten/acknowledge tersedia. Scope dataset ETL/taxonomy, trigger/masking lanjutan, retention, dan provider live masih terbuka |
+| BE-15 | Sebagian selesai | Backend dan frontend registry AI/version history, scope DataProduct/source/taxonomy, budget/fallback, cron/timezone/concurrency, dependency freshness, incremental watermark transaksional, statistik proses, serta notifikasi persisten/acknowledge tersedia. Trigger/masking lanjutan, retention, workbook tab 07/08, dan provider live masih terbuka |
 | BE-16 | Tahap 1–3 dan enforcement produk tahap 4 parsial | Registry atribut/assignment, bundle/grant, policy/binding, metadata sumber, aktivasi SOURCE, evaluasi katalog/query/export/join, serta access request/delegasi/notifikasi reviewer tersedia; legacy masih memakai akses lama, policy template, row/column lintas semua jalur, jalur admin/artefak, default-deny penuh dan rollout masih terbuka |
 | BE-17 | Belum selesai | Verifikasi integrasi nyata serta rollout per release |
 

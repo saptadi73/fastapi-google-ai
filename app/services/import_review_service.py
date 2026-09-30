@@ -1381,6 +1381,7 @@ class ImportReviewService:
                             ensure_ascii=False,
                         ),
                         AIImportReviewResult,
+                        data_source_id=review.source_id,
                     )
                     issues.extend(result.issues)
                     reviewed_rows.extend(result.reviewed_rows)

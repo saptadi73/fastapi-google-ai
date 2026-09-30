@@ -76,17 +76,21 @@ async def test_responses_api_contract_and_usage(monkeypatch, config_data, purpos
     assert "platform.ai_task_policy.approved_at DESC" in str(scalar_queries[0])
     assert "platform.ai_task_policy.data_product_code IS NULL" in str(scalar_queries[0])
     scoped_query_index = len(scalar_queries)
+    scope_field = "data_source_id" if purpose == "ETL_CONFIG" else "taxonomy_id"
     await openai_service.OpenAIService().generate(
         user,
         purpose,
         "masked profile",
         ETLConfiguration,
-        data_product_code="SALES",
+        **{scope_field: str(uuid4())},
     )
     scoped_query = str(scalar_queries[scoped_query_index])
-    assert "platform.ai_task_policy.data_product_code =" in scoped_query
-    assert "OR platform.ai_task_policy.data_product_code IS NULL" in scoped_query
-    assert "CASE WHEN" in scoped_query
+    assert f"platform.ai_task_policy.{scope_field} =" in scoped_query
+    assert "platform.ai_task_policy.data_product_code IS NULL" in scoped_query
+    assert "platform.ai_task_policy.data_source_id IS NULL" in scoped_query
+    assert "platform.ai_task_policy.taxonomy_id IS NULL" in scoped_query
+    priority_case = scoped_query.rsplit("CASE WHEN", 1)[1].split("END DESC", 1)[0]
+    assert f"platform.ai_task_policy.{scope_field} =" in priority_case
     parse.return_value = SimpleNamespace(output_parsed=None, id="refused", usage=None)
     with pytest.raises(AppError):
         await openai_service.OpenAIService().generate(user, purpose, "masked profile", ETLConfiguration)
@@ -226,4 +230,102 @@ async def test_policy_runtime_limits_stop_before_provider(
         )
 
     assert error.value.code == expected_code
+    provider.assert_not_called()
+
+
+async def test_policy_budget_reserves_registered_prompt_before_provider(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)("test-placeholder"))
+    monkeypatch.setattr(settings, "openai_model_etl_config", "primary-model")
+    monkeypatch.setattr(settings, "openai_allowed_models", ["primary-model"])
+    monkeypatch.setattr(settings, "ai_daily_tenant_budget_usd", 0)
+    monkeypatch.setattr(settings, "openai_input_usd_per_million", 1)
+    monkeypatch.setattr(settings, "openai_output_usd_per_million", 1)
+    monkeypatch.setattr(settings, "openai_max_output_tokens", 1)
+    policy = SimpleNamespace(
+        id=str(uuid4()),
+        model="primary-model",
+        fallback_model=None,
+        allowed_models=["primary-model"],
+        prompt_version="etl_configuration_v1.md",
+        max_context_chars=1_000,
+        daily_budget_usd=0.00001,
+    )
+
+    class Ledger:
+        def __init__(self):
+            self.scalar_calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def begin(self):
+            return self
+
+        async def execute(self, *args, **kwargs):
+            pass
+
+        async def scalar(self, *_args, **_kwargs):
+            self.scalar_calls += 1
+            return policy if self.scalar_calls == 1 else 0
+
+        def add(self, _value):
+            raise AssertionError("Budget rejection must not write usage")
+
+    provider = Mock()
+    monkeypatch.setattr(openai_service, "AsyncOpenAI", provider)
+    monkeypatch.setattr(openai_service, "SessionFactory", Ledger)
+    user = SimpleNamespace(id=str(uuid4()), tenant_id=str(uuid4()))
+
+    with pytest.raises(AppError) as error:
+        await openai_service.OpenAIService().generate(
+            user, "ETL_CONFIG", "short", ETLConfiguration
+        )
+
+    assert error.value.code == "AI_TASK_BUDGET_EXCEEDED"
+    provider.assert_not_called()
+
+
+async def test_runtime_rejects_invalid_stored_model_allowlist(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)("test-placeholder"))
+    monkeypatch.setattr(settings, "openai_model_etl_config", "primary-model")
+    monkeypatch.setattr(settings, "openai_allowed_models", ["primary-model"])
+    policy = SimpleNamespace(
+        id=str(uuid4()),
+        model="primary-model",
+        fallback_model=None,
+        allowed_models=["primary-model", "untrusted-model"],
+        prompt_version="etl_configuration_v1.md",
+        max_context_chars=1_000,
+        daily_budget_usd=None,
+    )
+
+    class Ledger:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def begin(self):
+            return self
+
+        async def scalar(self, *_args, **_kwargs):
+            return policy
+
+    provider = Mock()
+    monkeypatch.setattr(openai_service, "AsyncOpenAI", provider)
+    monkeypatch.setattr(openai_service, "SessionFactory", Ledger)
+    user = SimpleNamespace(id=str(uuid4()), tenant_id=str(uuid4()))
+
+    with pytest.raises(AppError) as error:
+        await openai_service.OpenAIService().generate(
+            user, "ETL_CONFIG", "short", ETLConfiguration
+        )
+
+    assert error.value.code == "AI_TASK_POLICY_INVALID"
     provider.assert_not_called()

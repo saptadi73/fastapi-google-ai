@@ -123,6 +123,13 @@ Tulisan `Approved`, `Aktif`, atau nama approver di Excel tidak boleh mengaktifka
 
 Semua tab, hubungan ID, serta bagian task dan prompt pada tab 07 harus dipertahankan saat ekspor template. Jangan mengganti workbook lengkap dengan satu sheet JSON lalu menyebutnya kompatibel dengan template.
 
+Pada implementasi saat ini, tab 07 OpenAI Config dan tab 08 Operasional diekspor sebagai
+referensi read-only dan seluruh perubahan selnya ditolak oleh `workbook-preview`. Tab 07
+memuat kondisi trigger, model alias, dan prompt ID yang harus diikat ke policy/server
+registry; tab 08 mencampur jadwal/watermark yang memakai endpoint tersendiri dengan
+batch/retry yang belum memiliki kontrak runtime. Jangan aktifkan edit XLSX sebelum
+identitas, allowlist, revision, otorisasi, serta apply atomiknya didefinisikan.
+
 ## 6. API yang tersedia dan tambahan yang diperlukan
 
 ### Dapat dipakai sekarang untuk form subset konfigurasi

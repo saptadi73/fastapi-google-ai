@@ -153,6 +153,23 @@ def test_edit_identity_and_reject_unsupported_or_formula(workbook_context):
         assert parse_workbook(edited(workbook_context, tab, cell, value), *workbook_context)["errors"]
 
 
+@pytest.mark.parametrize(
+    ("tab", "cell", "value"),
+    [
+        ("07 OpenAI Config", "G5", "unreviewed trigger expression"),
+        ("07 OpenAI Config", "H5", "unapproved model alias"),
+        ("07 OpenAI Config", "I5", "arbitrary prompt id"),
+        ("08 Operasional", "D5", "0 0 * * *"),
+        ("08 Operasional", "H5", 1000),
+    ],
+)
+def test_ai_and_operational_tabs_are_read_only(workbook_context, tab, cell, value):
+    result = parse_workbook(edited(workbook_context, tab, cell, value), *workbook_context)
+    assert result["configuration"] is None
+    assert result["errors"]
+    assert all("tidak boleh diubah" in error["message"] for error in result["errors"])
+
+
 def test_stale_and_invalid_upload(workbook_context):
     raw = encode(export_workbook(*workbook_context))
     workbook_context[0].revision_no += 1

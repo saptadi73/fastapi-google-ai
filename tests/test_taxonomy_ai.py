@@ -18,9 +18,10 @@ pytestmark = pytest.mark.integration
 @pytest.mark.parametrize("result_kind", ["valid", "empty", "unknown", "duplicate", "missing", "bad_score", "stale", "inactive"])
 async def test_ai_recommendations_validate_scope_coverage_and_freshness(context, monkeypatch, result_kind):
     definition, terms = await taxonomy(context)
-    async def generate(self, user, purpose, raw, schema):
+    async def generate(self, user, purpose, raw, schema, *, taxonomy_id=None):
         payload = json.loads(raw)
         assert purpose == "TAXONOMY_RECOMMEND" and payload["version"] == definition["version"]
+        assert taxonomy_id == definition["id"]
         assert {t["id"] for t in payload["terms"]} == {t["id"] for t in terms}
         assert payload["inputs"] == [{"input_index": 0, "value": "first branch"}]
         candidates = [{"term_id": terms[0]["id"], "confidence": 0.8}]

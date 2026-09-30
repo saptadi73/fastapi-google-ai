@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, Query
 
 from app.api.dependencies import CurrentUser, Session, require_roles
 from app.core.exceptions import success
@@ -17,6 +17,21 @@ review = [Depends(require_roles(*REVIEW_ROLES))]
 @router.get("")
 async def list_policies(session: Session, user: CurrentUser):
     return success(await AITaskPolicyService(session, user).list())
+
+
+@router.get("/{policy_id}/versions")
+async def list_policy_versions(
+    policy_id: UUID,
+    session: Session,
+    user: CurrentUser,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    return success(
+        await AITaskPolicyService(session, user).versions(policy_id, offset, limit),
+        offset=offset,
+        limit=limit,
+    )
 
 
 @router.post("", status_code=201, dependencies=edit)

@@ -1450,6 +1450,16 @@ Body: —.
 
 Body: [AITaskPolicyCreate](#aitaskpolicycreate).
 
+### GET /api/v1/ai-task-policies/{policy_id}/versions
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `policy_id` | path | Ya | `string (uuid)` {} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
 ### PATCH /api/v1/ai-task-policies/{policy_id}
 
 Body: [AITaskPolicyUpdate](#aitaskpolicyupdate).
@@ -1556,6 +1566,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
 | `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
 | `data_product_code` | Tidak | `string / null` | — | — |
+| `data_source_id` | Tidak | `string (uuid) / null` | — | — |
+| `taxonomy_id` | Tidak | `string (uuid) / null` | — | — |
 | `max_context_chars` | Tidak | `integer` | 200000 | {"maximum":2000000.0,"minimum":1000.0} |
 | `daily_budget_usd` | Tidak | `number / null` | — | — |
 | `fallback_model` | Tidak | `string / null` | — | — |
@@ -1588,6 +1600,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
 | `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
 | `data_product_code` | Tidak | `string / null` | — | — |
+| `data_source_id` | Tidak | `string (uuid) / null` | — | — |
+| `taxonomy_id` | Tidak | `string (uuid) / null` | — | — |
 | `max_context_chars` | Tidak | `integer` | 200000 | {"maximum":2000000.0,"minimum":1000.0} |
 | `daily_budget_usd` | Tidak | `number / null` | — | — |
 | `fallback_model` | Tidak | `string / null` | — | — |
@@ -3806,6 +3820,19 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `decision_note` | `VARCHAR(500)` | Tidak |
 | `assignment_id` | `CHAR(32)` | Ya |
 | `permission_grant_id` | `CHAR(32)` | Ya |
+| `tenant_id` | `CHAR(32)` | Tidak |
+| `id` | `CHAR(32)` | Tidak |
+| `created_at` | `DATETIME` | Tidak |
+
+### Record AITaskPolicyVersion
+
+| Field | Tipe penyimpanan | Nullable |
+|---|---|---|
+| `policy_id` | `CHAR(32)` | Tidak |
+| `revision_no` | `INTEGER` | Tidak |
+| `action` | `VARCHAR(20)` | Tidak |
+| `snapshot_json` | `JSONB` | Tidak |
+| `actor_user_id` | `CHAR(32)` | Tidak |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |

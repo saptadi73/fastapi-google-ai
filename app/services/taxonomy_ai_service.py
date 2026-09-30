@@ -32,7 +32,13 @@ async def recommend_taxonomy(session, user, taxonomy_id, data):
                               "inputs": [{"input_index": i, "value": value} for i, value in enumerate(data.values)]})
     if len(context.encode("utf-8")) > 150_000:
         raise AppError("TAXONOMY_AI_SCOPE_LIMIT", "Konteks taxonomy terlalu besar untuk saran AI.", 422)
-    parsed, metadata = await OpenAIService().generate(user, "TAXONOMY_RECOMMEND", context, TaxonomyAIResult)
+    parsed, metadata = await OpenAIService().generate(
+        user,
+        "TAXONOMY_RECOMMEND",
+        context,
+        TaxonomyAIResult,
+        taxonomy_id=str(taxonomy_id),
+    )
     try:
         parsed = TaxonomyAIResult.model_validate(parsed)
     except ValidationError:

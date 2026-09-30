@@ -15,6 +15,7 @@ def build_documents():
     from pydantic import BaseModel
 
     from app.core import config
+    from app.models.ai_policy import AITaskPolicyVersion
 
     # Documentation must not include local configuration or need real credentials.
     settings = config.Settings(
@@ -197,6 +198,7 @@ def build_documents():
         (AccessPolicy, set()),
         (AccessPolicyBinding, set()),
         (AccessRequest, set()),
+        (AITaskPolicyVersion, set()),
         (UserAssignment, set()),
         (UserPermissionGrant, set()),
         (DataSource, set()),
