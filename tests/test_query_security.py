@@ -63,6 +63,17 @@ def test_query_scope_and_bind_values(config_data):
     user.token_version = 2
     assert cache_key(user, product, plan) != key
     assert cache_key(user, product, plan, authorization_revisions=[("policy-a", 1)]) != key
+    assert cache_key(
+        user,
+        product,
+        plan,
+        authorization_revisions=[("decision:DATA_PRODUCT:SALES:QUERY:first", 1)],
+    ) != cache_key(
+        user,
+        product,
+        plan,
+        authorization_revisions=[("decision:DATA_PRODUCT:SALES:QUERY:second", 1)],
+    )
 
 
 def test_monthly_query_allowed(config_data):

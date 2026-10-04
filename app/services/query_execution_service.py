@@ -20,12 +20,15 @@ from app.services.profiling_service import digest
 from app.services.schema_compiler_service import TYPE_MAP
 from app.services.sql_guard_service import validate_readonly_sql
 
+QUERY_CACHE_SCHEMA_VERSION = "query-v2"
+
 
 def cache_key(
     user, product, plan, default_period=None, joined_products=(), relationships=(), authorization_revisions=()
 ):
     return "query:" + digest(
         [
+            QUERY_CACHE_SCHEMA_VERSION,
             user.tenant_id,
             user.role,
             getattr(user, "token_version", 0),

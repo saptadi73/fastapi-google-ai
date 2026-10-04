@@ -6,6 +6,7 @@ from app.models.source import DataSource, SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.schemas.access import AccessEvaluationRequest
 from app.services.access_service import AccessService
+from app.services.profiling_service import digest
 
 
 class SemanticRepository(TenantRepository):
@@ -14,7 +15,20 @@ class SemanticRepository(TenantRepository):
         self.authorization_revisions = set()
         self.product_access_decisions = {}
 
+    def _remember_decision(self, resource_type, resource_id, action, decision):
+        controls = {
+            "allowed": decision.get("allowed", False),
+            "reason": decision.get("reason"),
+            "row_scope": decision.get("row_scope", {}),
+            "columns": decision.get("columns", {}),
+            "export_allowed": decision.get("export_allowed", False),
+        }
+        self.authorization_revisions.add(
+            (f"decision:{resource_type}:{resource_id}:{action}:{digest(controls)}", 1)
+        )
+
     async def source_allowed(self, source, user, action):
+        self.authorization_revisions.add((f"source:{source.id}", source.access_revision))
         if source.access_metadata is None:
             return True
         if source.access_status != "POLICY_APPROVED":
@@ -27,6 +41,7 @@ class SemanticRepository(TenantRepository):
         self.authorization_revisions.update(
             (item["id"], item["revision"]) for item in decision.get("policy_revisions", [])
         )
+        self._remember_decision("SOURCE", source.source_code, action, decision)
         return (
             decision["allowed"]
             and not decision["row_scope"]
@@ -90,6 +105,7 @@ class SemanticRepository(TenantRepository):
             self.authorization_revisions.update(
                 (item["id"], item["revision"]) for item in decision.get("policy_revisions", [])
             )
+            self._remember_decision("DATA_PRODUCT", obj.code, action, decision)
             if not decision["allowed"]:
                 raise AppError("DATA_PRODUCT_NOT_FOUND", "Data product tidak tersedia untuk akses Anda.", 404)
             self.product_access_decisions[obj.code] = decision

@@ -34,7 +34,8 @@ class MasterService:
 
     async def guard_policy_read(self, master):
         has_policy = await self.session.scalar(
-            self.repo.query(AccessPolicy.id)
+            self.repo.query(AccessPolicy)
+            .with_only_columns(AccessPolicy.id)
             .join(AccessPolicyBinding, AccessPolicyBinding.policy_id == AccessPolicy.id)
             .where(
                 AccessPolicyBinding.resource_type == "MASTER",

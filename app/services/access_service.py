@@ -16,7 +16,7 @@ from app.models.auth import User
 from app.models.base import now
 from app.models.master import MasterDefinition
 from app.models.semantic import DataProduct
-from app.models.source import DataSource
+from app.models.source import DataSource, SourceSheet
 from app.models.taxonomy import Taxonomy
 from app.repositories.base import TenantRepository, record
 from app.services.audit_service import audit
@@ -919,14 +919,38 @@ class AccessService:
                 }
             )
 
+        resource_bindings = [
+            (AccessPolicyBinding.resource_type == data.resource_type)
+            & (AccessPolicyBinding.resource_id == data.resource_id)
+        ]
+        parent_source = None
+        if data.resource_type == "DATA_PRODUCT":
+            parent_source = await self.session.scalar(
+                self.repo.query(DataSource)
+                .join(
+                    SourceSheet,
+                    (SourceSheet.source_id == DataSource.id)
+                    & (SourceSheet.tenant_id == self.actor.tenant_id),
+                )
+                .join(
+                    DataProduct,
+                    (DataProduct.source_sheet_id == SourceSheet.id)
+                    & (DataProduct.tenant_id == self.actor.tenant_id),
+                )
+                .where(DataProduct.code == data.resource_id)
+            )
+            if parent_source is not None:
+                resource_bindings.append(
+                    (AccessPolicyBinding.resource_type == "SOURCE")
+                    & (AccessPolicyBinding.resource_id == parent_source.source_code)
+                )
         query = (
             select(AccessPolicy)
             .join(AccessPolicyBinding, AccessPolicyBinding.policy_id == AccessPolicy.id)
             .where(
                 AccessPolicy.tenant_id == self.actor.tenant_id,
                 AccessPolicyBinding.tenant_id == self.actor.tenant_id,
-                AccessPolicyBinding.resource_type == data.resource_type,
-                AccessPolicyBinding.resource_id == data.resource_id,
+                or_(*resource_bindings),
                 AccessPolicy.status == "APPROVED",
                 AccessPolicy.valid_from <= data.at,
                 or_(AccessPolicy.valid_to.is_(None), AccessPolicy.valid_to > data.at),
@@ -937,10 +961,12 @@ class AccessService:
         policies = list((await self.session.scalars(query)).all())
         active_attributes = {item["attribute_id"] for item in effective["assignments"]}
         source_scope = set()
-        if data.resource_type == "SOURCE":
-            source = await self.session.scalar(
-                self.repo.query(DataSource).where(DataSource.source_code == data.resource_id)
-            )
+        if data.resource_type in ("SOURCE", "DATA_PRODUCT"):
+            source = parent_source
+            if source is None and data.resource_type == "SOURCE":
+                source = await self.session.scalar(
+                    self.repo.query(DataSource).where(DataSource.source_code == data.resource_id)
+                )
             if source is not None and source.access_metadata:
                 source_scope = {
                     source.access_metadata[field]

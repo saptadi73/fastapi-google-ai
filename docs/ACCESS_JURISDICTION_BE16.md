@@ -268,7 +268,11 @@ role produk, serta keputusan policy SOURCE pada setiap lookup. Catalog, metadata
 produk, join, query, export, report berbasis produk, saved query, dan konteks/template
 NL2SQL memakai filter tersebut. QUERY dan EXPORT dievaluasi terpisah, sebelum cache;
 explicit deny, pencabutan assignment/policy, dan expiry langsung menolak akses. Hasil
-evaluator dengan row_scope atau column_rules belum diterapkan compiler dan **ditolak**,
+evaluasi `DATA_PRODUCT` mewarisi binding policy SOURCE induknya dan menggabungkannya
+dengan binding DATA_PRODUCT langsung bila tersedia. Explicit deny dari salah satu scope
+tetap menang; row scope dan aturan kolom dari seluruh ALLOW yang cocok digabungkan secara
+paling ketat. Keputusan evaluator dengan row_scope atau column_rules yang belum
+diterapkan compiler **ditolak**,
 tidak diabaikan. Status `POLICY_APPROVED` yang tersimpan bukan jaminan policy masih
 aktif: runtime selalu mengecek ulang. Sumber legacy dengan metadata null masih
 mengikuti akses lama untuk kompatibilitas; default-deny penuh dan jalur admin/artefak,

@@ -219,9 +219,13 @@ async def test_record_query_keeps_tenant_scope_masking_and_pagination(definition
     definition.fields[-1].pii_classification = "HIGH"
     result = Mock()
     result.mappings.return_value.all.return_value = [{"code": "001"}, {"code": "002"}]
-    session = SimpleNamespace(execute=AsyncMock(return_value=result), connection=AsyncMock())
+    session = SimpleNamespace(
+        execute=AsyncMock(return_value=result),
+        connection=AsyncMock(),
+        scalar=AsyncMock(return_value=None),
+    )
     service = MasterStorageService(session, SimpleNamespace(tenant_id=tenant, role="TECHNICAL_APPROVER"))
-    service.target = AsyncMock(return_value=(None, definition, table))
+    service.target = AsyncMock(return_value=(SimpleNamespace(code="PRICE_HISTORY"), definition, table))
     output = await service.records(str(uuid4()), limit=1, as_of="2026-01-01")
     stmt = session.execute.call_args.args[0]
     assert "price" not in stmt.selected_columns.keys()

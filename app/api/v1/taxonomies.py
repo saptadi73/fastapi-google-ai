@@ -27,6 +27,7 @@ from app.schemas.taxonomy import (
     TaxonomyVersionUpdate,
 )
 from app.services.audit_service import audit
+from app.services.cache_service import get_cached_json, set_cached_json, similarity_cache_key
 from app.services.profiling_service import digest
 from app.services.taxonomy_validation_service import exact_terms, normalized
 from app.services.taxonomy_version_service import TaxonomyVersionService, archive_current
@@ -299,6 +300,16 @@ async def recommend_terms(taxonomy_id: UUID, data: TaxonomyRecommendRequest, ses
     taxonomy = await repo.get(Taxonomy, taxonomy_id)
     if taxonomy.status != "APPROVED" or not taxonomy.is_active:
         raise AppError("TAXONOMY_NOT_APPROVED", "Taxonomy harus approved dan aktif.", 422)
+    cache_key = similarity_cache_key(
+        tenant_id=user.tenant_id,
+        taxonomy_id=taxonomy.id,
+        taxonomy_version=taxonomy.version,
+        values=data.values,
+        limit=data.limit,
+    )
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return success({**cached, "cached": True})
     terms = (await session.scalars(repo.query(TaxonomyTerm).where(TaxonomyTerm.taxonomy_id == str(taxonomy_id), TaxonomyTerm.is_active.is_(True)))).all()
     result = []
     for raw in data.values:
@@ -310,4 +321,10 @@ async def recommend_terms(taxonomy_id: UUID, data: TaxonomyRecommendRequest, ses
             scored.append((score, term))
         scored.sort(key=lambda x: x[0], reverse=True)
         result.append({"value": raw, "candidates": [{"term": record(term), "confidence": round(score, 4)} for score, term in scored[:data.limit]], "requires_confirmation": True})
-    return success({"taxonomy_id": str(taxonomy_id), "taxonomy_version": taxonomy.version, "recommendations": result})
+    response = {"taxonomy_id": str(taxonomy_id), "taxonomy_version": taxonomy.version, "recommendations": result}
+    await set_cached_json(
+        cache_key,
+        response,
+        ttl_seconds=get_settings().similarity_cache_ttl_seconds,
+    )
+    return success({**response, "cached": False})

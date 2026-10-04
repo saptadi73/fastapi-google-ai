@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     celery_result_backend: SecretStr = SecretStr("redis://127.0.0.1:6379/2")
     redis_required: bool = False
     query_cache_ttl_seconds: int = 300
+    similarity_cache_ttl_seconds: int = 900
     nl2sql_statement_timeout_ms: int = Field(10000, ge=100, le=60000)
     nl2sql_max_rows: int = Field(1000, ge=1, le=10000)
     nl2sql_max_estimated_cost: float = 100000

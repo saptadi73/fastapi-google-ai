@@ -30,3 +30,4 @@ def test_openapi():
     assert "/api/v1/operations/summary" in spec["paths"]
     assert "/api/v1/notifications" in spec["paths"]
     assert "/api/v1/notifications/{notification_id}/acknowledge" in spec["paths"]
+    assert "/api/v1/jobs/{job_id}/events" in spec["paths"]

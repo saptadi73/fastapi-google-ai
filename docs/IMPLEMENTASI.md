@@ -41,8 +41,13 @@ melalui `scripts/prepare_test_db.py`, terpisah dari database aplikasi `googleai`
   dashboard sales/inventory, CSV export, saved query dan normalized intent.
 - OpenAI Responses API menghasilkan structured query plan; backend membangun SQL. AST guard,
   transaksi read-only, EXPLAIN cost limit, statement timeout, row limit, quota dan audit penggunaan AI.
-- Optional Redis query cache: key mencakup tenant, role, row scope, semantic version dan freshness version.
-  Tanpa Redis, query tetap berjalan tanpa cache dan job dapat diproses lewat `worker-once`.
+- Optional Redis query cache: key mencakup schema cache, tenant, role, `token_version`, row scope,
+  semantic/freshness version, relationship, revisi source/policy, dan fingerprint keputusan akses.
+  Rekomendasi similarity deterministik memakai cache terpisah berdasarkan tenant, taxonomy/version,
+  versi algoritma, input ternormalisasi, dan limit. Kegagalan Redis bersifat fail-open.
+- Progres job tersedia sebagai SSE terautentikasi di `/jobs/{id}/events`; stream mengirim perubahan,
+  heartbeat, terminal event, dan berhenti paling lama dua menit. GET job tetap menjadi fallback/resume.
+  Tanpa Redis, query/similarity tetap berjalan tanpa cache dan job dapat diproses lewat `worker-once`.
 - Error envelope, request ID, structured HTTP log tanpa body/token/nilai sel, health live/ready,
   OpenAPI/Swagger, pencatatan event dan penggunaan token.
 
@@ -99,8 +104,8 @@ Lihat [status, matriks rute, dan gate rollout BE16](ACCESS_JURISDICTION_BE16.md)
 ## Cakupan lanjutan dari baseline
 
 Yang belum diimplementasikan: split satu tab menjadi beberapa grain/tabel; migrasi otomatis schema
-evolution; semantic similarity/embedding; template dengan parameter dinamis; retention
-snapshot/artifact/audit; SSE; Prometheus dan kanal delivery alert eksternal; autentikasi OIDC; distributed login
+evolution; semantic embedding dan re-index lifecycle; template dengan parameter dinamis; retention
+snapshot/artifact/audit; Prometheus dan kanal delivery alert eksternal; autentikasi OIDC; distributed login
 rate limiting; RLS seluruh tabel; immutable audit storage di tingkat database; pengujian beban, backup/restore,
 disaster recovery dan penetration test produksi.
 

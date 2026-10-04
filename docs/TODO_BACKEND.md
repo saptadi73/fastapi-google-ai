@@ -320,7 +320,11 @@ Prasyarat: BE-10 dan BE-11; kontrak parameter mengikuti BE-12.
 - [~] Tambahkan trigger, threshold, masking, budget, dan fallback policy per task dengan approval/audit perubahan; batas karakter konteks, budget harian policy yang mengestimasi prompt + konteks + output, fallback model allowlisted satu kali, ledger policy, frontend, dan audit edit tersedia. Trigger sumber dan masking khusus task masih terbuka.
 - [x] Tambahkan edit jadwal, timezone, dependency job, concurrency policy, dan incremental watermark yang commit hanya setelah load sukses; cron/timezone/revision/audit, policy `QUEUE_LATEST`/`SKIP_IF_RUNNING`, graph dependency tenant-aware, serta watermark INTEGER/DECIMAL/DATE/DATETIME pada ETL dan import review tersedia pada backend/frontend.
 - [~] Implementasikan retention snapshot/artifact/audit sesuai kebutuhan, statistik proses, dan notifikasi NEEDS_INPUT/FAILED; statistik tenant, inbox persisten, event transaksional, acknowledge teraudit, frontend, dan migration tersedia. Policy/worker retention masih terbuka.
-- [ ] Pertimbangkan SSE untuk progres serta similarity/embedding/query cache hanya dengan kebutuhan dan invalidation yang jelas.
+- [x] Tambahkan SSE terautentikasi untuk progres job dengan heartbeat, batas koneksi dua menit,
+  event terminal, dan fallback polling frontend. Tambahkan cache similarity deterministik yang
+  versioned per tenant/taxonomy/algoritma serta perkuat query cache dengan schema key, freshness,
+  revisi source/policy, fingerprint keputusan akses, dan `token_version`. Cache embedding tetap
+  tidak dibuat karena belum ada provider/model/vector lifecycle yang dapat menjadi kunci invalidasi.
 - [~] Aktifkan parameter tab 07/08 bertahap; keduanya tetap read-only pada XLSX. Tab 07 memuat trigger bebas serta alias model/prompt yang harus berasal dari registry server; tab 08 mencampur jadwal/watermark (sudah tersedia lewat API terpisah) dengan batch/retry yang belum memiliki kontrak runtime. Regression workbook memastikan edit kedua tab ditolak. Acceptance rotasi kredensial/provider nyata tetap memerlukan deployment.
 
 Selesai jika operasi berulang dapat dikonfigurasi, diamati, dan dipulihkan tanpa menghilangkan bukti review.
@@ -352,7 +356,9 @@ Belum ada definisi retensi per jenis data/masa simpan, trigger task yang disepak
 atau aturan masking khusus purpose; karena itu policy/worker penghapusan dan aktivasi
 import workbook tab 07/08 belum boleh dianggap selesai. Jadwal/watermark
 tetap dikelola melalui endpoint khusus; batch/retry XLSX belum memiliki kontrak runtime.
-SSE/embedding tetap opsi, bukan backlog wajib tanpa kebutuhan/invalidation yang jelas.
+SSE job dan cache similarity/query sudah aktif dengan invalidasi versioned. Cache embedding tetap
+ditunda sampai provider, model, dimensi vector, serta lifecycle re-index disepakati; menambah cache
+sebelum kontrak itu ada akan menghasilkan hasil stale yang tidak dapat divalidasi.
 Rotasi secret terdokumentasi sebagai update environment lalu restart seluruh proses;
 acceptance rotasi dan provider nyata tetap bagian deployment BE-17.
 
@@ -447,7 +453,7 @@ row/column policy, access request, dan default-deny penuh masih terbuka.
 - [~] Batasi katalog, prompt, contoh, schema, relationship, cache, dan hasil AI/NL2SQL pada resource/kolom yang lolos evaluator. Filter produk SOURCE, sanitizer metadata kolom/metric, validasi saved query dan join saat create/update/approve, serta validasi ulang plan tersedia; lineage/error/preview non-query dan invalidasi cache lintas jalur belum lengkap.
 - [x] Tambahkan `access_request`/approval untuk permintaan akses sementara, delegasi, alasan bisnis, expiry, revoke, dan notifikasi reviewer tanpa memberikan akses sebelum approval commit. Request atribut/bundle untuk diri sendiri, delegasi admin kepada user aktif, approval admin kedua, effective period maksimum 366 hari, cancel/reject/revoke, optimistic revision, audit, UI, serta inbox reviewer terarah tersedia.
 - [~] Pisahkan kepemilikan data dari hak akses: owner/steward dan admin platform tidak otomatis mendapat akses produk SOURCE BE16; seluruh jalur PII legacy dan masking belum terlindungi model ini.
-- [~] Masukkan policy/assignment revision ke cache key dan invalidasi session/query cache saat revoke, expiry, perubahan assignment, classification, atau policy. `token_version` serta policy/revision SOURCE kini masuk cache key query produk/join; invalidasi cache lintas jalur, classification, dan resource non-query masih belum.
+- [~] Masukkan policy/assignment revision ke cache key dan invalidasi session/query cache saat revoke, expiry, perubahan assignment, classification, atau policy. `token_version`, revisi SOURCE/policy, serta fingerprint keputusan efektif kini masuk cache key query produk/join; revoke assignment/grant menaikkan `token_version`, sedangkan grant baru langsung mengubah fingerprint tanpa memutus sesi penerima. Invalidasi classification dan resource non-query masih belum.
 - [~] Audit keputusan sensitif dan perubahan policy: subject, action, resource, policy/revision, hasil, alasan kode, request ID, dan waktu; event keputusan/alasan dan actor tersedia tanpa raw PII, tetapi request ID serta revision policy per keputusan belum lengkap.
 - [~] Implementasikan frontend registrasi sumber dengan selector registry, capability response, layar User Management/role/permission bundle/assignment, policy/access request, effective-access preview, masking konsisten, serta penjelasan deny yang aman. Registrasi/review/aktivasi, admin policy, access request/delegasi, serta label masking Dashboard tersedia; capability global dan masking konsisten pada seluruh tampilan belum.
 - [x] Implementasikan UI tahap 1 pada Administrasi untuk membuat registry, memberi/mencabut assignment bertanggal, melihat histori, dan preview effective access role + assignment.

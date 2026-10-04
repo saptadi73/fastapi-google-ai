@@ -91,7 +91,8 @@ Contoh respons yang diberi label **isi `data`** di bagian berikut adalah bagian 
 - Payload menggunakan strict schema: field JSON yang tidak dikenal menghasilkan `422`. Field yang boleh dihilangkan belum tentu boleh berisi `null`; ikuti schema.
 - List yang mempunyai `offset`/`limit`: default `0`/`100`, minimum offset `0`, limit `1..100`; respons `meta` berisi offset dan limit, **tanpa total count**. Urutan repository umumnya `created_at DESC`.
 - List tanpa parameter pagination pada tabel tidak menerima pagination yang berfungsi. Beberapa dibatasi internal 100 item; jangan membuat infinite scroll dengan asumsi semua list mendukung offset.
-- Belum ada pencarian/filter list generik, `DELETE`, pagination cursor, WebSocket, SSE, atau cancel-job endpoint.
+- Belum ada pencarian/filter list generik, `DELETE`, pagination cursor, WebSocket, atau cancel-job endpoint.
+  SSE hanya tersedia untuk progres job pada `/jobs/{job_id}/events`.
 
 ### Hak akses
 
@@ -428,7 +429,9 @@ sumber, memuat unit pemilik + domain bisnis + yurisdiksi sebagai atribut wajib, 
 memiliki aksi DISCOVER + QUERY. Policy row/column control ditolak sampai
 runtime mendukungnya. Sumber berubah ke `POLICY_APPROVED`, tetapi katalog, query,
 join, report, dan export tetap mengevaluasi aksi pengguna melalui policy SOURCE pada
-setiap permintaan; explicit deny, expiry, dan revoke berlaku segera. Query/export
+setiap permintaan; explicit deny, expiry, dan revoke berlaku segera. Evaluasi
+`DATA_PRODUCT` mewarisi binding SOURCE induknya serta menggabungkan binding DATA_PRODUCT
+langsung bila ada. Explicit deny dari kedua scope mengalahkan ALLOW. Query/export
 menolak policy row/column yang belum bisa diterapkan runtime. Sumber legacy tanpa
 metadata masih mengikuti kontrol lama; ini bukan default-deny penuh BE16.
 
@@ -820,6 +823,7 @@ File JSON/YAML berisi metadata schema_version, configuration_id, configuration_v
 |---|---|---|---|---|---|
 | GET | `/jobs` | S | offset/limit | 200 | Job[]; meta pagination |
 | GET | `/jobs/{job_id}` | S | — | 200 | Job |
+| GET | `/jobs/{job_id}/events` | S | `Accept: text/event-stream` | 200 | Stream SSE event `job`, `complete`, `timeout`, atau `error` |
 | POST | `/jobs/{job_id}/retry` | S | — | 202 | EnqueuedJob baru |
 | GET | `/operations/summary` | S | — | 200 | Jumlah status job/review dan notifikasi aktif |
 | GET | `/notifications` | S | unacknowledged_only, offset/limit | 200 | OperationalNotification[]; meta pagination |
@@ -839,7 +843,7 @@ File JSON/YAML berisi metadata schema_version, configuration_id, configuration_v
 
 **Perhatikan ID:** `{job_id}` pada `/etl-jobs/{job_id}/...` sebenarnya adalah **DataSource.id**, bukan ID dari `/jobs`. Gunakan source.id dari hasil `/etl-jobs`. Pause memengaruhi sumber/jadwal dan menolak sync saat source paused; bukan cancel job yang sudah berjalan.
 
-### EnqueuedJob dan polling
+### EnqueuedJob, SSE, dan polling
 
 EnqueuedJob, isi `data`:
 
@@ -873,7 +877,18 @@ Job, isi `data` hasil GET:
 
 Job status: QUEUED → RUNNING → SUCCEEDED atau FAILED. Polling GET job gagal secara pekerjaan tetap **HTTP 200**, `data.status="FAILED"`, dan error ada di `data.error_code/error_message`, bukan `errors[]`.
 
-Saran frontend: poll setiap 2–5 detik dengan jeda antar-response, batalkan polling saat komponen dilepas, dan sediakan “Lanjutkan memantau” bila batas tunggu UI tercapai. Berhenti memantau tidak membatalkan job backend. Jangan mengulang POST enqueue hanya karena proses lama.
+Untuk progres langsung, panggil `GET /jobs/{job_id}/events` dengan bearer token dan header
+`Accept: text/event-stream`. Server mengirim `event: job` ketika status/hasil berubah, lalu
+`event: complete` untuk status terminal. Heartbeat komentar dikirim saat tidak ada perubahan;
+`event: timeout` menutup stream setelah dua menit agar klien dapat membuka kembali dengan job ID
+yang sama. Event `error` dengan `code=JOB_NOT_FOUND` menutup stream jika job tidak lagi tersedia.
+Stream hanya tersedia untuk job pada tenant user. Seperti GET detail job, ini menjaga
+kegagalan discovery/onboarding tetap dapat diamati sebelum policy source diaktifkan.
+
+Browser `EventSource` standar tidak dapat memasang bearer header. Gunakan streaming `fetch`, atau
+poll `GET /jobs/{job_id}` setiap 2–5 detik sebagai fallback. Batalkan stream/polling saat komponen
+dilepas dan sediakan “Lanjutkan memantau” bila batas tunggu UI tercapai. Berhenti memantau tidak
+membatalkan job backend. Jangan mengulang POST enqueue hanya karena proses lama.
 
 Retry hanya untuk FAILED; menghasilkan ID job baru dengan requester user yang menekan retry. Worker memeriksa role lagi: DEPLOY/ROLLBACK memerlukan R, jenis lain E. Walaupun endpoint retry diizinkan untuk S, retry oleh user yang tidak memenuhi role jenis job bisa berakhir FAILED/FORBIDDEN.
 
@@ -1084,7 +1099,7 @@ Respons query lengkap:
 }
 ```
 
-Angka contoh bukan hasil eksekusi database. `row_count` adalah jumlah baris halaman ini, bukan total hasil. Jangan mengasumsikan `meta.limit`, `meta.offset`, atau total_pages tersedia. Cache mengikuti tenant, role, scope, produk, versi, freshness, dan plan; tidak mengubah hak akses user. Bila Redis gagal, query dapat tetap berjalan tanpa cache.
+Angka contoh bukan hasil eksekusi database. `row_count` adalah jumlah baris halaman ini, bukan total hasil. Jangan mengasumsikan `meta.limit`, `meta.offset`, atau total_pages tersedia. Cache mengikuti schema key, tenant, role, `token_version`, row scope, produk, semantic/freshness version, join relationship, revisi source/policy, fingerprint keputusan akses efektif, plan, dan periode default. Grant, expiry, atau perubahan hasil evaluator mengubah fingerprint; revoke juga menaikkan `token_version` agar sesi lama tidak berlaku. Key versi lama dibiarkan habis melalui TTL 300 detik dan tidak dibaca lagi. Bila Redis gagal, query tetap berjalan tanpa cache.
 
 ### Saved query dan intent
 
@@ -1626,6 +1641,14 @@ serta ledger existing dengan purpose TAXONOMY_RECOMMEND. Tidak ada fallback kemi
 terselubung: provider belum siap -> OPENAI_NOT_CONFIGURED (503); gagal -> AI_UPSTREAM_FAILED
 (503); refusal/output kosong -> AI_CONFIGURATION_INVALID (422); kuota/budget tetap
 kode existing. UI dapat menawarkan endpoint kemiripan existing sebagai aksi terpisah.
+
+Endpoint deterministik `POST /taxonomies/{taxonomy_id}/recommend-terms` memakai Redis
+secara opsional selama 900 detik. Key mencakup tenant, taxonomy ID dan version, versi
+algoritma, nilai input yang dinormalisasi, serta limit. Karena publish taxonomy menaikkan
+version, hasil lama tidak dapat dipakai oleh versi baru. Respons menambahkan `cached=true`
+untuk hit dan `cached=false` untuk hasil baru. Kegagalan Redis bersifat fail-open. Cache
+embedding belum tersedia karena aplikasi belum mempunyai provider/model/dimensi vector
+dan lifecycle re-index yang stabil untuk invalidasi.
 
 Saran tidak membuat term/alias/binding atau menyetujui data. Untuk TAXONOMY_INVALID,
 pengguna mengonfirmasi saran lalu mengirim term.code sebagai corrected_value lewat

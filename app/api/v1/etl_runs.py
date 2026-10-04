@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import CurrentUser, Session, require_roles
 from app.core.exceptions import AppError, success
@@ -11,6 +12,7 @@ from app.models.source import DataSource
 from app.repositories.base import TenantRepository, record
 from app.schemas.access import AccessEvaluationRequest
 from app.services.access_service import AccessService
+from app.services.job_event_service import job_event_stream
 from app.services.job_service import enqueue
 from app.services.monitoring_service import MonitoringService
 from app.services.source_service import source_records
@@ -53,6 +55,16 @@ async def jobs(
 @router.get("/jobs/{job_id}")
 async def job(job_id: UUID, session: Session, user: CurrentUser):
     return success(record(await TenantRepository(session, user.tenant_id).get(Job, job_id)))
+
+
+@router.get("/jobs/{job_id}/events")
+async def job_events(job_id: UUID, request: Request, session: Session, user: CurrentUser):
+    await TenantRepository(session, user.tenant_id).get(Job, job_id)
+    return StreamingResponse(
+        job_event_stream(request, tenant_id=user.tenant_id, job_id=job_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/jobs/{job_id}/retry", status_code=202)

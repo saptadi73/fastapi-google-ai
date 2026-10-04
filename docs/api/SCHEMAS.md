@@ -1112,6 +1112,14 @@ Body: —.
 |---|---|---|---|
 | `job_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/jobs/{job_id}/events
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `job_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/jobs/{job_id}/retry
 
 Body: —.

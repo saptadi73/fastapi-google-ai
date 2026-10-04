@@ -55,11 +55,14 @@ async def test_join_relationship_draft_edit_increments_revision_and_clears_appro
     session = Mock()
     user = SimpleNamespace(tenant_id="tenant", id="editor", role="DATA_STEWARD")
     relationship = SimpleNamespace(id="relationship", revision_no=2, status="DRAFT", approved_by="approver")
-    left = SimpleNamespace(id="left", columns=[{"target_column": "product_id"}])
-    right = SimpleNamespace(id="right", columns=[{"target_column": "id"}])
+    left = SimpleNamespace(id="left", code="SALES", columns=[{"target_column": "product_id"}])
+    right = SimpleNamespace(id="right", code="PRODUCTS", columns=[{"target_column": "id"}])
     service = SemanticCatalogService(session, user)
     service.repo.get = AsyncMock(return_value=relationship)
     service.repo.product = AsyncMock(side_effect=[left, right])
+    service.repo.product_record = AsyncMock(
+        side_effect=[{"columns": left.columns}, {"columns": right.columns}]
+    )
     monkeypatch.setattr("app.services.semantic_catalog_service.record", lambda value: vars(value).copy())
     result = await service.update_join_relationship(
         "relationship",
