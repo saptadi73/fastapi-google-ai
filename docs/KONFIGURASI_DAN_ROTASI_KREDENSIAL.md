@@ -31,7 +31,7 @@ Setelah mengganti konfigurasi, restart atau redeploy **API, worker Celery, dan s
 | `REDIS_REQUIRED` | Jika `true`, Redis menjadi syarat readiness |
 | `TEST_DATABASE_URL` | Database terpisah khusus tes; bukan database production |
 
-Untuk production, isi `APP_ENV=production`, sesuaikan `HOST`, `PORT`, dan `CORS_ORIGINS` dengan deployment. `APP_ENV` tidak otomatis memasang TLS, reverse proxy, atau process manager. Pertahankan `REQUIRE_SEPARATE_APPROVER=true` dan sediakan akun approver terpisah.
+Untuk production, isi `APP_ENV=production` dan sesuaikan `HOST` serta `PORT` dengan deployment. Pada mode ini FastAPI tidak memasang `CORSMiddleware`; TLS, preflight, dan header CORS ditangani Nginx. Gunakan contoh `deploy/nginx/api-google.kanjabung.web.id.conf.example`. `CORS_ORIGINS` hanya dipakai FastAPI di environment non-production. Pertahankan `REQUIRE_SEPARATE_APPROVER=true` dan sediakan akun approver terpisah.
 
 ## 3. PostgreSQL: satu database, tiga role
 

@@ -19,6 +19,21 @@ structlog.configure(
 logger = structlog.get_logger()
 
 
+def configure_cors(application: FastAPI, runtime_settings) -> bool:
+    """Install application CORS outside production; Nginx owns it in production."""
+    if runtime_settings.app_env.strip().casefold() == "production":
+        return False
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=runtime_settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH"],
+        allow_headers=["Authorization", "Content-Type"],
+        expose_headers=["X-Request-ID", "Content-Disposition"],
+    )
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app):
     yield
@@ -31,14 +46,7 @@ app = FastAPI(
     lifespan=lifespan,
     description="Google Sheets ingestion, reviewed ETL, dashboard API, and controlled AI query plans.",
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH"],
-    allow_headers=["Authorization", "Content-Type"],
-    expose_headers=["X-Request-ID"],
-)
+configure_cors(app, settings)
 install_handlers(app)
 
 

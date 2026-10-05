@@ -1374,7 +1374,7 @@ if (data.meta.clarification_required) {
 
 Untuk artifact/data export, pakai `responseType: 'blob'`. Buat object URL, klik link download, lalu revoke URL setelah browser memulai download. Tangani error Axios berbentuk Blob JSON dengan `await blob.text()` dan parse envelope sebelum menampilkan error. Jangan menganggap semua Blob adalah file sukses.
 
-CORS saat ini mengizinkan GET/POST/PATCH dan header Authorization/Content-Type, serta hanya mengekspos X-Request-ID. Untuk download lintas origin, `Content-Disposition` belum diekspos ke JavaScript. Gunakan `Artifact.file_name` dari metadata atau nama tetap `data-export.csv`; jika perlu membaca header itu langsung, backend perlu memperbarui expose_headers. `localhost` dan `127.0.0.1` adalah origin berbeda; daftarkan origin Vue yang sebenarnya dalam CORS_ORIGINS.
+Pada environment non-production, FastAPI menangani CORS sesuai `CORS_ORIGINS`, mengizinkan GET/POST/PUT/PATCH dan header Authorization/Content-Type, serta mengekspos X-Request-ID dan Content-Disposition. Pada `APP_ENV=production`, FastAPI tidak memasang CORS middleware; Nginx wajib menangani origin, preflight OPTIONS, credentials, allowed headers, dan exposed headers. Contoh aktif tersedia di `deploy/nginx/api-google.kanjabung.web.id.conf.example`. `localhost` dan `127.0.0.1` adalah origin berbeda.
 
 ## 10. Error dan keterbatasan
 

@@ -1,6 +1,34 @@
 import httpx
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.main import app
+from app.main import app, configure_cors
+
+
+def test_cors_is_owned_by_nginx_in_production():
+    production_app = FastAPI()
+    enabled = configure_cors(
+        production_app,
+        type(
+            "Settings",
+            (),
+            {"app_env": "production", "cors_origins": ["https://google.kanjabung.web.id"]},
+        )(),
+    )
+
+    assert enabled is False
+    assert not any(middleware.cls is CORSMiddleware for middleware in production_app.user_middleware)
+
+
+def test_cors_remains_available_for_local_development():
+    development_app = FastAPI()
+    enabled = configure_cors(
+        development_app,
+        type("Settings", (), {"app_env": "development", "cors_origins": ["http://localhost:5173"]})(),
+    )
+
+    assert enabled is True
+    assert any(middleware.cls is CORSMiddleware for middleware in development_app.user_middleware)
 
 
 async def test_health_and_auth_envelopes():
