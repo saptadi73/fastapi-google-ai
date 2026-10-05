@@ -24,6 +24,7 @@ class AITaskPolicyService:
         return (set(settings.openai_allowed_models) | {
             settings.openai_model_etl_config,
             settings.openai_model_nl2sql,
+            settings.openai_model_help,
         }) - {""}
 
     async def validate_model_assignment(self, data):

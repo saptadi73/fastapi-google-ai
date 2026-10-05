@@ -10,6 +10,12 @@ administrasi dan pendaftaran Google Sheet sampai batch berhasil, dashboard, sert
 dokumentasinya tersedia di [panduan pengguna awal sampai akhir](USER_GUIDE_END_TO_END.md). Panduan
 dapat dibuka sebelum login; tautan ke modul operasional tetap meminta autentikasi dan role yang sesuai.
 
+Setelah login, tombol **Tanya AI** tersedia di atas tombol Bantuan. Panel ini menerima pertanyaan
+bebas, menyertakan route aktif sebagai konteks, dan menampilkan sumber knowledge base serta saran
+pertanyaan lanjutan. Riwayat hanya disimpan dalam memori browser dan dibersihkan ketika sesi berakhir.
+Frontend tidak mengirim isi halaman, role, tenant, token, atau riwayat percakapan ke endpoint bantuan.
+Rincian integrasi tersedia di `docs/AI_USER_HELP.md` pada repository frontend.
+
 ## Cakupan
 
 Bantuan khusus tersedia untuk:

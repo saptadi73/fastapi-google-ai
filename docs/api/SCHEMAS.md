@@ -1191,6 +1191,19 @@ Body: —.
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
 
+### GET /api/v1/help/articles
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `route` | query | Tidak | `string / null` {} |
+| `query` | query | Tidak | `string / null` {} |
+
+### POST /api/v1/help/ask
+
+Body: [HelpQuestion](#helpquestion).
+
 ### GET /api/v1/data-quality/issues
 
 Body: —.
@@ -1573,7 +1586,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
 | `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
-| `purpose` | Ya | `enum ["ETL_CONFIG","TAXONOMY_RECOMMEND","NL2SQL"]` | — | — |
+| `purpose` | Ya | `enum ["ETL_CONFIG","TAXONOMY_RECOMMEND","NL2SQL","USER_HELP"]` | — | — |
 | `prompt_version` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_.-]{0,79}$"} |
 | `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
 | `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
@@ -1607,7 +1620,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
 | `code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
-| `purpose` | Ya | `enum ["ETL_CONFIG","TAXONOMY_RECOMMEND","NL2SQL"]` | — | — |
+| `purpose` | Ya | `enum ["ETL_CONFIG","TAXONOMY_RECOMMEND","NL2SQL","USER_HELP"]` | — | — |
 | `prompt_version` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_.-]{0,79}$"} |
 | `model` | Ya | `string` | — | {"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$"} |
 | `allowed_models` | Ya | `array<string>` | — | {"maxItems":20,"minItems":1} |
@@ -2261,6 +2274,22 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 ```json
 {
   "feedback": "Hasil sesuai laporan cabang."
+}
+```
+
+### HelpQuestion
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `question` | Ya | `string` | — | {"maxLength":2000,"minLength":3} |
+| `route` | Tidak | `string / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "question": "Bagaimana alur dari Google Sheet sampai dashboard?",
+  "route": "/guide"
 }
 ```
 

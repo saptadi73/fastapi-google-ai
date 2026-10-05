@@ -14,6 +14,7 @@ PROMPT_PATHS = {
     "ETL_CONFIG": "etl_configuration_v1.md",
     "TAXONOMY_RECOMMEND": "taxonomy_recommend_v1.md",
     "NL2SQL": "nl2sql_v1.md",
+    "USER_HELP": "user_help_v1.md",
 }
 
 
@@ -38,7 +39,11 @@ class OpenAIService:
             raise AppError("AI_TASK_SCOPE_INVALID", "Scope source hanya untuk ETL_CONFIG.", 422)
         if taxonomy_id is not None and purpose != "TAXONOMY_RECOMMEND":
             raise AppError("AI_TASK_SCOPE_INVALID", "Scope taxonomy hanya untuk TAXONOMY_RECOMMEND.", 422)
-        model = s.openai_model_etl_config if purpose in ("ETL_CONFIG", "TAXONOMY_RECOMMEND") else s.openai_model_nl2sql
+        model = (
+            s.openai_model_etl_config
+            if purpose in ("ETL_CONFIG", "TAXONOMY_RECOMMEND")
+            else (s.openai_model_help or s.openai_model_nl2sql)
+        )
         if not s.openai_api_key.get_secret_value() or not model:
             raise AppError("OPENAI_NOT_CONFIGURED", "Isi OPENAI_API_KEY dan OPENAI_MODEL_* pada .env.", 503)
         template = PROMPT_PATHS.get(purpose, "nl2sql_v1.md")
@@ -87,7 +92,7 @@ class OpenAIService:
                 allowed_models = getattr(policy, "allowed_models", [])
                 server_models = (
                     set(s.openai_allowed_models)
-                    | {s.openai_model_etl_config, s.openai_model_nl2sql}
+                    | {s.openai_model_etl_config, s.openai_model_nl2sql, s.openai_model_help}
                 ) - {""}
                 if (
                     sum(value is not None for value in stored_scopes) > 1
@@ -121,11 +126,16 @@ class OpenAIService:
                 .where(
                     AIUsage.tenant_id == user.tenant_id,
                     AIUsage.user_id == user.id,
+                    AIUsage.purpose == purpose,
                     AIUsage.created_at >= midnight,
                 )
             )
-            if count >= s.nl2sql_daily_user_limit:
-                raise AppError("NL2SQL_QUOTA_EXCEEDED", "Kuota AI harian pengguna tercapai.", 429)
+            daily_limit = (
+                s.ai_help_daily_user_limit if purpose == "USER_HELP" else s.nl2sql_daily_user_limit
+            )
+            if count >= daily_limit:
+                code = "AI_HELP_QUOTA_EXCEEDED" if purpose == "USER_HELP" else "NL2SQL_QUOTA_EXCEEDED"
+                raise AppError(code, "Kuota AI harian pengguna tercapai.", 429)
             if s.ai_daily_tenant_budget_usd or policy_budget:
                 if not s.openai_input_usd_per_million or not s.openai_output_usd_per_million:
                     raise AppError(

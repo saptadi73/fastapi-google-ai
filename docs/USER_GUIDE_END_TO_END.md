@@ -63,3 +63,8 @@ Tombol **Bantuan** tersedia pada semua halaman dan menjelaskan fungsi serta oper
 Pilih **Panduan lengkap** dari dialog tersebut untuk membuka workflow `/guide`. Panduan route dan
 aksesibilitas dijelaskan di [bantuan kontekstual frontend](FRONTEND_CONTEXTUAL_HELP.md).
 
+Pengguna yang sudah login juga dapat membuka **Tanya AI** dari tombol bantuan global. Asisten mencari
+jawaban pada knowledge base pengguna yang dikurasi, menampilkan sumber rujukan, dan tidak mempunyai
+akses langsung ke source code, database, filesystem, atau credential. Jangan masukkan password,
+token, API key, data pribadi, atau isi spreadsheet sensitif ke pertanyaan.
+

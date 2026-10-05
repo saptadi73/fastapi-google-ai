@@ -1,8 +1,8 @@
 # API Reference untuk frontend
 
-Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **27 September 2026**.
+Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **6 Oktober 2026**.
 
-Dokumen ini menjelaskan **190 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan **210 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -1144,6 +1144,13 @@ POST `/data-products/{code}/export` memakai QueryPlan yang sama dan menghasilkan
 | POST | `/nl2sql/requests/{request_id}/feedback` | Auth + pemilik/admin | FeedbackRequest | 200 | `{recorded:true}` |
 | POST | `/nl2sql/clarifications/{request_id}` | Auth + pemilik/admin | QuestionRequest | 200 | QueryRow[]/[]; meta parent_request_id |
 | POST | `/nl2sql/requests/{request_id}/promote` | D | SavedQueryCreate | 201 | SavedQuery DRAFT |
+| GET | `/help/articles` | Auth | route, query opsional | 200 | Metadata artikel knowledge base sesuai role |
+| POST | `/help/ask` | Auth | HelpQuestion | 200 | Jawaban AI, sitasi artikel, saran pertanyaan, dan status kecukupan konteks |
+
+`/help/ask` melakukan retrieval lokal dari `docs/knowledge`, menyaring audience berdasarkan role,
+dan hanya mengirim artikel terpilih ke model. `route` membantu memprioritaskan petunjuk halaman aktif.
+Backend memvalidasi kembali ID sitasi model. Jika tidak ada konteks, respons aman dikembalikan tanpa
+memanggil OpenAI. Jangan mengirim password, token, API key, data pribadi, atau isi spreadsheet sensitif.
 
 QuestionRequest:
 

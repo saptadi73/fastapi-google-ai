@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_model_etl_config: str = ""
     openai_model_nl2sql: str = ""
+    openai_model_help: str = ""
     openai_allowed_models: list[str] = []
     openai_store_responses: bool = False
     openai_timeout_seconds: int = 60
@@ -54,6 +55,7 @@ class Settings(BaseSettings):
     nl2sql_max_rows: int = Field(1000, ge=1, le=10000)
     nl2sql_max_estimated_cost: float = 100000
     nl2sql_daily_user_limit: int = Field(25, ge=1)
+    ai_help_daily_user_limit: int = Field(50, ge=1)
     etl_sample_row_limit: int = Field(200, ge=1, le=1000)
     job_poll_seconds: int = 5
     job_stale_minutes: int = 30
