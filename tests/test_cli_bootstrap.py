@@ -86,7 +86,7 @@ async def test_reconcile_bootstrap_admin_can_reset_password_and_revoke_tokens(mo
     user = User(
         tenant_id=tenant.id,
         username="admin_etl@kanjabung.com",
-        full_name="ETL Administrator",
+        full_name="Nama Admin Lama",
         role="PLATFORM_ADMIN",
         is_active=True,
         token_version=2,
@@ -104,5 +104,6 @@ async def test_reconcile_bootstrap_admin_can_reset_password_and_revoke_tokens(mo
     )
 
     assert result == "reset"
+    assert user.full_name == "ETL Administrator"
     assert user.password_hash == "hashed:new-strong-password"
     assert user.token_version == 3

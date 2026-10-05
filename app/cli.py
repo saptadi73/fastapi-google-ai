@@ -35,7 +35,7 @@ async def reconcile_bootstrap_admin(session, settings, *, password: str, usernam
     if not user.is_active:
         user.is_active = True
         changed = True
-    if not user.full_name and settings.bootstrap_full_name:
+    if settings.bootstrap_full_name and user.full_name != settings.bootstrap_full_name:
         user.full_name = settings.bootstrap_full_name
         changed = True
     if reset_password:
