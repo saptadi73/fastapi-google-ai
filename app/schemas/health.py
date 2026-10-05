@@ -22,6 +22,20 @@ class Readiness(StrictModel):
     background_jobs: Literal["celery", "manual_worker_only"]
 
 
+class DependencyCheck(StrictModel):
+    status: Literal["ready", "unavailable", "not_configured"]
+    latency_ms: float = Field(ge=0)
+    message: str | None = None
+
+
+class DependencyHealth(StrictModel):
+    status: Literal["ready", "degraded"]
+    database: DependencyCheck
+    redis: DependencyCheck
+    google_api: DependencyCheck
+    openai: DependencyCheck
+
+
 class LivenessResponse(Envelope):
     data: Liveness
 
@@ -32,3 +46,7 @@ class DatabaseHealthResponse(Envelope):
 
 class ReadinessResponse(Envelope):
     data: Readiness
+
+
+class DependencyHealthResponse(Envelope):
+    data: DependencyHealth

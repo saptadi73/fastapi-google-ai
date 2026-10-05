@@ -1217,6 +1217,7 @@ NL2SQL berjalan sinkron, bukan Job. Timeout frontend harus cukup untuk timeout m
 | GET | `/health/live` | Public | —; tanpa prefix API | 200 | `{alive:true}` |
 | GET | `/health/database` | Public | —; tanpa prefix API | 200 | DatabaseHealth |
 | GET | `/health/ready` | Public | —; tanpa prefix API | 200 | Readiness |
+| GET | `/health/dependencies` | A | —; tanpa prefix API | 200 | DependencyHealth |
 
 AIUsageSummary, contoh isi `data`:
 
@@ -1249,6 +1250,20 @@ Readiness mode manual dapat tetap 200:
 ```
 
 Jika REDIS_REQUIRED=true dan Redis tidak siap → 503 REDIS_UNAVAILABLE. Database/schema platform tidak siap → 503 DATABASE_UNAVAILABLE. Liveness tidak memeriksa database. Readiness hanya memeriksa koneksi utama/schema dan Redis; tidak membuktikan key Google/OpenAI, role DDL/reader, worker, atau beat berfungsi. `background_jobs="celery"` adalah hasil inferensi Redis tersedia, bukan pemeriksaan proses worker.
+
+`GET /health/dependencies` merupakan diagnosis khusus `PLATFORM_ADMIN`. Endpoint ini menjalankan empat pemeriksaan secara paralel dan selalu mengembalikan 200 selama aplikasi dapat menyelesaikan pemeriksaan. `data.status` bernilai `ready` bila semuanya siap atau `degraded` bila ada layanan `unavailable`/`not_configured`:
+
+```json
+{
+  "status": "ready",
+  "database": {"status": "ready", "latency_ms": 4.12, "message": null},
+  "redis": {"status": "ready", "latency_ms": 1.31, "message": null},
+  "google_api": {"status": "ready", "latency_ms": 128.42, "message": null},
+  "openai": {"status": "ready", "latency_ms": 214.73, "message": null}
+}
+```
+
+Pemeriksaan Google meminta token OAuth service account dengan scope baca Google Sheets. Ini membuktikan file kredensial dan autentikasi Google dapat digunakan, tetapi tidak membuktikan service account memiliki akses ke suatu spreadsheet tertentu. Pemeriksaan OpenAI membaca metadata setiap model yang dikonfigurasi; tidak menjalankan prompt dan tidak memakai token generasi. Pesan kegagalan disanitasi sehingga kredensial dan detail exception upstream tidak dikirim ke klien.
 
 ## 9. Alur implementasi Vue
 

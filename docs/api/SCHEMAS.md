@@ -1530,6 +1530,10 @@ Body: —.
 
 Body: —.
 
+### GET /health/dependencies
+
+Body: —.
+
 ## Schema JSON
 
 `Wajib` berarti field harus dikirim. Nullable berbeda dari opsional. Payload StrictModel menolak field tambahan. Default ditampilkan jika tersedia; default factory list/map kosong ditampilkan sebagai `[]`/`{}`.
@@ -2168,6 +2172,33 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "comment": "Mapping, business key, dan hasil validasi sudah diperiksa."
 }
 ```
+
+### DependencyCheck
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `status` | Ya | `enum ["ready","unavailable","not_configured"]` | — | — |
+| `latency_ms` | Ya | `number` | — | {"minimum":0.0} |
+| `message` | Tidak | `string / null` | — | — |
+
+### DependencyHealth
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `status` | Ya | `enum ["ready","degraded"]` | — | — |
+| `database` | Ya | `DependencyCheck` | — | — |
+| `redis` | Ya | `DependencyCheck` | — | — |
+| `google_api` | Ya | `DependencyCheck` | — | — |
+| `openai` | Ya | `DependencyCheck` | — | — |
+
+### DependencyHealthResponse
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `status` | Ya | `string` | — | — |
+| `data` | Ya | `DependencyHealth` | — | — |
+| `meta` | Tidak | `object` | {} | — |
+| `errors` | Tidak | `array<object>` | [] | — |
 
 ### ETLConfiguration
 

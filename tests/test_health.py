@@ -10,6 +10,7 @@ from sqlalchemy.exc import OperationalError
 from app.api.health import get_health_service
 from app.core.config import get_settings
 from app.main import app
+from app.schemas.health import DependencyCheck
 from app.services import health_service
 from app.services.health_service import HealthService
 
@@ -96,3 +97,49 @@ async def test_readiness_requires_migration(client):
     response = await client.get("/health/ready")
     assert response.status_code == 503
     assert response.json()["errors"][0]["code"] == "DATABASE_UNAVAILABLE"
+
+
+async def test_dependency_health_collects_all_results(monkeypatch):
+    service = HealthService(fake_engine())
+    monkeypatch.setattr(
+        service,
+        "_database_dependency",
+        AsyncMock(return_value=DependencyCheck(status="ready", latency_ms=1)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_redis_dependency",
+        AsyncMock(
+            return_value=DependencyCheck(
+                status="unavailable", latency_ms=2, message="Koneksi Redis gagal."
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_google_dependency",
+        AsyncMock(return_value=DependencyCheck(status="ready", latency_ms=3)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_openai_dependency",
+        AsyncMock(
+            return_value=DependencyCheck(
+                status="not_configured", latency_ms=0, message="OpenAI belum dikonfigurasi."
+            )
+        ),
+    )
+
+    result = await service.dependencies()
+
+    assert result.status == "degraded"
+    assert result.database.status == "ready"
+    assert result.redis.status == "unavailable"
+    assert result.google_api.status == "ready"
+    assert result.openai.status == "not_configured"
+
+
+async def test_dependency_health_requires_platform_admin(client):
+    response = await client.get("/health/dependencies")
+    assert response.status_code == 401
+    assert response.json()["errors"][0]["code"] == "AUTHENTICATION_REQUIRED"

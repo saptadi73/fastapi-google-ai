@@ -285,7 +285,7 @@ Invoke-RestMethod http://127.0.0.1:8000/health/database
 Invoke-RestMethod http://127.0.0.1:8000/health/ready
 ```
 
-`/health/live` hanya membuktikan API merespons. `/health/database` membuktikan koneksi utama. `/health/ready` memeriksa database, tabel migrasi, dan Redis sesuai konfigurasi; endpoint tersebut tidak memverifikasi akses Google, OpenAI, atau keberhasilan ETL.
+`/health/live` hanya membuktikan API merespons. `/health/database` membuktikan koneksi utama. `/health/ready` memeriksa database, tabel migrasi, dan Redis sesuai konfigurasi. Admin dapat memakai bearer token pada `/health/dependencies` untuk memeriksa koneksi database, Redis, autentikasi Google service account, dan akses model OpenAI. Pemeriksaan tersebut tidak membuktikan akses ke spreadsheet tertentu atau keberhasilan ETL.
 
 Untuk instalasi pertama, jalankan migrasi dan bootstrap secara eksplisit sesuai README. Mengubah `BOOTSTRAP_PASSWORD` kemudian menjalankan bootstrap **tidak mengganti password admin yang sudah ada**. Mengganti `JWT_SECRET` akan membuat token lama gagal diverifikasi; rencanakan login ulang pengguna.
 

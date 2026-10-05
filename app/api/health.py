@@ -1,9 +1,15 @@
 from fastapi import Depends
 
+from app.api.dependencies import require_roles
 from app.core.exceptions import success
 from app.core.routing import APIRouter
 from app.schemas.common import Envelope
-from app.schemas.health import DatabaseHealthResponse, LivenessResponse, ReadinessResponse
+from app.schemas.health import (
+    DatabaseHealthResponse,
+    DependencyHealthResponse,
+    LivenessResponse,
+    ReadinessResponse,
+)
 from app.services.health_service import HealthService
 
 router = APIRouter(prefix="/health", tags=["Health"], responses={503: {"model": Envelope}})
@@ -27,3 +33,13 @@ async def database(service: HealthService = Depends(get_health_service)):
 @router.get("/ready", response_model=ReadinessResponse, summary="Cek database, migrasi, dan Redis")
 async def ready(service: HealthService = Depends(get_health_service)):
     return success(await service.ready())
+
+
+@router.get(
+    "/dependencies",
+    response_model=DependencyHealthResponse,
+    dependencies=[Depends(require_roles("PLATFORM_ADMIN"))],
+    summary="Cek PostgreSQL, Redis, Google API, dan OpenAI",
+)
+async def dependencies(service: HealthService = Depends(get_health_service)):
+    return success(await service.dependencies())

@@ -20694,6 +20694,42 @@
           }
         }
       }
+    },
+    "/health/dependencies": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Cek PostgreSQL, Redis, Google API, dan OpenAI",
+        "operationId": "dependencies_health_dependencies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependencyHealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -22066,6 +22102,106 @@
           "revision_no"
         ],
         "title": "Decision"
+      },
+      "DependencyCheck": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "unavailable",
+              "not_configured"
+            ],
+            "title": "Status"
+          },
+          "latency_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Latency Ms"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "latency_ms"
+        ],
+        "title": "DependencyCheck"
+      },
+      "DependencyHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "database": {
+            "$ref": "#/components/schemas/DependencyCheck"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/DependencyCheck"
+          },
+          "google_api": {
+            "$ref": "#/components/schemas/DependencyCheck"
+          },
+          "openai": {
+            "$ref": "#/components/schemas/DependencyCheck"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "database",
+          "redis",
+          "google_api",
+          "openai"
+        ],
+        "title": "DependencyHealth"
+      },
+      "DependencyHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DependencyHealth"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          },
+          "errors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "title": "DependencyHealthResponse"
       },
       "ETLConfiguration": {
         "properties": {
