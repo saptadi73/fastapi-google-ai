@@ -179,20 +179,18 @@ JSON berisi `type`, `project_id`, `client_email`, `private_key_id`, `private_key
 
 Bagikan **setiap spreadsheet yang akan digunakan aplikasi** ke email `client_email` sebagai **Viewer**. Akses pribadi pembuat akun tidak diwariskan ke Service Account. Spreadsheet tidak perlu dibuat publik.
 
-Untuk pendaftaran sumber, isi `credential_ref` dengan alias, bukan email atau isi JSON:
+Untuk pendaftaran sumber, klien cukup mengirim informasi bisnis. Kode sumber dan alias kredensial dapat ditentukan server:
 
 ```json
 {
-  "source_code": "penjualan",
   "name": "Data Penjualan",
   "spreadsheet_url": "https://docs.google.com/spreadsheets/d/ID_SPREADSHEET/edit",
   "description": "Data transaksi penjualan",
-  "credential_ref": "default",
   "sync_schedule": "0 */6 * * *"
 }
 ```
 
-Kirim ke `POST /api/v1/sources/google-sheets` dengan autentikasi aplikasi. Jadwal cron menggunakan UTC. Aplikasi saat ini memakai satu file Service Account dan satu alias global; `credential_ref` bukan pemilih banyak file kredensial.
+Kirim ke `POST /api/v1/sources/google-sheets` dengan autentikasi aplikasi. Server membuat `source_code` unik dari nama bila field itu tidak dikirim dan memakai alias credential `default`. Jadwal cron menggunakan UTC. Aplikasi saat ini memakai satu file Service Account dan satu alias global; `credential_ref` bukan pilihan yang perlu ditampilkan kepada pengguna.
 
 ### Mengganti key pada Service Account yang sama
 

@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from datetime import datetime, timezone
 
 from fastapi.encoders import jsonable_encoder
@@ -61,6 +63,14 @@ def dependency_graph_has_cycle(edges):
     return any(visit(node) for node in graph)
 
 
+def source_code_base(name: str) -> str:
+    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    code = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    if not code or not code[0].isalpha():
+        code = f"source_{code}" if code else "source"
+    return code[:63].rstrip("_")
+
+
 class SourceService:
     def __init__(self, session, user, google=None):
         self.session, self.user = session, user
@@ -108,9 +118,33 @@ class SourceService:
         except ValueError as exc:
             raise AppError("INVALID_SPREADSHEET_ID", str(exc)) from None
         metadata = await self._validated_access_metadata(data.access_metadata)
+        source_code = data.source_code
+        if source_code is None:
+            await self.session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": f"source-code:{self.user.tenant_id}"},
+            )
+            base = source_code_base(data.name)
+            existing = set(
+                (
+                    await self.session.scalars(
+                        select(DataSource.source_code).where(
+                            DataSource.tenant_id == self.user.tenant_id,
+                            DataSource.source_code.startswith(base, autoescape=True),
+                        )
+                    )
+                ).all()
+            )
+            source_code = base
+            suffix = 2
+            while source_code in existing:
+                ending = f"_{suffix}"
+                source_code = f"{base[: 63 - len(ending)].rstrip('_')}{ending}"
+                suffix += 1
         source = await self.repo.add(
             DataSource,
-            **data.model_dump(exclude={"spreadsheet_url", "access_metadata"}),
+            **data.model_dump(exclude={"spreadsheet_url", "access_metadata", "source_code"}),
+            source_code=source_code,
             spreadsheet_id=sid,
             owner_user_id=self.user.id,
             access_metadata=metadata,

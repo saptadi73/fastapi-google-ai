@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from app.core.exceptions import AppError
 from app.models.source import DataSource
 from app.schemas.source import SourceCreate, SourceScheduleUpdate, cron_schedule
-from app.services.source_service import SourceService, dependency_graph_has_cycle
+from app.services.source_service import SourceService, dependency_graph_has_cycle, source_code_base
 from app.workers import runner
 
 
@@ -89,6 +89,19 @@ async def test_schedule_update_uses_revision_resets_clock_and_audits(monkeypatch
 def test_dependency_graph_rejects_cycles():
     assert dependency_graph_has_cycle([("b", "a"), ("c", "b")]) is False
     assert dependency_graph_has_cycle([("b", "a"), ("a", "b")]) is True
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Laporan Penjualan Harian", "laporan_penjualan_harian"),
+        ("Data Produksi 2026", "data_produksi_2026"),
+        ("123", "source_123"),
+        ("---", "source"),
+    ],
+)
+def test_source_code_base_is_human_readable(name, expected):
+    assert source_code_base(name) == expected
 
 
 @pytest.mark.parametrize(

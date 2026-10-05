@@ -44,7 +44,7 @@ class SourceAccessActivation(StrictModel):
 
 
 class SourceCreate(StrictModel):
-    source_code: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    source_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,62}$")
     name: str = Field(min_length=1, max_length=200)
     spreadsheet_url: str = Field(min_length=5, max_length=500)
     access_metadata: SourceAccessMetadata

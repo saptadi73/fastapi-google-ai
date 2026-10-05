@@ -489,6 +489,7 @@ Checklist ini adalah gate yang diterapkan pada setiap perubahan sesuai dampaknya
 - [ ] API Reference menjelaskan payload, respons, error, role, status, dan mekanisme polling/resume yang baru.
 - [ ] Contoh payload serta OpenAPI/schema diperbarui; `scripts/export_api_reference.py --check` lulus.
 - [ ] Parameter yang belum didukung tetap disebutkan pada capabilities dan tidak dibuang diam-diam saat import Excel.
+- [x] Relasi internal dipilih melalui nama/kode bisnis; halaman dan workbook tidak meminta UUID manual. Lihat [aturan identifier](IDENTIFIER_UX.md).
 - [ ] Bukti pengujian dan batasan dicatat; status TODO diperbarui setelah kriteria selesai terpenuhi.
 
 ## Catatan progres

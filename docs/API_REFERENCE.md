@@ -332,7 +332,6 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 
 ```json
 {
-  "source_code": "sales_cabang",
   "name": "Penjualan Cabang",
   "spreadsheet_url": "https://docs.google.com/spreadsheets/d/ID_SPREADSHEET_ANDA/edit",
   "access_metadata": {
@@ -345,12 +344,11 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
     "sensitivity": "MEDIUM"
   },
   "description": "Satu baris per transaksi penjualan",
-  "credential_ref": "default",
   "sync_schedule": "0 */6 * * *"
 }
 ```
 
-`source_code` wajib unik per tenant, 1–63 karakter, lowercase identifier mulai huruf. `name` wajib 1–200 karakter. URL juga boleh berupa spreadsheet ID. `access_metadata` wajib untuk pendaftaran baru; tiga scope harus merupakan assignment aktif pendaftar, PURPOSE harus aktif pada registry tenant, dan owner/steward adalah user aktif tenant yang sama. Pilihan editor ada pada `GET /access/registration-options`; validasi backend diulang saat POST. Sensitivitas hanya `LOW`, `MEDIUM`, atau `HIGH`. Sumber lama tanpa metadata tetap null dan berstatus `ACCESS_POLICY_REQUIRED`. Deskripsi maksimal 2000 karakter. `credential_ref` harus cocok dengan konfigurasi server; jangan mengirim email Service Account/private key. Cron lima field, optional/null untuk tanpa jadwal. Metadata diperbaiki lewat PATCH access-metadata; jadwal melalui endpoint schedule.
+`source_code` opsional. Jika tidak dikirim, server membentuk kode unik yang mudah dibaca dari `name`, misalnya `Penjualan Cabang` menjadi `penjualan_cabang`, lalu menambahkan suffix `_2`, `_3`, dan seterusnya bila sudah dipakai dalam tenant. Klien API tetap boleh mengirim kode bisnis sendiri dengan format 1–63 karakter, lowercase identifier mulai huruf. UUID sumber selalu dibuat sistem. `name` wajib 1–200 karakter. URL juga boleh berupa spreadsheet ID. `access_metadata` wajib untuk pendaftaran baru; tiga scope harus merupakan assignment aktif pendaftar, PURPOSE harus aktif pada registry tenant, dan owner/steward adalah user aktif tenant yang sama. Pilihan editor ada pada `GET /access/registration-options`; UUID pilihan hanya menjadi value internal dropdown. Sensitivitas hanya `LOW`, `MEDIUM`, atau `HIGH`. Deskripsi maksimal 2000 karakter. `credential_ref` boleh dihilangkan agar memakai alias server `default`; jangan tampilkan email Service Account/private key pada form. Cron lima field optional/null untuk tanpa jadwal; frontend utama memakai preset jadwal.
 
 Contoh respons `202` lengkap:
 

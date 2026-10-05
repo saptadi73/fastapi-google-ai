@@ -197,7 +197,7 @@ async def source_access_metadata(ctx):
 
 async def test_source_registration_checks_access_metadata(context):
     ctx = context
-    base = {"source_code": "scope_test", "name": "Scoped source", "spreadsheet_url": "fake_sheet_12345"}
+    base = {"name": "Scoped source", "spreadsheet_url": "fake_sheet_12345"}
     await request(ctx, "POST", "/sources/google-sheets", expected=422, data=base)
     metadata = await source_access_metadata(ctx)
     options = (await request(ctx, "GET", "/access/registration-options"))["data"]
@@ -277,8 +277,17 @@ async def test_source_registration_checks_access_metadata(context):
         data={**base, "access_metadata": metadata},
     )
     source = (await request(ctx, "GET", f"/sources/{created['data']['source']['id']}"))["data"]
+    assert source["source_code"] == "scoped_source"
     assert source["access_status"] == "ACCESS_POLICY_REQUIRED"
     assert source["access_metadata"] == metadata
+    duplicate_name = await request(
+        ctx,
+        "POST",
+        "/sources/google-sheets",
+        expected=202,
+        data={**base, "spreadsheet_url": "fake_sheet_67890", "access_metadata": metadata},
+    )
+    assert duplicate_name["data"]["source"]["source_code"] == "scoped_source_2"
     async with SessionFactory() as session, session.begin():
         await session.execute(
             update(UserAssignment)

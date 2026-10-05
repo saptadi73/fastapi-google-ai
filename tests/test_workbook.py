@@ -77,6 +77,10 @@ def test_taxonomy_mapping_roundtrip_edit_and_signed_identity(workbook_context):
     column = workbook_context[0].configuration_json["columns"][2]
     column.update(taxonomy_id="00000000-0000-0000-0000-000000000001", taxonomy_version=2,
                   taxonomy_required=True)
+    book = load_workbook(io.BytesIO(export_workbook(*workbook_context)))
+    assert book[TAXONOMY]["U7"].protection.locked
+    assert not book[TAXONOMY]["V7"].protection.locked
+    assert not book[TAXONOMY]["W7"].protection.locked
     result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
     assert not result["errors"] and result["configuration"]["columns"][2] == column
     result = parse_workbook(edited(workbook_context, TAXONOMY, "V7", 3), *workbook_context)

@@ -34,7 +34,9 @@ COLUMN_PARAMETERS = {
 EDITABLE = {
     "02 Struktur Kolom": (5, 104, {4, 10, 11, 12, 13, 17, 20, *COLUMN_PARAMETERS.values()}),
     "03 Aturan Cleansing": (5, 1004, {3, 4, 5, 9}),
-    TAXONOMY: (5, 104, {21, 22, 23}),
+    # Taxonomy identity is selected in the application and signed into the workbook.
+    # Editors may adjust version/required, but never type an internal UUID.
+    TAXONOMY: (5, 104, {22, 23}),
     "05 Data Quality": (5, 104, {3, 5, 6, 7, 8, 9, 10, 11, 15, 16}),
     "06 Target Database": (5, 104, {6}),
     "10 Data Product Catalog": (5, 5, {1, 11, 15}),
@@ -261,7 +263,10 @@ def render(config, source, sheet):
     book["00 Petunjuk"]["A2"] = (
         "Draft aplikasi: edit sel kuning. Mapping taxonomy ada di tab 04 kolom U-W. Sheet 07, 08, 12, 13 belum dapat diimport. Status Excel tidak memberi approval."
     )
-    book[TAXONOMY]["A2"] = "U: UUID taxonomy, V: versi, W: wajib Ya/Tidak. Binding tetap perlu approval melalui aplikasi."
+    book[TAXONOMY]["A2"] = (
+        "U: taxonomy terpilih dari aplikasi (tidak dapat diedit), V: versi, W: wajib Ya/Tidak. "
+        "Ubah taxonomy dan approval binding melalui aplikasi."
+    )
     book["11 Metric Definitions"]["A2"] = (
         "C: definisi bisnis; D: sinonim JSON; H: filter JSON; I: dimensi tanggal; J: hari default; K: unit; M: null_handling "
         "PRESERVE atau ZERO_RESULT. Approval tetap melalui aplikasi."

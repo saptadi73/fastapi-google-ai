@@ -3241,7 +3241,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
-| `source_code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `source_code` | Tidak | `string / null` | — | — |
 | `name` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
 | `spreadsheet_url` | Ya | `string` | — | {"maxLength":500,"minLength":5} |
 | `access_metadata` | Ya | `SourceAccessMetadata` | — | — |
