@@ -29,6 +29,15 @@ parsial. BE-11/BE-12 tetap mengikuti status parsial backend; editor
 68 skenario browser, dan build/typecheck frontend lulus**; tes browser memakai mock
 API dan bukan acceptance deployment.
 
+Addendum 6 Oktober 2026: frontend menyediakan bantuan kontekstual global untuk 26 pola route,
+termasuk login, analitik NL2SQL, ETL, governance, import, operasional, dan administrasi. Dialog
+menjelaskan fungsi serta langkah penggunaan, mendukung keyboard/focus, dan mempunyai fallback untuk
+route baru. Menu `/guide` memberikan workflow 10 tahap dari administrasi, onboarding Google Sheet,
+master/taxonomy, ETL/import, sampai dashboard/chart. Bukti: **98 unit test**, tes browser bantuan,
+panduan dan navigasi viewer, typecheck, serta production build lulus. Lihat
+[bantuan kontekstual frontend](FRONTEND_CONTEXTUAL_HELP.md) dan
+[panduan pengguna](USER_GUIDE_END_TO_END.md).
+
 ## Urutan implementasi
 
 ### BE-01 — Kebijakan data dan kontrak dasar
@@ -291,7 +300,7 @@ Prasyarat: BE-09, BE-11; gunakan BE-12/BE-13 jika memakai unit/domain/taxonomy.
 - [~] Lengkapi metadata bisnis produk, default periode, unit, sinonim, dan lifecycle approval metrik. Tahap 1: edit name/description; tahap 2: unit/sinonim katalog; tahap 6: definisi bisnis/unit/sinonim dalam konfigurasi reviewed dan workbook C/D/K; tahap 7: periode default UTC dengan override filter, conflict guard, frontend dan workbook I/J. Registry approval metrik terpisah masih terbuka. Kontrak: [frontend BE14](FRONTEND_BE14.md).
 - [~] Tambahkan expression/filter/null handling metrik melalui AST/operasi allowlist yang tervalidasi (aggregation/kolom, PRESERVE/ZERO_RESULT, serta filter tetap bertipe melalui aggregate FILTER tersedia dalam konfigurasi reviewed, frontend, dan workbook tab 11 H/M; expression arithmetic AST lanjutan belum).
 - [~] Tambahkan query template berparameter dan periode relatif, timezone, output type, priority, serta ambiguity policy. Tahap 5 BE14 meminta pilihan eksplisit untuk template ambigu (backend + Chat frontend), memeriksa ulang akses/versi; parameter, periode, timezone/output dan priority masih terbuka.
-- [x] Tambahkan spesifikasi visualisasi allowlist pada QueryPlan dan saved query: table, KPI, bar, line, area, pie/donut, combo, scatter, heatmap; validasi field output, renderer Dashboard/Chat, override manual, dan isolasi SQL/cache tersedia pada tahap 9.
+- [x] Tambahkan spesifikasi visualisasi allowlist pada QueryPlan dan saved query: table, KPI, bar, line, area, pie/donut, combo, scatter, heatmap; validasi field output, renderer Dashboard/Chat, override manual, dan isolasi SQL/cache tersedia pada tahap 9. Input bahasa alami NL2SQL kini juga menjadi panel utama Dashboard dengan klarifikasi, kandidat template, tabel, chart, detail request, dan feedback.
 - [x] Buat registry join allowlist, kardinalitas, arah join, dan kebijakan penanganan agregasi ganda. Registry tenant-scoped dengan lifecycle DRAFT/APPROVED/REJECTED, optimistic revision, validasi product/column, join type, cardinality, duplicate policy, dan aktivasi hanya untuk relationship APPROVED tersedia.
 - [x] Perluas structured query compiler multi-product dengan tenant scope, row scope, PII, serta akses tiap sisi join. QueryPlan menerima path relationship terarah; field produk sekunder memakai `PRODUCT.field`, dan SQL guard hanya menerima object/kolom hasil kompilasi katalog.
 - [x] Izinkan NL2SQL AI menemukan join hanya dari graph relationship APPROVED yang dapat diakses. Konteks dibatasi 10 produk/50 relationship, mengikuti arah maksimal lima hop, membuang relationship stale/PII, mengunci root product eksplisit, dan menolak kode relationship hasil AI di luar konteks.

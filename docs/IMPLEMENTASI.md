@@ -41,6 +41,12 @@ melalui `scripts/prepare_test_db.py`, terpisah dari database aplikasi `googleai`
   dashboard sales/inventory, CSV export, saved query dan normalized intent.
 - OpenAI Responses API menghasilkan structured query plan; backend membangun SQL. AST guard,
   transaksi read-only, EXPLAIN cost limit, statement timeout, row limit, quota dan audit penggunaan AI.
+- Dashboard frontend menempatkan input bahasa alami NL2SQL sebagai akses utama. Hasil langsung
+  ditampilkan sebagai tabel dan visualisasi tervalidasi; klarifikasi, kandidat template, detail request,
+  serta feedback memakai kontrak NL2SQL yang sama dengan halaman Chat data. Query builder katalog
+  tetap tersedia untuk pengguna yang ingin menyusun dimensi, metrik, filter, dan join secara eksplisit.
+- Bantuan kontekstual frontend tersedia pada setiap route. Dialog menjelaskan fungsi halaman,
+  langkah operasi, dan catatan penting; route yang baru atau belum terdaftar menerima petunjuk fallback.
 - Optional Redis query cache: key mencakup schema cache, tenant, role, `token_version`, row scope,
   semantic/freshness version, relationship, revisi source/policy, dan fingerprint keputusan akses.
   Rekomendasi similarity deterministik memakai cache terpisah berdasarkan tenant, taxonomy/version,

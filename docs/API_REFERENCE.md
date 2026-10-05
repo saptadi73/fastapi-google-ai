@@ -1303,7 +1303,7 @@ Checklist UI per modul:
 | Approval | approve/reject/deploy | Role dan approver terpisah; ACTIVE setelah job sukses |
 | Monitor job | jobs, etl-runs | HTTP 200 dengan job FAILED; result per tab |
 | Kualitas data | issues/quarantine/resolve/reprocess | Catatan resolve tidak memperbaiki data otomatis |
-| Dashboard | data-products, metrics, query, reports | Katalog kosong, allowlist, batas baris, null aggregate |
+| Dashboard | nl2sql/query, clarifications, feedback, data-products, metrics, query, reports | Bahasa alami sebagai akses utama; klarifikasi di meta, katalog kosong, allowlist, batas baris, null aggregate |
 | Chat data | nl2sql/query, clarifications, feedback | Klarifikasi di meta, request baru, timeout AI |
 | Admin | users, audit-events, ai-usage | Scope tenant, revoke token saat update user |
 
