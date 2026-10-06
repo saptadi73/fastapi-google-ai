@@ -17,12 +17,14 @@ from app.schemas.source import (
     SheetWatermarkUpdate,
     SourceAccessActivation,
     SourceAccessMetadataUpdate,
+    SourceApproversUpdate,
     SourceCreate,
     SourceMetadataReview,
     SourceScheduleUpdate,
 )
 from app.services.classification_service import ClassificationService
 from app.services.job_service import enqueue
+from app.services.source_approver_service import SourceApproverService
 from app.services.source_service import SourceService, source_records
 
 router = APIRouter(tags=["Sources"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))])
@@ -60,6 +62,11 @@ async def sources(
     )
 
 
+@router.get("/sources/approver-options", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def source_approver_options(session: Session, user: CurrentUser):
+    return success(await SourceApproverService(session, user).options())
+
+
 @router.get("/sources/{source_id}")
 async def get_source(source_id: UUID, session: Session, user: CurrentUser):
     source = await SourceRepository(session, user.tenant_id).get(DataSource, source_id)
@@ -73,14 +80,14 @@ async def update_access_metadata(
     return success(await SourceService(session, user).update_access_metadata(source_id, data))
 
 
-@router.post("/sources/{source_id}/access-review", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+@router.post("/sources/{source_id}/access-review", dependencies=[Depends(require_roles("PLATFORM_ADMIN", "TECHNICAL_APPROVER"))])
 async def review_access_metadata(
     source_id: UUID, data: SourceMetadataReview, session: Session, user: CurrentUser
 ):
     return success(await SourceService(session, user).review_access_metadata(source_id, data))
 
 
-@router.get("/sources/{source_id}/access-review-context", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+@router.get("/sources/{source_id}/access-review-context", dependencies=[Depends(require_roles("PLATFORM_ADMIN", "TECHNICAL_APPROVER"))])
 async def access_review_context(source_id: UUID, session: Session, user: CurrentUser):
     return success(await SourceService(session, user).metadata_review_context(source_id))
 
@@ -95,6 +102,16 @@ async def activate_source_access(
 @router.get("/sources/{source_id}/access-policy-options", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
 async def source_policy_options(source_id: UUID, session: Session, user: CurrentUser):
     return success(await SourceService(session, user).source_policy_options(source_id))
+
+
+@router.get("/sources/{source_id}/approvers", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def source_approvers(source_id: UUID, session: Session, user: CurrentUser):
+    return success(await SourceApproverService(session, user).get(source_id))
+
+
+@router.put("/sources/{source_id}/approvers", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def replace_source_approvers(source_id: UUID, data: SourceApproversUpdate, session: Session, user: CurrentUser):
+    return success(await SourceApproverService(session, user).replace(source_id, data))
 
 
 @router.patch("/sources/{source_id}/schedule", dependencies=edit)

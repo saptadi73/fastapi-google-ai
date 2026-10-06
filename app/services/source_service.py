@@ -22,6 +22,8 @@ from app.services.google_sheets_service import GoogleSheetsService
 from app.services.import_review_service import ImportReviewService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
+from app.services.release_approval_service import require_release_ready
+from app.services.source_approver_service import require_source_approver
 
 
 async def source_records(session, sources):
@@ -199,6 +201,7 @@ class SourceService:
         )
         if source is None:
             raise AppError("RESOURCE_NOT_FOUND", "Data tidak ditemukan.", 404)
+        await require_source_approver(self.session, self.user, source.id, "metadata_review")
         if source.access_revision != data.revision_no:
             raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
         if source.access_review_status != "PENDING":
@@ -230,6 +233,7 @@ class SourceService:
 
     async def metadata_review_context(self, source_id):
         source = await self.repo.get(DataSource, source_id)
+        await require_source_approver(self.session, self.user, source.id, "metadata_review")
         metadata = source.access_metadata or {}
         attribute_fields = ("owner_unit_id", "business_domain_id", "jurisdiction_id", "purpose_id")
         user_fields = ("data_owner_user_id", "data_steward_user_id")
@@ -251,6 +255,7 @@ class SourceService:
             }
         return {
             "source_id": source.id,
+            "can_decide": source.approval_assignees is None or self.user.id in source.approval_assignees.get("metadata_review", []),
             "source_code": source.source_code,
             "access_revision": source.access_revision,
             "access_status": source.access_status,
@@ -273,6 +278,14 @@ class SourceService:
 
     async def activate_source_access(self, source_id, data):
         source = await self.repo.get(DataSource, source_id, lock=True)
+        if source.release_policy is not None:
+            active_configs = (await self.session.scalars(
+                self.repo.query(Configuration).where(
+                    Configuration.source_id == source.id, Configuration.status == "ACTIVE"
+                )
+            )).all()
+            for config in active_configs:
+                require_release_ready(config, source)
         if source.access_revision != data.revision_no:
             raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
         if not source.access_metadata or source.access_review_status != "APPROVED":

@@ -132,6 +132,7 @@ Role UI bukan hierarki bebas: misalnya `TECHNICAL_APPROVER` dapat approve tetapi
 | PATCH | `/access/permission-bundles/{bundle_id}` | A | PermissionBundleUpdate | 200 | PermissionBundle |
 | GET | `/access/users/{user_id}/assignments` | A | —; query include_inactive | 200 | UserAssignment[] dengan attribute |
 | POST | `/access/users/{user_id}/assignments` | A | UserAssignmentCreate | 201 | UserAssignment dengan attribute |
+| POST | `/access/users/{user_id}/unit-assignments` | A | `{unit_ids: UUID[], valid_from?, valid_to?, note?}` | 201 | UserAssignment[]; satu transaksi, hanya DEPARTMENT eksplisit |
 | POST | `/access/assignments/{assignment_id}/revoke` | A | AssignmentRevoke | 200 | UserAssignment yang dicabut |
 | GET | `/access/users/{user_id}/permission-grants` | A | —; query include_inactive | 200 | UserPermissionGrant[] dengan bundle |
 | POST | `/access/users/{user_id}/permission-grants` | A | PermissionGrantCreate | 201 | UserPermissionGrant dengan bundle |
@@ -307,8 +308,18 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | GET | `/sources` | S | offset/limit | 200 | DataSource[]; meta pagination |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
 | PATCH | `/sources/{source_id}/access-metadata` | E | SourceAccessMetadataUpdate | 200 | DataSource dengan access_revision terbaru dan access_status pending |
-| GET | `/sources/{source_id}/access-review-context` | A | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk review metadata |
-| POST | `/sources/{source_id}/access-review` | A | SourceMetadataReview | 200 | Keputusan review metadata; status akses tetap pending |
+| GET | `/sources/{source_id}/access-review-context` | R | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk reviewer sumber yang ditunjuk |
+| POST | `/sources/{source_id}/access-review` | R | SourceMetadataReview | 200 | Keputusan reviewer yang ditunjuk; status akses tetap pending |
+| GET | `/sources/approver-options` | A | — | 200 | Akun reviewer aktif tenant, id/username/role |
+| GET | `/sources/{source_id}/approvers` | A | — | 200 | Revision, configured, dan daftar reviewer per jenis keputusan |
+| PUT | `/sources/{source_id}/approvers` | A | `{revision, metadata_review: UUID[], configuration: UUID[], import_review: UUID[]}` | 200 | Daftar baru; revision naik, 409 bila stale |
+| GET | `/release-approvals/candidates` | A | — | 200 | Akun aktif dan unit assignment aktif untuk pilihan approver |
+| GET | `/release-approvals/sources/{source_id}/policy` | A | — | 200 | Aturan rilis, status configured, dan revision |
+| PUT | `/release-approvals/sources/{source_id}/policy` | A | `SourceReleasePolicyUpdate` | 200 | Satu pemeriksa IT dan setiap unit terkait wajib; revision naik |
+| GET | `/release-approvals/inbox` | Login | offset/limit | 200 | Konfigurasi approved yang ditugaskan kepada akun, beserta status setiap kelompok |
+| GET | `/release-approvals/configurations/{config_id}` | Reviewer/ditunjuk | — | 200 | Ringkasan dan status siap tayang per revisi |
+| POST | `/release-approvals/configurations/{config_id}/decisions` | Ditunjuk | `ConfigurationReleaseDecision` | 200 | Keputusan IT/unit dengan catatan; 403 jika bukan approver terkait |
+
 | GET | `/sources/{source_id}/access-policy-options` | A | UUID source | 200 | Policy SOURCE ALLOW approved yang berlaku dan didukung runtime |
 | POST | `/sources/{source_id}/access-activate` | A | SourceAccessActivation | 200 | Aktifkan source setelah review metadata dan binding policy approved |
 | PATCH | `/sources/{source_id}/schedule` | E | SourceScheduleUpdate | 200 | Edit cron/timezone/concurrency dengan optimistic revision |
@@ -327,6 +338,11 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | GET | `/source-sheets/{sheet_id}/configurations/active` | S | UUID tab internal | 200 | Configuration atau null |
 | GET | `/sources/{source_id}/profiling-runs` | S | UUID source | 200 | ProfilingRun[]; maksimal 100 |
 | GET | `/sources/{source_id}/profiling-runs/{run_id}` | S | UUID source + profile | 200 | ProfilingRun |
+
+Untuk keputusan IT `APPROVE`, payload wajib memuat `technical_checks` dengan
+`schema_and_mapping`, `data_quality`, dan `security_and_access` semuanya `true`.
+Keputusan unit memakai `unit_id` dan tidak memakai checklist IT. Persetujuan
+yang ditolak menahan rilis hingga versi konfigurasi atau aturan rilis diperbarui.
 
 ### Mendaftarkan Sheet
 

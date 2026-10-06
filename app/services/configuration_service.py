@@ -21,7 +21,9 @@ from app.services.etl_compiler_service import transform_rows
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
+from app.services.release_approval_service import require_release_ready
 from app.services.schema_compiler_service import deploy_schema, schema_plan
+from app.services.source_approver_service import require_source_approver
 from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
 
 
@@ -73,6 +75,8 @@ class ConfigurationService:
         expected = "SUPERSEDED" if rollback else "APPROVED"
         if config.status != expected:
             raise AppError("APPROVAL_REQUIRED", f"Konfigurasi harus berstatus {expected}.", 409)
+        source = await self.repo.get(DataSource, config.source_id)
+        require_release_ready(config, source)
         sheet = await self.repo.get(SourceSheet, config.source_sheet_id)
         self.require_classification_evidence(config, sheet)
         return await enqueue(
@@ -232,6 +236,7 @@ class ConfigurationService:
 
     async def decision(self, config_id, data, decision):
         config = await self.repo.get(Configuration, config_id, lock=True)
+        await require_source_approver(self.session, self.user, config.source_id, "configuration")
         if config.status != "NEEDS_REVIEW" or data.revision_no != config.revision_no:
             raise AppError(
                 "CONFIGURATION_CONFLICT",
@@ -284,9 +289,10 @@ class ConfigurationService:
             raise AppError(
                 "APPROVAL_REQUIRED", "Konfigurasi belum disetujui atau tidak dapat diaktifkan.", 409
             )
+        source = await self.repo.get(DataSource, config.source_id, lock=True)
+        require_release_ready(config, source)
         sheet = await ClassificationService(self.session, self.user).locked_sheet(config.source_sheet_id)
         self.require_classification_evidence(config, sheet)
-        source = await self.repo.get(DataSource, config.source_id)
         artifact = await self.session.scalar(
             self.repo.query(Artifact).where(
                 Artifact.configuration_version_id == config.id,

@@ -13,6 +13,7 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
 from app.core.database import SessionFactory
+from app.core.exceptions import AppError
 from app.core.security import decode_token, password_hasher
 from app.main import app
 from app.models import Base
@@ -20,12 +21,14 @@ from app.models.access import AccessAttribute, UserAssignment
 from app.models.audit import AuditEvent
 from app.models.auth import Tenant, User
 from app.models.configuration import Artifact, Configuration
-from app.models.etl import Job
+from app.models.etl import Job, Snapshot
 from app.models.import_review import ImportReview
 from app.models.master import MasterDefinition
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, SourceSheet
+from app.services.configuration_service import ConfigurationService
 from app.services.google_sheets_service import GoogleSheetsService
+from app.services.release_approval_service import require_release_ready
 from app.workers.runner import run_pending, schedule_sources
 
 pytestmark = pytest.mark.integration
@@ -155,6 +158,203 @@ async def request(ctx, method, path, *, who="admin", expected=200, data=None):
     response = await ctx.client.request(method, "/api/v1" + path, headers=ctx.headers[who], json=data)
     assert response.status_code == expected, response.text
     return response.json()
+
+
+async def test_release_needs_it_and_each_related_unit_on_same_revision(context):
+    async with SessionFactory() as session, session.begin():
+        users = {item.username: item for item in (await session.scalars(
+            select(User).where(User.tenant_id == context.tenant_id)
+        )).all()}
+        units = [AccessAttribute(tenant_id=context.tenant_id, kind="DEPARTMENT",
+                                 code="release_" + uuid4().hex, label=label)
+                 for label in ("Penjualan Malang", "Keuangan Surabaya")]
+        manager = User(tenant_id=context.tenant_id, username="manager", role="VIEWER",
+                       password_hash=password_hasher.hash("test-password-123"))
+        source = DataSource(tenant_id=context.tenant_id, source_code="release_" + uuid4().hex[:20],
+                            name="Rilis lintas unit", spreadsheet_id="test-release-sheet",
+                            owner_user_id=users["admin"].id)
+        session.add_all([*units, manager, source])
+        await session.flush()
+        sheet = SourceSheet(tenant_id=context.tenant_id, source_id=source.id, sheet_id=1,
+                            sheet_name="Penjualan")
+        session.add(sheet)
+        await session.flush()
+        config = Configuration(tenant_id=context.tenant_id, source_id=source.id,
+                               source_sheet_id=sheet.id, version_no=1, status="APPROVED",
+                               based_on_fingerprint="a" * 64,
+                               configuration_json={"target_table": "release_test"},
+                               review_state={"snapshot_hash": "b" * 64},
+                               created_by=users["admin"].id)
+        session.add(config)
+        await session.flush()
+        source_id, config_id = source.id, config.id
+        unit_id, second_unit_id = [unit.id for unit in units]
+        technical_id, business_id = users["approver"].id, users["viewer"].id
+        manager_id = manager.id
+
+    login_response = await context.client.post("/api/v1/auth/login", json={
+        "tenant_code": context.tenant_code, "username": "manager", "password": "test-password-123"
+    })
+    assert login_response.status_code == 200
+    context.headers["manager"] = {"Authorization": "Bearer " + login_response.json()["data"]["access_token"]}
+
+    await request(context, "POST", f"/access/users/{business_id}/unit-assignments", expected=201,
+                  data={"unit_ids": [unit_id, second_unit_id], "note": "Approver rilis unit"})
+    await request(context, "POST", f"/access/users/{manager_id}/unit-assignments", expected=201,
+                  data={"unit_ids": [second_unit_id], "note": "Approver unit terkait"})
+    groups = [{"unit_id": unit_id, "approver_ids": [business_id]},
+              {"unit_id": second_unit_id, "approver_ids": [manager_id]}]
+    await request(context, "PUT", f"/release-approvals/sources/{source_id}/policy", expected=422,
+                  data={"revision": 1, "technical_approver_ids": [technical_id],
+                        "unit_groups": [{"unit_id": unit_id, "approver_ids": [business_id]},
+                                        {"unit_id": second_unit_id, "approver_ids": [business_id]}]})
+    policy = await request(context, "PUT", f"/release-approvals/sources/{source_id}/policy",
+                           data={"revision": 1, "technical_approver_ids": [technical_id],
+                                 "unit_groups": groups})
+    assert policy["data"]["revision"] == 2
+    status = await request(context, "GET", f"/release-approvals/configurations/{config_id}", who="viewer")
+    assert not status["data"]["ready"]
+    assert [group["status"] for group in status["data"]["groups"]] == ["PENDING"] * 3
+    inbox = await request(context, "GET", "/release-approvals/inbox", who="viewer")
+    assert any(item["configuration_id"] == config_id for item in inbox["data"])
+    await request(context, "POST", f"/configurations/{config_id}/deploy", who="approver", expected=409)
+    async with SessionFactory() as session:
+        actor = await session.scalar(select(User).where(
+            User.tenant_id == context.tenant_id, User.username == "approver"
+        ))
+        with pytest.raises(AppError) as worker_error:
+            await ConfigurationService(session, actor).deploy(config_id)
+        assert worker_error.value.code == "RELEASE_APPROVAL_REQUIRED"
+    await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                  who="viewer", expected=403,
+                  data={"revision_no": 1, "group_type": "TECHNICAL", "decision": "APPROVE",
+                        "comment": "Tidak berwenang", "technical_checks": {
+                            "schema_and_mapping": True, "data_quality": True, "security_and_access": True,
+                        }})
+    await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                  who="approver", expected=422,
+                  data={"revision_no": 1, "group_type": "TECHNICAL", "decision": "APPROVE",
+                        "comment": "Checklist belum lengkap"})
+    await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                  who="approver", data={"revision_no": 1, "group_type": "TECHNICAL",
+                                        "decision": "APPROVE", "comment": "Tes skema dan keamanan lulus",
+                                        "technical_checks": {"schema_and_mapping": True,
+                                                             "data_quality": True,
+                                                             "security_and_access": True}})
+    await request(context, "POST", f"/configurations/{config_id}/deploy", who="approver", expected=409)
+    partial = await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                              who="viewer", data={"revision_no": 1, "group_type": "UNIT",
+                                                   "unit_id": unit_id, "decision": "APPROVE",
+                                                   "comment": "Definisi bisnis sesuai"})
+    assert not partial["data"]["ready"]
+    await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                  who="viewer", expected=403,
+                  data={"revision_no": 1, "group_type": "UNIT", "unit_id": second_unit_id,
+                        "decision": "APPROVE", "comment": "Tidak berwenang unit lain"})
+    completed = await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                              who="manager", data={"revision_no": 1, "group_type": "UNIT",
+                                                   "unit_id": second_unit_id, "decision": "APPROVE",
+                                                   "comment": "Data unit terkait sesuai"})
+    assert completed["data"]["ready"]
+    async with SessionFactory() as session:
+        config = await session.get(Configuration, config_id)
+        source = await session.get(DataSource, source_id)
+        assert require_release_ready(config, source)["ready"]
+    await request(context, "PUT", f"/release-approvals/sources/{source_id}/policy",
+                  data={"revision": 2, "technical_approver_ids": [technical_id],
+                        "unit_groups": groups})
+    stale = await request(context, "GET", f"/release-approvals/configurations/{config_id}", who="viewer")
+    assert not stale["data"]["ready"]
+    async with SessionFactory() as session:
+        config = await session.get(Configuration, config_id)
+        source = await session.get(DataSource, source_id)
+        with pytest.raises(AppError) as error:
+            require_release_ready(config, source)
+        assert error.value.code == "RELEASE_APPROVAL_REQUIRED"
+    rejected = await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                             who="approver", data={"revision_no": 1, "group_type": "TECHNICAL",
+                                                   "decision": "REJECT", "comment": "Masalah keamanan belum selesai"})
+    assert rejected["data"]["groups"][0]["status"] == "REJECTED"
+    await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
+                  who="approver", expected=409,
+                  data={"revision_no": 1, "group_type": "TECHNICAL", "decision": "APPROVE",
+                        "comment": "Coba menyetujui tanpa revisi baru", "technical_checks": {
+                            "schema_and_mapping": True, "data_quality": True, "security_and_access": True,
+                        }})
+
+
+async def test_multi_unit_assignment_and_explicit_source_approvers(context):
+    async with SessionFactory() as session, session.begin():
+        users = {item.username: item for item in (await session.scalars(
+            select(User).where(User.tenant_id == context.tenant_id)
+        )).all()}
+        units = [AccessAttribute(tenant_id=context.tenant_id, kind="DEPARTMENT",
+                                 code="unit_" + uuid4().hex, label=label)
+                 for label in ("Penjualan Malang", "Penjualan Surabaya")]
+        source = DataSource(tenant_id=context.tenant_id, source_code="approval_" + uuid4().hex[:20],
+                            name="Sumber approval", spreadsheet_id="test-approver-sheet",
+                            owner_user_id=users["admin"].id)
+        session.add_all([*units, source])
+        await session.flush()
+        sheet = SourceSheet(tenant_id=context.tenant_id, source_id=source.id, sheet_id=1,
+                            sheet_name="Penjualan")
+        session.add(sheet)
+        await session.flush()
+        configuration = Configuration(
+            tenant_id=context.tenant_id, source_id=source.id, source_sheet_id=sheet.id,
+            version_no=1, status="NEEDS_REVIEW", based_on_fingerprint="a" * 64,
+            configuration_json={"target_table": "approval_test"}, created_by=users["admin"].id,
+        )
+        snapshot = Snapshot(
+            tenant_id=context.tenant_id, source_id=source.id, source_sheet_id=sheet.id,
+            content_hash="b" * 64, row_count=0, values=[],
+        )
+        session.add_all([configuration, snapshot])
+        await session.flush()
+        review = ImportReview(
+            tenant_id=context.tenant_id, source_id=source.id, source_sheet_id=sheet.id,
+            snapshot_id=snapshot.id, created_by=users["admin"].id,
+            idempotency_key=uuid4().hex, status="VALIDATING", dependencies={},
+            configuration_json={}, checkpoint={},
+        )
+        session.add(review)
+        await session.flush()
+        unit_ids = [item.id for item in units]
+        source_id = source.id
+        configuration_id = configuration.id
+        review_id = review.id
+        reviewer_id = users["approver"].id
+        viewer_id = users["viewer"].id
+
+    created = await request(context, "POST", f"/access/users/{viewer_id}/unit-assignments",
+                            expected=201, data={"unit_ids": unit_ids})
+    assert {item["attribute_id"] for item in created["data"]} == set(unit_ids)
+    effective = await request(context, "GET", f"/access/users/{viewer_id}/effective")
+    assert set(effective["data"]["dimensions"]["DEPARTMENT"]) == {item.code for item in units}
+
+    await request(context, "POST", f"/sources/{source_id}/access-review", who="approver", expected=403,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+
+    setup = await request(context, "PUT", f"/sources/{source_id}/approvers", data={
+        "revision": 1, "metadata_review": [reviewer_id],
+        "configuration": [reviewer_id], "import_review": [reviewer_id],
+    })
+    assert setup["data"]["configured"] is True
+    await request(context, "PUT", f"/sources/{source_id}/approvers", expected=409, data={
+        "revision": 1, "metadata_review": [], "configuration": [], "import_review": [],
+    })
+    await request(context, "POST", f"/sources/{source_id}/access-review", expected=403,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    await request(context, "POST", f"/configurations/{configuration_id}/approve", expected=403,
+                  data={"revision_no": 1, "comment": "Review"})
+    await request(context, "POST", f"/import-reviews/{review_id}/approve", expected=403,
+                  data={"revision_no": 1, "comment": "Review"})
+    await request(context, "POST", f"/sources/{source_id}/access-review", who="approver", expected=409,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    await request(context, "POST", f"/configurations/{configuration_id}/approve", who="approver", expected=409,
+                  data={"revision_no": 2, "comment": "Review"})
+    await request(context, "POST", f"/import-reviews/{review_id}/approve", who="approver", expected=409,
+                  data={"revision_no": 1, "comment": "Review"})
 
 
 async def source_access_metadata(ctx):

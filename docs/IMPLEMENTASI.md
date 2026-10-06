@@ -151,6 +151,12 @@ Migrasi `b762af03e219` menetapkan tab lama ke CLASSIFICATION_REQUIRED tanpa mene
 
 ## API Reference frontend
 
+Untuk alur persetujuan IT dan unit terkait sebelum publikasi konfigurasi, gunakan
+[kontrol akses BE-16](ACCESS_JURISDICTION_BE16.md), [panduan review ETL](PANDUAN_REVIEW_ETL.md),
+dan [panduan pengguna](USER_GUIDE_END_TO_END.md). Migrasi `x4n7j0e3g5i2` menambah aturan rilis
+per sumber dan keputusan per versi konfigurasi; jalankan `alembic upgrade head` pada database
+tujuan saat rollout. Penerapan migrasi di database aplikasi/production belum dibuktikan di sini.
+
 Endpoint yang sudah tersedia beserta payload, respons, role, error, dan mekanisme frontend dijelaskan di [API Reference](API_REFERENCE.md). Snapshot OpenAPI dan schema dapat diperbarui dengan `scripts/export_api_reference.py`; contoh payload diverifikasi terhadap schema backend.
 
 Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](PANDUAN_REVIEW_ETL.md) memuat cara menjalankan migrasi, halaman Vue `/workspace`, payload preview/apply, dan mekanisme persetujuan.

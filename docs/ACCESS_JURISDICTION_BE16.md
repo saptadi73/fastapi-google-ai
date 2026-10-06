@@ -45,6 +45,58 @@ Pemetaan implementasi saat ini:
 
 ## User Access Management
 
+### Multi-unit eksplisit dan approver sumber
+
+Admin dapat memberi beberapa `DEPARTMENT` kepada satu pengguna melalui
+`POST /access/users/{user_id}/unit-assignments`. Payload `unit_ids` berisi ID yang dipilih
+dari registry pada UI, bukan diketik pengguna. Semua assignment disimpan dalam satu transaksi;
+duplikat, atribut lintas tenant, non-departemen, atau periode tumpang tindih ditolak.
+`parent_id` hanya menyatakan struktur organisasi; hak akses **tidak diwariskan** ke unit turunan.
+Setiap unit yang dibutuhkan harus dipilih eksplisit. Assignment sendiri belum membuka produk;
+policy SOURCE/DATA_PRODUCT, domain, dan yurisdiksi tetap harus cocok.
+
+Admin menunjuk reviewer pada setiap sumber melalui `GET/PUT /sources/{source_id}/approvers`.
+Tiga daftar terpisah ialah `metadata_review`, `configuration`, dan `import_review`.
+Reviewer harus akun aktif dengan role `PLATFORM_ADMIN` atau `TECHNICAL_APPROVER`; pilihan akun
+tersedia pada `GET /sources/approver-options`. Penunjukan **tidak** memberikan akses membaca
+data atau kewenangan lintas jenis keputusan. Backend memeriksa penunjukan pada setiap
+approve/reject metadata dan konfigurasi serta approve batch import; aturan reviewer berbeda
+dari editor tetap berlaku. Perubahan daftar memakai revision dan audit. Daftar kosong setelah
+disimpan menolak semua keputusan pada jenis tersebut sampai admin menunjuk reviewer.
+
+Nilai `approval_assignees = NULL` pada sumber lama mempertahankan pemeriksaan role lama
+agar migrasi tidak menghentikan workflow yang berjalan. Admin perlu mengisi daftar untuk
+setiap sumber; setelah disimpan, daftar eksplisit menjadi wajib. Ini **belum** mencakup
+approval policy akses, master, atau taxonomy yang masih memiliki alur masing-masing.
+
+### Persetujuan IT dan unit terkait sebelum data tayang
+
+Admin membuka **Persetujuan sebelum data tayang** untuk sumber yang dipilih dan menyimpan
+pemeriksa IT (akun aktif dengan role `TECHNICAL_APPROVER` atau `PLATFORM_ADMIN`) serta
+unit-unit terkait. Setiap unit dipilih dari registry `DEPARTMENT` dan mempunyai daftar
+approver bernama yang memiliki assignment aktif pada unit tersebut. Satu orang dari
+daftar IT dan satu orang dari **setiap** unit wajib menyetujui revisi konfigurasi yang
+sama. Orang IT dan setiap unit memakai akun approver berbeda; satu akun hanya boleh
+ditunjuk untuk satu kelompok pada sumber yang sama. Penunjukan ini tidak memberi hak baca
+atau query data.
+
+Setelah konfigurasi ETL berstatus `APPROVED`, akun yang ditunjuk membuka
+**Persetujuan tayang**, memeriksa ringkasan produk, kolom, metrik, dan hasil review
+yang relevan, lalu memberi keputusan dengan catatan. Pemeriksa IT wajib mencentang
+skema/mapping, kualitas data, serta keamanan/akses sebelum menyetujui. Keputusan terikat pada revisi
+konfigurasi, snapshot review, dan revisi aturan rilis. Perubahan salah satunya membuat
+persetujuan lama tidak berlaku. Penolakan menahan rilis; perbaikan dilakukan melalui
+versi konfigurasi baru atau revisi aturan yang diaudit. Endpoint antrean deployment
+dan worker memeriksa gate yang sama sebelum membuat tabel/view; aktivasi akses sumber
+juga memeriksa konfigurasi yang sudah aktif. Versi `SUPERSEDED` yang hendak di-rollback
+harus memenuhi aturan rilis yang berlaku dan dapat ditinjau ulang di inbox.
+
+`release_policy = NULL` pada sumber lama berarti gate tambahan ini belum diaktifkan,
+sehingga rollout tidak memutus proses lama. Admin harus menyimpan aturan untuk sumber
+yang memerlukan persetujuan IT dan lintas unit. Cakupan saat ini adalah publikasi
+**versi konfigurasi/data product**; batch import berikutnya tetap memakai review batch
+yang ada, belum mensyaratkan tanda tangan semua unit pada setiap batch.
+
 BE-16 memperluas administrasi pengguna yang saat ini hanya mengelola akun, role dasar,
 dan `row_scope`. Tanggung jawabnya mencakup:
 

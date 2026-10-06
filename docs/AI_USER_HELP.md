@@ -11,6 +11,16 @@ untuk prosedur terbatas. Konten harus menjelaskan fungsi dan proses pengguna tan
 credential, atau detail kontrol keamanan. Perubahan artikel langsung digunakan pada request berikutnya
 dan tidak memerlukan migration database.
 
+Artikel akses menjelaskan pilihan beberapa unit secara eksplisit dan penunjukan approver
+per sumber untuk review metadata, konfigurasi ETL, dan batch import. Asisten harus
+menegaskan bahwa unit induk tidak otomatis membuka unit bawahan dan penunjukan approver
+tidak otomatis memberi akses membaca data.
+
+Artikel akses, alur awal, operasi ETL, dan pemecahan masalah menerangkan gate siap tayang: admin menunjuk pemeriksa IT dan
+approver bernama pada setiap unit terkait; satu keputusan IT serta satu keputusan dari
+setiap unit diperlukan pada revisi konfigurasi yang sama sebelum deploy. Asisten harus
+membedakan ini dari reviewer konfigurasi awal, approval batch import, dan assignment untuk membaca data. Jawaban tentang deploy yang tertahan perlu mengarahkan pengguna ke status **Persetujuan tayang**, serta menjelaskan bahwa perubahan revisi/snapshot/aturan atau penolakan memerlukan tindak lanjut sebelum mencoba lagi.
+
 Contoh isian bisnis terdapat pada [Contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md) dan
 artikel `08` sampai `11` dalam `docs/knowledge`. Isinya mencakup taxonomy/term, atribut
 DEPARTMENT/BUSINESS_DOMAIN/JURISDICTION/CLEARANCE/PURPOSE, metadata Google Sheet, master,

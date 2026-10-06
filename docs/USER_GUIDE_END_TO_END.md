@@ -20,13 +20,13 @@ Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memaka
 
 | Tahap | Tindakan | Hasil minimum sebelum lanjut |
 |---|---|---|
-| 1. Administrasi | Buat pengguna, role, atribut departemen/domain/yurisdiksi/purpose, assignment, permission, dan policy | Pengguna dapat login dan keputusan akses sudah diuji |
+| 1. Administrasi | Buat pengguna, role, atribut departemen/domain/yurisdiksi/purpose, assignment multi-unit eksplisit, permission, policy, approver per sumber, dan aturan persetujuan sebelum tayang | Pengguna dapat login, cakupan unit dipilih, dan pemeriksa IT/unit terkait ditunjuk |
 | 2. Pendaftaran sumber | Bagikan Sheet ke service account sebagai Viewer, lalu daftarkan URL/ID serta metadata kepemilikan | Discovery dan profiling sukses; tab serta header terbaca |
 | 3. Klasifikasi tab | Konfirmasi `MASTER` atau `NON_MASTER` untuk setiap tab | Semua tab yang akan diproses berstatus confirmed |
 | 4. Master | Definisikan field, business key, label, policy, storage, dan binding | Definisi/storage/binding approved dan record rujukan siap |
 | 5. Taxonomy | Buat term, alias, hierarki, versi, serta binding kolom | Taxonomy dan binding approved |
 | 6. Konfigurasi ETL | Map kolom, transformasi, DQ, strategi load, business key, semantic product, dimensi, dan metrik | Konfigurasi valid tanpa blocker |
-| 7. Review/deploy | Submit, approve dengan reviewer berbeda, deploy, activate, dan selesaikan policy sumber | Konfigurasi `ACTIVE` dan produk lolos kontrol akses |
+| 7. Review/deploy | Submit dan approve konfigurasi; jika aturan rilis aktif, IT dan setiap unit terkait menyetujui revisi yang sama di Persetujuan tayang; lalu deploy, activate, dan selesaikan policy sumber | Konfigurasi `ACTIVE` dan produk lolos kontrol akses |
 | 8. Batch import | Stage data, jawab pertanyaan, resolve referensi, preview, approve, lalu apply | Batch `SUCCEEDED` sesuai preview |
 | 9. Operasional | Pantau job, schedule/dependency/watermark, karantina, resolusi, dan reprocess | Job terbaru sukses dan tidak ada blocker kualitas |
 | 10. Analitik | Tanyakan data dengan bahasa alami atau gunakan query builder; pilih tabel/chart | Hasil tampil dan dapat ditelusuri ke produk serta sumber approved |
@@ -49,6 +49,7 @@ menyusun structured plan dan SQL aman berdasarkan semantic catalog; pengguna tid
 
 1. Pastikan job discovery/sync/import terakhir berhasil.
 2. Pastikan tab sudah diklasifikasikan dan konfigurasi berstatus approved, deployed, serta active.
+   Jika gate siap tayang aktif, periksa apakah IT dan semua unit terkait sudah menyetujui revisi yang sama.
 3. Periksa batch import: seluruh pertanyaan wajib harus selesai dan preview yang sama harus approved
    sebelum apply.
 4. Periksa master/taxonomy binding dan dependency freshness.

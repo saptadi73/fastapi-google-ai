@@ -20,6 +20,7 @@ from app.schemas.access import (
     AccessRequestDecision,
     AccessRequestReject,
     AssignmentRevoke,
+    MultiUnitAssignmentCreate,
     PermissionBundleCreate,
     PermissionBundleUpdate,
     PermissionGrantCreate,
@@ -99,6 +100,11 @@ async def list_assignments(
 @router.post("/users/{user_id}/assignments", status_code=201, dependencies=admin)
 async def create_assignment(user_id: UUID, data: UserAssignmentCreate, session: Session, user: CurrentUser):
     return success(await AccessService(session, user).create_assignment(user_id, data))
+
+
+@router.post("/users/{user_id}/unit-assignments", status_code=201, dependencies=admin)
+async def create_unit_assignments(user_id: UUID, data: MultiUnitAssignmentCreate, session: Session, user: CurrentUser):
+    return success(await AccessService(session, user).create_unit_assignments(user_id, data))
 
 
 @router.post("/assignments/{assignment_id}/revoke", dependencies=admin)

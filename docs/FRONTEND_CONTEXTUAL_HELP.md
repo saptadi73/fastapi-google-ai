@@ -11,6 +11,19 @@ Contohnya meliputi `jenis_biaya`, `jatim`, metadata sumber, business key master,
 pertanyaan bahasa alami. Konten ini mengikuti [contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md)
 dan tetap dapat dibaca tanpa memanggil AI.
 
+Bantuan Administrasi juga menerangkan pilihan multi-unit eksplisit dan reviewer per sumber.
+Unit induk tidak otomatis membuka unit bawahan. Reviewer metadata, konfigurasi, dan import
+ditunjuk terpisah; penunjukan tidak memberi hak membaca data.
+
+Bantuan **Persetujuan tayang** menjelaskan keputusan IT dan setiap unit terkait untuk
+revisi konfigurasi approved. Administrasi menyediakan pilihan akun/unit bernama;
+halaman approver menampilkan status, ringkasan data, dan catatan sebelum keputusan.
+Contoh yang ditampilkan: IT, Penjualan Malang, dan Keuangan masing-masing menyetujui
+revisi yang sama dengan akun berbeda. IT wajib melengkapi checklist skema/mapping,
+kualitas, dan keamanan/akses. Bantuan review ETL mengingatkan editor untuk memeriksa
+status seluruh kelompok sebelum deploy/rollback; penolakan meminta revisi atau
+peninjauan aturan, dan review batch import tetap terpisah.
+
 Dialog menyediakan tautan **Panduan lengkap** ke `/guide`. Halaman ini memuat workflow 10 tahap dari
 administrasi dan pendaftaran Google Sheet sampai batch berhasil, dashboard, serta chart. Versi
 dokumentasinya tersedia di [panduan pengguna awal sampai akhir](USER_GUIDE_END_TO_END.md). Panduan
@@ -32,7 +45,7 @@ Bantuan khusus tersedia untuk:
 - registry taxonomy dan semantic/AI governance;
 - daftar serta detail batch import;
 - job/schedule, kualitas/karantina, dan operasi retry;
-- administrasi tenant, pengguna, registrasi akun, akun sendiri, dan access request.
+- administrasi tenant, pengguna, registrasi akun, akun sendiri, access request, dan Persetujuan tayang.
 
 Route detail menggunakan pola path dan tidak menampilkan UUID kepada pengguna. Route baru yang belum
 memiliki entri tetap mendapat bantuan fallback yang menyarankan pengguna membaca status, melengkapi
@@ -52,10 +65,10 @@ Registry konten berada di `src/lib/pageHelp.ts`, renderer global di
 `src/components/PageHelp.vue`, dan pemasangannya di `src/App.vue`. Saat menambah route, tambahkan
 petunjuk khusus beserta contoh path ke `tests/unit/pageHelp.test.ts`.
 
-## Verifikasi 6 Oktober 2026
+## Verifikasi 7 Oktober 2026
 
-- seluruh 26 contoh route memiliki bantuan khusus dan fallback diuji;
-- 98 unit test frontend lulus;
+- route operasional, termasuk Persetujuan tayang, memiliki bantuan khusus dan fallback diuji;
+- 99 unit test frontend lulus;
 - tes browser login ke dashboard membuktikan isi mengikuti halaman, `Escape` bekerja, dan fokus kembali;
 - typecheck dan production build lulus.
 

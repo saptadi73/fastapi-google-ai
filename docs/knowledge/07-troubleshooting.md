@@ -10,5 +10,7 @@ Jika sumber tidak terbaca, pastikan spreadsheet dibagikan kepada service account
 
 Jika data belum muncul di dashboard, pastikan discovery, profiling, klasifikasi, konfigurasi, deploy, activation, import, dan job terakhir berhasil. Periksa master atau taxonomy binding, pertanyaan batch, data karantina, freshness, metadata sumber, serta policy akses.
 
+Jika deploy atau rollback ditolak dengan `RELEASE_APPROVAL_REQUIRED`, buka status **Persetujuan tayang** pada review konfigurasi. Pastikan akun IT dan setiap unit yang ditunjuk telah memutuskan revisi yang sama; IT harus menyelesaikan checklist teknis. Jika status ditolak atau keputusan lama tidak berlaku setelah revisi konfigurasi, snapshot, atau aturan rilis berubah, minta editor memperbaiki versi konfigurasi atau admin meninjau ulang aturan. Jangan mengulangi deploy sebelum status siap tayang. Persetujuan ini berbeda dari approval batch import dan tidak otomatis memberikan akses membaca data.
+
 Jika AI tidak menjawab, periksa health OpenAI, konfigurasi model, kuota pengguna, budget tenant atau policy, lalu coba sekali lagi dengan pertanyaan yang lebih spesifik. Jangan mengirim password, token, API key, isi credential, atau data pribadi ke asisten. Catat request ID dari respons error untuk pemeriksaan administrator.
 

@@ -41,6 +41,7 @@ from app.services.reference_service import (
     resolve_value,
     validate_reference_rows,
 )
+from app.services.source_approver_service import require_source_approver
 from app.services.taxonomy_validation_service import (
     canonicalize_rows,
     context_hash,
@@ -964,6 +965,7 @@ class ImportReviewService:
         if self.user.role not in REVIEW_ROLES:
             raise AppError("FORBIDDEN", "Reviewer diperlukan untuk menyetujui batch import.", 403)
         review = await self.locked(review_id)
+        await require_source_approver(self.session, self.user, review.source_id, "import_review")
         if review.revision_no != data.revision_no:
             raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
         if review.status != "READY_FOR_APPROVAL":

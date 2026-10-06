@@ -95,6 +95,25 @@ flowchart LR
 
 ## Catatan pengisian
 
+### Contoh akses multi-unit dan reviewer
+
+Admin memilih akun `manajer.penjualan` dan mencentang `Penjualan Malang` serta
+`Penjualan Surabaya` pada **Akses multi-unit**. Kedua unit harus terdaftar dan dipilih
+satu per satu; unit induk tidak menambahkan unit turunannya secara otomatis. Untuk sumber
+`Penjualan Malang`, admin menunjuk akun reviewer pada **Review metadata sumber**,
+**Konfigurasi ETL**, dan **Batch import**. Tiap daftar bisa berisi orang yang berbeda.
+Penunjukan reviewer tidak menggantikan policy akses data atau syarat reviewer terpisah.
+
+Untuk sumber gabungan `Penjualan–Keuangan`, pada **Persetujuan sebelum data tayang**
+pilih `approver.it` sebagai pemeriksa IT, tambahkan unit `Penjualan Malang` dengan
+approver `manajer.penjualan`, dan unit `Keuangan Surabaya` dengan approver
+`manajer.keuangan`. Kedua manajer harus mempunyai assignment aktif pada unitnya.
+Setelah konfigurasi versi 2 approved, IT mencatat hasil uji skema/DQ/keamanan,
+lalu masing-masing manajer mencatat kecocokan definisi bisnis. Status **siap deploy**
+baru muncul setelah ketiganya menyetujui versi 2. Kode dan nama ini contoh fiktif;
+admin memilih akun dan unit dari daftar aplikasi, bukan mengetik UUID.
+
+
 - Contoh tidak membuat atribut atau taxonomy otomatis; admin/steward perlu menambahkannya pada tenant.
 - Gunakan kode yang stabil serta jelas bagi organisasi. Hindari memakai nama yang mudah berubah sebagai business key.
 - Pilih role, owner, steward, yurisdiksi, purpose, dan sensitivitas sesuai kebijakan resmi.

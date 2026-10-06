@@ -1,6 +1,6 @@
 # Implementasi review konfigurasi ETL
 
-Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. AI menghasilkan draft; pengguna menyesuaikan konfigurasi, menjawab pertanyaan, memvalidasi, lalu mengajukan review. Approver berbeda menyetujui sebelum deployment. Registry/binding metadata kini tersedia pada BE-03. Pemuatan record master, taxonomy, koreksi typo semua sel, dan foreign key otomatis masih mengikuti [rancangan master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), belum menjadi perilaku runtime.
+Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. AI menghasilkan draft; pengguna menyesuaikan konfigurasi, menjawab pertanyaan, memvalidasi, lalu mengajukan review. Approver berbeda menyetujui konfigurasi. Jika admin mengaktifkan aturan persetujuan tayang pada sumber, pemeriksa IT dan satu approver dari setiap unit terkait juga harus menyetujui revisi yang sama sebelum deployment. Registry/binding metadata kini tersedia pada BE-03. Pemuatan record master, taxonomy, koreksi typo semua sel, dan foreign key otomatis masih mengikuti [rancangan master data](MASTER_DATA_DAN_VALIDASI_IMPORT.md), belum menjadi perilaku runtime.
 
 ## Menjalankan
 
@@ -13,10 +13,11 @@ Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runt
 2. Jalankan backend, Redis, dan worker sesuai [panduan implementasi](IMPLEMENTASI.md). Profiling, rekomendasi AI, deployment, dan sync berjalan sebagai job. Status QUEUED terus-menerus berarti worker perlu diperiksa. Validasi draft, export, dan import-preview dijalankan melalui API.
 3. Di `C:\projek\vue-googlesheet-ai`, gunakan `npm run dev`. Pastikan `VITE_API_ORIGIN`, `VITE_API_BASE_PATH`, dan CORS backend sesuai. Buka `/workspace` atau tombol **Buka workspace ETL** pada halaman utama.
 4. Login dengan tenant dan akun aplikasi. Token berada di memori; reload penuh memerlukan login ulang. Jika sesi kedaluwarsa, keluar/ganti akun lalu login kembali.
-5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Konfirmasi klasifikasi per tab melalui API BE-02 (form klasifikasi belum ditambahkan ke Vue). Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan. MASTER tersimpan sebagai klasifikasi tetapi belum dapat dimuat sebelum review/apply import tersedia (registry/binding dan storage sudah tersedia pada BE-03/BE-04); lihat [kontrak dan rollout BE-02](KLASIFIKASI_TAB_BE02.md).
+5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Konfirmasi klasifikasi per tab di Workspace ETL. Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan; lihat [kontrak dan rollout BE-02](KLASIFIKASI_TAB_BE02.md).
 6. Periksa identitas, mapping kolom, cleansing berurutan, kualitas data, strategi pemuatan, dimensi, metrik, dan role akses. Simpan perubahan, periksa dry-run, isi checklist seluruh bagian/kolom, lalu **Ajukan review**.
-7. Gunakan akun `TECHNICAL_APPROVER` atau admin berbeda untuk membuka konfigurasi yang sama, memeriksa hasil, dan menyetujui. User dapat dibuat oleh admin melalui `POST /users`; frontend ini belum menyediakan administrasi user.
-8. **Deploy konfigurasi**, tunggu job SUCCEEDED, lalu jalankan sinkronisasi dengan akun editor. Approval dan deployment tidak langsung memuat data.
+7. Gunakan akun `TECHNICAL_APPROVER` atau admin berbeda untuk membuka konfigurasi yang sama, memeriksa hasil, dan menyetujui. Admin dapat mengelola akun dan role melalui halaman `/admin/users`.
+8. Jika aturan siap tayang aktif, akun IT dan approver bernama dari setiap unit terkait membuka `/release-approvals`. IT menyelesaikan checklist skema/mapping, kualitas data, dan keamanan/akses. Setiap kelompok memberi keputusan pada revisi konfigurasi, snapshot review, dan revisi aturan yang sama. Status kelompok tampil pada review konfigurasi; penolakan memerlukan versi baru atau revisi aturan yang diaudit. Aturan rilis dikonfigurasi admin di `/admin`.
+9. Setelah status siap tayang, **Deploy konfigurasi**, tunggu job SUCCEEDED, lalu jalankan sinkronisasi dengan akun editor. Approval dan deployment tidak langsung memuat data. Sumber lama tanpa aturan rilis tetap dapat mengikuti review konfigurasi biasa. Rollback ke versi sebelumnya juga melewati pemeriksaan aturan rilis saat ini; approval batch import berikutnya tetap terpisah.
 
 Konfigurasi APPROVED/ACTIVE lama yang tidak memiliki bukti review tetap tidak dapat diedit. Bila perlu deployment ulang, clone menjadi draft, validasi, submit, dan approve. Runtime sync konfigurasi yang sudah ACTIVE tidak memerlukan checklist ulang untuk setiap sync. Rollback konfigurasi memeriksa snapshot yang disetujui; perubahan data dapat mengharuskan draft baru. Rollback bukan pemulihan data historis.
 
@@ -134,6 +135,9 @@ Status `Tidak` pada cleansing atau `Nonaktif` pada aturan kualitas/metrik berart
 | QUESTION_ANSWER_REQUIRED / QUESTION_INVALID | 422 | Cocokkan pertanyaan dan isi jawaban |
 | WORKBOOK_INVALID / WORKBOOK_STRUCTURE | 422 | Gunakan XLSX export aplikasi yang utuh |
 | SEPARATE_APPROVER_REQUIRED | 403 | Gunakan approver berbeda |
+| RELEASE_APPROVAL_REQUIRED | 409 | Periksa status IT dan setiap unit di Persetujuan tayang sebelum deploy/rollback |
+| RELEASE_REJECTED | 409 | Buat versi konfigurasi baru atau minta admin meninjau aturan rilis |
+| RELEASE_POLICY_STALE / RELEASE_CONFIGURATION_STALE | 409 | Muat ulang aturan/status dan gunakan revisi konfigurasi terbaru |
 
 ## Verifikasi pengembangan
 

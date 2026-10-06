@@ -774,6 +774,23 @@ class AccessService:
         )
         return assignment_record(item, attribute)
 
+    async def create_unit_assignments(self, user_id, data):
+        # The API request is one transaction: a failure in any unit rolls back all assignments.
+        from app.schemas.access import UserAssignmentCreate
+
+        units = (await self.session.scalars(
+            self.repo.query(AccessAttribute).where(AccessAttribute.id.in_([str(value) for value in data.unit_ids]))
+        )).all()
+        if len(units) != len(data.unit_ids) or any(item.kind != "DEPARTMENT" for item in units):
+            raise AppError("UNIT_ASSIGNMENT_INVALID", "Pilih hanya unit tenant yang tersedia.", 422)
+        result = []
+        for unit_id in data.unit_ids:
+            result.append(await self.create_assignment(user_id, UserAssignmentCreate(
+                attribute_id=unit_id, valid_from=data.valid_from, valid_to=data.valid_to,
+                note=data.note,
+            )))
+        return result
+
     async def list_assignments(self, user_id, include_inactive=False):
         await self._user(user_id)
         query = (

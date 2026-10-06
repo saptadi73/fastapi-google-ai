@@ -40,6 +40,21 @@ class UserAssignmentCreate(StrictModel):
         return self
 
 
+class MultiUnitAssignmentCreate(StrictModel):
+    unit_ids: list[UUID] = Field(min_length=1, max_length=100)
+    valid_from: datetime = Field(default_factory=now)
+    valid_to: datetime | None = None
+    note: str = Field(default="", max_length=500)
+
+    @model_validator(mode="after")
+    def validate_units(self):
+        if len(self.unit_ids) != len(set(self.unit_ids)):
+            raise ValueError("Unit tidak boleh berulang")
+        if self.valid_to is not None and self.valid_to <= self.valid_from:
+            raise ValueError("valid_to harus setelah valid_from")
+        return self
+
+
 class AssignmentRevoke(StrictModel):
     revision: int = Field(ge=1)
     note: str = Field(default="", max_length=500)

@@ -14,7 +14,7 @@ Gunakan urutan berikut agar data dapat dipakai dengan aman:
 4. Jika data memakai rujukan baku, siapkan definisi, storage, record, dan binding master.
 5. Jika data memakai kategori baku, siapkan taxonomy, versi, term, alias, dan binding taxonomy.
 6. Buat konfigurasi ETL: mapping kolom, transformasi, kualitas, strategi load, business key, produk semantik, dimensi, dan metrik.
-7. Ajukan konfigurasi, minta reviewer berbeda menyetujui, deploy, lalu aktifkan.
+7. Ajukan konfigurasi dan minta reviewer berbeda menyetujui. Jika aturan persetujuan tayang aktif, tunggu pemeriksaan IT dan persetujuan dari setiap unit terkait pada revisi yang sama. Setelah status siap tayang, deploy dan aktifkan. Aturan ini ditetapkan admin per sumber; sumber lama tanpa aturan tetap mengikuti alur review konfigurasi biasa.
 8. Stage data, jawab pertanyaan import, periksa preview, approve, lalu apply batch.
 9. Pantau job, kualitas, schedule, dependency, watermark, dan data karantina.
 10. Setelah produk data aktif dan dapat diakses, pengguna dapat bertanya dengan bahasa alami dan memilih tabel atau chart.

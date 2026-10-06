@@ -14,6 +14,7 @@ Urutan keseluruhan:
 Hubungkan Sheet → klasifikasi master/non-master → profiling
 → AI mengusulkan draft → pengguna memverifikasi
 → dry-run dan penyelesaian pertanyaan → reviewer menyetujui
+→ jika aturan rilis aktif: IT dan setiap unit terkait menyetujui revisi yang sama
 → deploy → sync data → pantau hasil
 ```
 
@@ -31,7 +32,7 @@ Jangan meminta pengguna mengisi workbook kosong atau menampilkan semua parameter
 | 4. Kualitas data | Required, uniqueness, rentang, referensi, aksi kegagalan | Tentukan aturan bisnis dan penanganan data gagal |
 | 5. Load dan operasional | Preview tambah/update/tetap, jadwal, strategi load, dependensi master | Konfirmasi dampak load dan jadwal |
 | 6. Laporan dan akses | Data product, metric, dimensi, intent, relasi yang diizinkan | Konfirmasi definisi hitungan dan siapa yang boleh mengakses |
-| 7. Ringkasan dan persetujuan | Diff draft, hasil dry-run, pertanyaan tersisa, coverage pemeriksaan | Ajukan review; reviewer approve/reject; kemudian deploy |
+| 7. Ringkasan dan persetujuan | Diff draft, hasil dry-run, pertanyaan tersisa, coverage pemeriksaan | Ajukan review; reviewer approve/reject; bila diatur, tunggu IT dan setiap unit terkait pada Persetujuan tayang; kemudian deploy |
 
 Parameter teknis lanjutan diletakkan pada bagian yang dapat dibuka oleh reviewer terkait. Jangan menyembunyikan kebutuhan verifikasi key, referensi, PII, atau aksi penghapusan di balik tombol “terima semua”. Confidence membantu prioritas review; bukan pengganti approval.
 
@@ -85,7 +86,7 @@ Catat field yang tidak didukung sebagai error/pekerjaan lanjutan. Jangan membuan
 
 **Approval:** reviewer menyetujui satu revision dengan bukti validasi tertentu. Default backend memerlukan approver terpisah dari pembuat/editor terakhir. AI tidak boleh menyetujui hasilnya sendiri. Perubahan draft setelah approval harus kembali menjadi draft/revision yang ditinjau.
 
-**Deploy dan sync:** deploy membangun struktur/konfigurasi aktif; sync memuat data. Approval tidak boleh langsung dianggap data selesai dimuat. Kedua pekerjaan dipantau dengan job ID.
+**Deploy dan sync:** deploy membangun struktur/konfigurasi aktif; sync memuat data. Pada sumber dengan aturan siap tayang, deploy dan rollback menunggu keputusan IT serta satu keputusan dari setiap unit terkait pada revisi konfigurasi dan snapshot yang sama. IT mencatat hasil pemeriksaan skema/mapping, kualitas, dan keamanan/akses. Penolakan menahan rilis sampai versi baru atau revisi aturan yang diaudit. Approval tidak boleh langsung dianggap data selesai dimuat. Kedua pekerjaan dipantau dengan job ID. Approval batch import tetap merupakan tahap terpisah.
 
 Review konfigurasi saat ini terikat revision konfigurasi, snapshot hash, serta revision/jenis klasifikasi melalui `review_state`. Perubahan draft membatalkan submission; perubahan klasifikasi membuat bukti review tidak sesuai lagi. Deployment memeriksa ulang isi sumber. Rancangan review setiap import memperluas evidence ke versi master, alias, dan policy. Pertanyaan per sel, coverage AI per snapshot baru, serta binding ke versi master belum diimplementasikan.
 

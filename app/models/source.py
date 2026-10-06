@@ -61,6 +61,10 @@ class DataSource(TenantEntity, Base):
     )
     access_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     access_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    approval_assignees: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    approval_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    release_policy: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    release_policy_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     access_metadata_editor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
     access_review_status: Mapped[str] = mapped_column(
         String(20), default="PENDING", server_default="PENDING"

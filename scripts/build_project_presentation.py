@@ -476,8 +476,48 @@ txt(s, "“Tampilkan total penjualan per cabang bulan ini.”", 1.44, 5.53, 10.3
     19, WHITE, True, align=PP_ALIGN.CENTER)
 notes(s, "Business key cabang harus kode stabil, bukan nama yang bisa berubah. Penjualan adalah fakta dinamis dan dapat merujuk master Cabang melalui binding approved. Nama field contoh harus diganti sesuai header asli. Dashboard tetap mengikuti akses pengguna dan status produk.")
 
-# 19 — close/source
-s = page("Pesan utama", "Penutup", 19, dark=True)
+# 19 — unit access and reviewers
+s = page("Akses multi-unit dan approver", "Tata kelola · keputusan", 19,
+         subtitle="Daftar unit untuk melihat data; daftar reviewer untuk keputusan pada sumber.")
+card(s, 0.72, 2.07, 3.55, 3.68, "Manajer Penjualan",
+     "Unit yang dipilih admin:\n• Penjualan Malang\n• Penjualan Surabaya\n\nInduk organisasi tidak otomatis membuka unit bawahan.",
+     accent=GREEN, body_size=14.5)
+arrow(s, 4.43, 3.46, TEAL, 0.27)
+card(s, 4.93, 2.07, 3.55, 3.68, "Sumber Penjualan Malang",
+     "Metadata unit pemilik + domain + yurisdiksi\nPolicy aktif menentukan aksi baca/query\nPenunjukan reviewer tidak membuka data.",
+     accent=TEAL, body_size=14.5)
+arrow(s, 8.62, 3.46, TEAL, 0.27)
+card(s, 9.12, 2.07, 3.49, 3.68, "Reviewer ditunjuk",
+     "Metadata: Manajer A\nKonfigurasi: Manajer A\nBatch import: Manajer B\n\nReviewer berbeda dari pengaju.",
+     accent=AMBER, body_size=14.5)
+txt(s, "Akses = unit eksplisit + policy  |  Approval = reviewer aktif + jenis keputusan + pemisahan tugas",
+    0.84, 6.12, 11.8, 0.48, 15, GREEN, True, align=PP_ALIGN.CENTER)
+notes(s, "Contoh fiktif. Admin dapat memberikan beberapa unit sekaligus lewat Administrasi. Untuk setiap sumber, admin menunjuk reviewer metadata, konfigurasi, dan batch import secara terpisah. Penunjukan tidak menggantikan policy akses; reviewer harus aktif dan tidak boleh menyetujui pekerjaannya sendiri. Sumber lama yang belum dikonfigurasi masih memakai pemeriksaan role lama sampai daftar reviewer disimpan.")
+
+# 20 — release approvals
+s = page("Persetujuan sebelum data tayang", "Tata kelola · gate rilis", 20,
+         subtitle="Contoh sumber gabungan: IT dan semua unit terkait menyetujui versi konfigurasi yang sama.")
+rect(s, 0.94, 2.18, 11.48, 0.61, NAVY, radius=True)
+txt(s, "Konfigurasi ETL versi 2 approved dan siap diperiksa", 1.23, 2.30, 10.86, 0.37,
+    17, WHITE, True, align=PP_ALIGN.CENTER)
+card(s, 0.8, 2.94, 3.52, 2.18, "IT · teknis",
+     "Skema, DQ, keamanan,\nhasil dry-run\nPemeriksa: approver.it",
+     accent=GREEN, body_size=14)
+card(s, 4.9, 2.94, 3.52, 2.18, "Penjualan Malang",
+     "Definisi bisnis, metrik,\nlingkup unit\nPemeriksa: manajer.penjualan",
+     accent=TEAL, body_size=14)
+card(s, 9.0, 2.94, 3.52, 2.18, "Keuangan Surabaya",
+     "Kesesuaian data lintas unit\ndan aturan pemakaian\nPemeriksa: manajer.keuangan",
+     accent=AMBER, body_size=14)
+txt(s, "+", 4.46, 3.71, 0.34, 0.5, 23, GREEN, True, align=PP_ALIGN.CENTER)
+txt(s, "+", 8.56, 3.71, 0.34, 0.5, 23, GREEN, True, align=PP_ALIGN.CENTER)
+rect(s, 1.56, 5.65, 10.18, 0.78, MINT, radius=True)
+txt(s, "Semua setuju pada revisi yang sama  →  deploy  →  data tersedia sesuai policy akses",
+    1.8, 5.83, 9.72, 0.42, 15.4, GREEN, True, align=PP_ALIGN.CENTER)
+notes(s, "Admin memilih akun IT dan unit terkait dari daftar. Approver unit wajib memiliki assignment aktif, tetapi penunjukan approval tidak memberi hak query. Jika revisi konfigurasi atau aturan rilis berubah, keputusan lama tidak berlaku. Gate diperiksa pada antrean dan worker deploy; batch import berikutnya tetap mengikuti review batch tersendiri.")
+
+# 21 — close/source
+s = page("Pesan utama", "Penutup", 21, dark=True)
 txt(s, "Google Sheet tetap menjadi titik awal.\nKepercayaan dibangun melalui proses.",
     0.85, 2.05, 10.65, 1.61, 30, WHITE, True, valign=MSO_ANCHOR.TOP)
 txt(s, "Daftarkan  →  Maknai  →  Validasi  →  Setujui  →  Gunakan", 0.91, 4.26, 11.5, 0.8,

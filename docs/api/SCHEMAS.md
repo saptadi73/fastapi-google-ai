@@ -120,6 +120,14 @@ Body: [UserAssignmentCreate](#userassignmentcreate).
 |---|---|---|---|
 | `user_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/access/users/{user_id}/unit-assignments
+
+Body: [MultiUnitAssignmentCreate](#multiunitassignmentcreate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `user_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/access/assignments/{assignment_id}/revoke
 
 Body: [AssignmentRevoke](#assignmentrevoke).
@@ -323,6 +331,10 @@ Body: —.
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
 
+### GET /api/v1/sources/approver-options
+
+Body: —.
+
 ### GET /api/v1/sources/{source_id}
 
 Body: —.
@@ -366,6 +378,22 @@ Body: [SourceAccessActivation](#sourceaccessactivation).
 ### GET /api/v1/sources/{source_id}/access-policy-options
 
 Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/sources/{source_id}/approvers
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/sources/{source_id}/approvers
+
+Body: [SourceApproversUpdate](#sourceapproversupdate).
 
 | Parameter | Lokasi | Wajib | Tipe / batas |
 |---|---|---|---|
@@ -1094,6 +1122,51 @@ Body: —.
 |---|---|---|---|
 | `config_id` | path | Ya | `string (uuid)` {} |
 | `against` | query | Ya | `string (uuid)` {} |
+
+### GET /api/v1/release-approvals/candidates
+
+Body: —.
+
+### GET /api/v1/release-approvals/inbox
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+
+### GET /api/v1/release-approvals/sources/{source_id}/policy
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### PUT /api/v1/release-approvals/sources/{source_id}/policy
+
+Body: [SourceReleasePolicyUpdate](#sourcereleasepolicyupdate).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/release-approvals/configurations/{config_id}
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `config_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/release-approvals/configurations/{config_id}/decisions
+
+Body: [ConfigurationReleaseDecision](#configurationreleasedecision).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `config_id` | path | Ya | `string (uuid)` {} |
 
 ### GET /api/v1/jobs
 
@@ -2135,6 +2208,30 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### ConfigurationReleaseDecision
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `group_type` | Ya | `enum ["TECHNICAL","UNIT"]` | — | — |
+| `unit_id` | Tidak | `string (uuid) / null` | — | — |
+| `decision` | Ya | `enum ["APPROVE","REJECT"]` | — | — |
+| `comment` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
+| `technical_checks` | Tidak | `TechnicalReleaseChecks / null` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 3,
+  "group_type": "UNIT",
+  "unit_id": "22222222-2222-4222-8222-222222222222",
+  "decision": "APPROVE",
+  "comment": "Definisi bisnis unit telah diperiksa",
+  "technical_checks": null
+}
+```
+
 ### CurrencyConversion
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2801,6 +2898,29 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `unit` | Tidak | `string / null` | — | — |
 | `synonyms` | Tidak | `array<string>` | [] | {"maxItems":20} |
 
+### MultiUnitAssignmentCreate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `unit_ids` | Ya | `array<string (uuid)>` | — | {"maxItems":100,"minItems":1} |
+| `valid_from` | Tidak | `string (date-time)` | — | — |
+| `valid_to` | Tidak | `string (date-time) / null` | — | — |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "unit_ids": [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222"
+  ],
+  "valid_from": "2026-09-27T00:00:00+07:00",
+  "valid_to": null,
+  "note": "Akses untuk dua unit penjualan"
+}
+```
+
 ### NewMasterRecordPolicy
 
 `enum ["UPDATE_ONLY","PROPOSE_INSERT"]`
@@ -3034,6 +3154,13 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### ReleaseUnitGroup
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `unit_id` | Ya | `string (uuid)` | — | — |
+| `approver_ids` | Ya | `array<string (uuid)>` | — | {"maxItems":20,"minItems":1} |
+
 ### ResolutionRequest
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -3262,6 +3389,32 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### SourceApproversUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `metadata_review` | Tidak | `array<string (uuid)>` | [] | {"maxItems":20} |
+| `configuration` | Tidak | `array<string (uuid)>` | [] | {"maxItems":20} |
+| `import_review` | Tidak | `array<string (uuid)>` | [] | {"maxItems":20} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision": 1,
+  "metadata_review": [
+    "11111111-1111-4111-8111-111111111111"
+  ],
+  "configuration": [
+    "11111111-1111-4111-8111-111111111111"
+  ],
+  "import_review": [
+    "22222222-2222-4222-8222-222222222222"
+  ]
+}
+```
+
 ### SourceConflictPolicy
 
 `enum ["REQUIRE_REVIEW","AUTHORITATIVE_SOURCE"]`
@@ -3319,6 +3472,33 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   "revision_no": 2,
   "decision": "APPROVE",
   "reason": "METADATA_VERIFIED"
+}
+```
+
+### SourceReleasePolicyUpdate
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+| `technical_approver_ids` | Ya | `array<string (uuid)>` | — | {"maxItems":20,"minItems":1} |
+| `unit_groups` | Tidak | `array<ReleaseUnitGroup>` | [] | {"maxItems":20} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision": 1,
+  "technical_approver_ids": [
+    "11111111-1111-4111-8111-111111111111"
+  ],
+  "unit_groups": [
+    {
+      "unit_id": "22222222-2222-4222-8222-222222222222",
+      "approver_ids": [
+        "33333333-3333-4333-8333-333333333333"
+      ]
+    }
+  ]
 }
 ```
 
@@ -3553,6 +3733,14 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
   ]
 }
 ```
+
+### TechnicalReleaseChecks
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `schema_and_mapping` | Ya | `boolean` | — | — |
+| `data_quality` | Ya | `boolean` | — | — |
+| `security_and_access` | Ya | `boolean` | — | — |
 
 ### TransformParameter
 
@@ -3955,6 +4143,10 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `access_status` | `VARCHAR(40)` | Tidak |
 | `access_revision` | `INTEGER` | Tidak |
 | `access_metadata` | `JSONB` | Ya |
+| `approval_assignees` | `JSONB` | Ya |
+| `approval_revision` | `INTEGER` | Tidak |
+| `release_policy` | `JSONB` | Ya |
+| `release_policy_revision` | `INTEGER` | Tidak |
 | `access_metadata_editor_id` | `CHAR(32)` | Ya |
 | `access_review_status` | `VARCHAR(20)` | Tidak |
 | `access_reviewed_by` | `CHAR(32)` | Ya |
@@ -4022,6 +4214,7 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `based_on_fingerprint` | `VARCHAR(64)` | Tidak |
 | `configuration_json` | `JSONB` | Tidak |
 | `review_state` | `JSONB` | Tidak |
+| `release_decisions` | `JSONB` | Tidak |
 | `created_by` | `CHAR(32)` | Tidak |
 | `approved_by` | `CHAR(32)` | Ya |
 | `approved_at` | `DATETIME` | Ya |

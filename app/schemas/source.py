@@ -38,6 +38,73 @@ class SourceMetadataReview(StrictModel):
         return self
 
 
+class SourceApproversUpdate(StrictModel):
+    revision: int = Field(ge=1)
+    metadata_review: list[UUID] = Field(default_factory=list, max_length=20)
+    configuration: list[UUID] = Field(default_factory=list, max_length=20)
+    import_review: list[UUID] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_approvers(self):
+        for workflow in (self.metadata_review, self.configuration, self.import_review):
+            if len(workflow) != len(set(workflow)):
+                raise ValueError("Approver tidak boleh berulang dalam satu jenis keputusan")
+        return self
+
+
+class ReleaseUnitGroup(StrictModel):
+    unit_id: UUID
+    approver_ids: list[UUID] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_approvers(self):
+        if len(self.approver_ids) != len(set(self.approver_ids)):
+            raise ValueError("Approver unit tidak boleh berulang")
+        return self
+
+
+class SourceReleasePolicyUpdate(StrictModel):
+    revision: int = Field(ge=1)
+    technical_approver_ids: list[UUID] = Field(min_length=1, max_length=20)
+    unit_groups: list[ReleaseUnitGroup] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_groups(self):
+        if len(self.technical_approver_ids) != len(set(self.technical_approver_ids)):
+            raise ValueError("Approver teknis tidak boleh berulang")
+        unit_ids = [group.unit_id for group in self.unit_groups]
+        if len(unit_ids) != len(set(unit_ids)):
+            raise ValueError("Unit approval tidak boleh berulang")
+        return self
+
+
+class TechnicalReleaseChecks(StrictModel):
+    schema_and_mapping: bool
+    data_quality: bool
+    security_and_access: bool
+
+
+class ConfigurationReleaseDecision(StrictModel):
+    revision_no: int = Field(ge=1)
+    group_type: Literal["TECHNICAL", "UNIT"]
+    unit_id: UUID | None = None
+    decision: Literal["APPROVE", "REJECT"]
+    comment: str = Field(min_length=1, max_length=500)
+    technical_checks: TechnicalReleaseChecks | None = None
+
+    @model_validator(mode="after")
+    def valid_group(self):
+        if (self.group_type == "UNIT") != (self.unit_id is not None):
+            raise ValueError("unit_id hanya diisi untuk approval UNIT")
+        if self.group_type == "UNIT" and self.technical_checks is not None:
+            raise ValueError("technical_checks hanya untuk pemeriksa IT")
+        if self.group_type == "TECHNICAL" and self.decision == "APPROVE" and (
+            self.technical_checks is None or not all(self.technical_checks.model_dump().values())
+        ):
+            raise ValueError("Pemeriksa IT harus melengkapi seluruh checklist teknis")
+        return self
+
+
 class SourceAccessActivation(StrictModel):
     revision_no: int = Field(ge=1)
     policy_id: UUID
