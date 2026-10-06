@@ -25,6 +25,19 @@ def test_knowledge_search_respects_role_and_route(tmp_path):
     assert knowledge.search("kelola pengguna", "PLATFORM_ADMIN", "/admin/users")[0].article_id == "admin"
 
 
+@pytest.mark.parametrize(
+    "question,role,route,expected",
+    [
+        ("contoh isi taxonomy dan term", "DATA_STEWARD", "/taxonomies", "contoh-isian-taxonomy"),
+        ("contoh pengisian yurisdiksi", "PLATFORM_ADMIN", "/admin", "contoh-isian-atribut-akses"),
+        ("apa isi unit pemilik sumber", "SOURCE_OWNER", "/workspace", "contoh-isian-sumber-google-sheet"),
+        ("contoh master cabang", "VIEWER", "/dashboard", "contoh-isian-master-dan-analitik"),
+    ],
+)
+def test_example_questions_find_relevant_knowledge(question, role, route, expected):
+    assert KnowledgeBase().search(question, role, route)[0].article_id == expected
+
+
 @pytest.mark.asyncio
 async def test_help_answer_only_keeps_retrieved_citations(tmp_path):
     article(tmp_path / "guide.md", "guide", "Panduan", '"*"', '"/guide"', "daftarkan sumber lalu profiling")

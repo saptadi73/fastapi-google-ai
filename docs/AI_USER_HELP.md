@@ -11,6 +11,12 @@ untuk prosedur terbatas. Konten harus menjelaskan fungsi dan proses pengguna tan
 credential, atau detail kontrol keamanan. Perubahan artikel langsung digunakan pada request berikutnya
 dan tidak memerlukan migration database.
 
+Contoh isian bisnis terdapat pada [Contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md) dan
+artikel `08` sampai `11` dalam `docs/knowledge`. Isinya mencakup taxonomy/term, atribut
+DEPARTMENT/BUSINESS_DOMAIN/JURISDICTION/CLEARANCE/PURPOSE, metadata Google Sheet, master,
+dan pertanyaan dashboard. Contoh bersifat fiktif; retrieval tidak boleh menyatakannya sebagai
+registry yang sudah ada pada tenant pengguna.
+
 ## API
 
 - `GET /api/v1/help/articles?route=/dashboard` menampilkan metadata artikel yang dapat diakses.

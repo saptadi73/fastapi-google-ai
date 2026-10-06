@@ -68,3 +68,6 @@ jawaban pada knowledge base pengguna yang dikurasi, menampilkan sumber rujukan, 
 akses langsung ke source code, database, filesystem, atau credential. Jangan masukkan password,
 token, API key, data pribadi, atau isi spreadsheet sensitif ke pertanyaan.
 
+Contoh nilai yang dapat dipakai saat menjelaskan form taxonomy, yurisdiksi, metadata sumber,
+dan master tersedia di [Contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md).
+
