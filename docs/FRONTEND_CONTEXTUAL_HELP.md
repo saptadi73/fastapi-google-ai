@@ -5,6 +5,12 @@ membuka dialog yang menjelaskan fungsi halaman, urutan penggunaan, dan catatan y
 diperhatikan. Isi mengikuti `route.path`, sehingga navigasi ke halaman lain langsung mengganti
 petunjuk tanpa memuat ulang aplikasi.
 
+Pada halaman Taxonomy, Administrasi, Workspace ETL, Master, binding taxonomy, Dashboard,
+Chat data, dan Permintaan akses, dialog juga menampilkan **Contoh pengisian** yang fiktif.
+Contohnya meliputi `jenis_biaya`, `jatim`, metadata sumber, business key master, dan
+pertanyaan bahasa alami. Konten ini mengikuti [contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md)
+dan tetap dapat dibaca tanpa memanggil AI.
+
 Dialog menyediakan tautan **Panduan lengkap** ke `/guide`. Halaman ini memuat workflow 10 tahap dari
 administrasi dan pendaftaran Google Sheet sampai batch berhasil, dashboard, serta chart. Versi
 dokumentasinya tersedia di [panduan pengguna awal sampai akhir](USER_GUIDE_END_TO_END.md). Panduan
