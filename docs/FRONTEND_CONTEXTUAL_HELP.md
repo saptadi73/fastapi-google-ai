@@ -15,6 +15,12 @@ Bantuan Administrasi juga menerangkan pilihan multi-unit eksplisit dan reviewer 
 Unit induk tidak otomatis membuka unit bawahan. Reviewer metadata, konfigurasi, dan import
 ditunjuk terpisah; penunjukan tidak memberi hak membaca data.
 
+Bantuan Workspace menerangkan mengapa dropdown unit, domain bisnis, dan yurisdiksi bisa
+kosong: hanya assignment aktif akun pendaftar yang muncul. Form menampilkan keadaan
+assignment kosong, kegagalan request, dan tombol **Muat ulang pilihan** secara terpisah.
+Admin lain perlu memberikan assignment melalui Administrasi → Pengguna; atribut registry
+tidak otomatis menjadi assignment.
+
 Bantuan **Persetujuan tayang** menjelaskan keputusan IT dan setiap unit terkait untuk
 revisi konfigurasi approved. Administrasi menyediakan pilihan akun/unit bernama;
 halaman approver menampilkan status, ringkasan data, dan catatan sebelum keputusan.

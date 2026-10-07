@@ -35,6 +35,14 @@ Tahap master dan taxonomy dilakukan bila dataset membutuhkan rujukan atau katego
 transaksi sederhana tetap harus melewati klasifikasi, konfigurasi, review, deploy, import, dan kontrol
 akses sebelum muncul di dashboard.
 
+Jika dropdown unit, domain bisnis, atau yurisdiksi kosong saat pendaftaran, pastikan
+ketiganya sudah menjadi assignment aktif **akun yang sedang login**, pada tenant yang
+sama. Atribut yang baru dibuat di Administrasi belum otomatis diberikan ke pengguna.
+Minta admin lain menugaskan atribut tersebut melalui Administrasi → Pengguna, lalu
+tekan **Muat ulang pilihan** di Workspace. Admin tidak dapat menugaskan akunnya sendiri.
+Purpose diambil dari registry aktif, bukan assignment; jika semua pilihan kosong dan
+ada pesan gagal memuat, periksa endpoint `/access/registration-options`.
+
 ## Contoh pertanyaan dashboard
 
 - `Tampilkan total penjualan per cabang bulan ini.`

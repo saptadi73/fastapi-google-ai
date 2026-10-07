@@ -180,6 +180,17 @@ legacy tanpa metadata sama-sama berstatus `ACCESS_POLICY_REQUIRED`, tetapi **sta
 ini belum membatasi query sumber legacy**. Sumber baru dengan metadata tidak muncul
 di katalog/query bisnis sampai aktivasi SOURCE, lalu hak setiap pengguna diperiksa.
 
+`GET /access/registration-options` sengaja mengembalikan hanya `DEPARTMENT`,
+`BUSINESS_DOMAIN`, dan `JURISDICTION` yang menjadi assignment aktif akun login.
+Membuat atribut di registry saja tidak cukup untuk mengisi dropdown pendaftaran.
+Admin lain harus memberikan assignment ketiganya kepada akun yang mendaftarkan sumber;
+admin tidak dapat memberikan assignment kepada akunnya sendiri. Periksa tenant yang
+dipakai saat login, status aktif atribut/assignment, serta tanggal berlaku. `PURPOSE`
+diambil dari registry tenant yang aktif, sedangkan owner/steward dari akun aktif.
+Frontend menyediakan pesan khusus dan tombol **Muat ulang pilihan** setelah assignment
+diberikan; jika seluruh pilihan termasuk sensitivitas kosong, periksa kegagalan request
+`GET /access/registration-options` pada pesan halaman.
+
 ## AI, cache, dan audit
 
 Untuk produk BE16, katalog dan template/relationship yang dikirim ke NL2SQL dibatasi
