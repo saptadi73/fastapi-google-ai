@@ -51,6 +51,15 @@ Admin dapat memberi beberapa `DEPARTMENT` kepada satu pengguna melalui
 `POST /access/users/{user_id}/unit-assignments`. Payload `unit_ids` berisi ID yang dipilih
 dari registry pada UI, bukan diketik pengguna. Semua assignment disimpan dalam satu transaksi;
 duplikat, atribut lintas tenant, non-departemen, atau periode tumpang tindih ditolak.
+Panel multi-unit hanya menampilkan atribut aktif berjenis `DEPARTMENT`: jika hanya
+Marketing yang tampil, hanya itu unit aktif yang tersedia di tenant. Checkbox harus
+dicentang sebelum tombol berubah dari 0 menjadi 1 unit. Setelah berhasil, pilihan
+form dibersihkan dan assignment aktif muncul pada ringkasan serta riwayat pengguna;
+pengguna yang sudah memiliki unit tersebut tidak perlu diberi assignment duplikat.
+`BUSINESS_DOMAIN` dan `JURISDICTION` diberikan secara terpisah lewat form **Atribut**
+pada pengguna yang sama, bukan lewat daftar multi-unit. Pastikan akun yang dipilih
+di Administrasi sama dengan akun yang login ke Workspace; `saptadi` dan `saptadi1`
+adalah pengguna berbeda bila keduanya terdaftar.
 `parent_id` hanya menyatakan struktur organisasi; hak akses **tidak diwariskan** ke unit turunan.
 Setiap unit yang dibutuhkan harus dipilih eksplisit. Assignment sendiri belum membuka produk;
 policy SOURCE/DATA_PRODUCT, domain, dan yurisdiksi tetap harus cocok.
@@ -190,6 +199,8 @@ diambil dari registry tenant yang aktif, sedangkan owner/steward dari akun aktif
 Frontend menyediakan pesan khusus dan tombol **Muat ulang pilihan** setelah assignment
 diberikan; jika seluruh pilihan termasuk sensitivitas kosong, periksa kegagalan request
 `GET /access/registration-options` pada pesan halaman.
+Langkah pemeriksaan akun, periode, dan tenant production tersedia di
+[diagnosis dropdown registrasi](DIAGNOSIS_DROPDOWN_REGISTRASI.md).
 
 ## AI, cache, dan audit
 

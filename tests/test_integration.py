@@ -395,6 +395,51 @@ async def source_access_metadata(ctx):
     return metadata
 
 
+async def test_new_unit_assignment_appears_for_source_registrant(context):
+    """The registration dropdown must reflect a newly granted unit for that exact login."""
+    async with SessionFactory() as session, session.begin():
+        registrant = User(
+            tenant_id=context.tenant_id,
+            username="saptadi1",
+            role="SOURCE_OWNER",
+            password_hash=password_hasher.hash("test-password-123"),
+        )
+        unit = AccessAttribute(
+            tenant_id=context.tenant_id,
+            kind="DEPARTMENT",
+            code="MARKETING",
+            label="Marketing",
+        )
+        session.add_all([registrant, unit])
+        await session.flush()
+        registrant_id, unit_id = registrant.id, unit.id
+
+    login_response = await context.client.post("/api/v1/auth/login", json={
+        "tenant_code": context.tenant_code,
+        "username": "saptadi1",
+        "password": "test-password-123",
+    })
+    assert login_response.status_code == 200
+    context.headers["saptadi1"] = {
+        "Authorization": "Bearer " + login_response.json()["data"]["access_token"]
+    }
+    before = (await request(context, "GET", "/access/registration-options", who="saptadi1"))["data"]
+    assert unit_id not in {scope["id"] for scope in before["scopes"]}
+
+    created = await request(
+        context,
+        "POST",
+        f"/access/users/{registrant_id}/unit-assignments",
+        expected=201,
+        data={"unit_ids": [unit_id]},
+    )
+    assert created["data"][0]["attribute_id"] == unit_id
+    after = (await request(context, "GET", "/access/registration-options", who="saptadi1"))["data"]
+    assert {scope["id"] for scope in after["scopes"]} == {unit_id}
+    assert after["scopes"][0]["code"] == "MARKETING"
+
+
+
 async def test_source_registration_checks_access_metadata(context):
     ctx = context
     base = {"name": "Scoped source", "spreadsheet_url": "fake_sheet_12345"}
