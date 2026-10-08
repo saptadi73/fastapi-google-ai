@@ -1,0 +1,18 @@
+[Unit]
+Description=Google Sheet AI Celery beat
+Wants=network-online.target redis-server.service
+After=network-online.target redis-server.service
+
+[Service]
+Type=simple
+User=saptadi73
+Group=www-data
+WorkingDirectory=/var/www/fastapi_app/fastapi-google-ai
+ExecStartPre=/usr/bin/mkdir -p /var/www/fastapi_app/fastapi-google-ai/storage
+ExecStart=/var/www/fastapi_app/fastapi-google-ai/venv/bin/python -m celery -A app.workers.celery_app:celery_app beat --loglevel=INFO --schedule=/var/www/fastapi_app/fastapi-google-ai/storage/celerybeat-schedule
+Restart=always
+RestartSec=5
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

@@ -35,6 +35,13 @@ Tahap master dan taxonomy dilakukan bila dataset membutuhkan rujukan atau katego
 transaksi sederhana tetap harus melewati klasifikasi, konfigurasi, review, deploy, import, dan kontrol
 akses sebelum muncul di dashboard.
 
+Tombol **Hubungkan & profiling** mendaftarkan sumber lebih dulu, kemudian membuat job
+discovery yang berjalan melalui worker. Status dan tautan monitor job tampil di dekat
+tombol. Jika statusnya QUEUED/RUNNING, tunggu atau buka monitor; jangan mendaftarkan
+Sheet yang sama lagi. Jika job FAILED, sumber tetap tercatat dan penyebabnya perlu
+diperiksa pada monitor job. Jika request pendaftaran gagal, periksa pesan form dan
+daftar sumber sebelum mencoba ulang.
+
 Jika dropdown unit, domain bisnis, atau yurisdiksi kosong saat pendaftaran, pastikan
 ketiganya sudah menjadi assignment aktif **akun yang sedang login**, pada tenant yang
 sama. Atribut yang baru dibuat di Administrasi belum otomatis diberikan ke pengguna.
