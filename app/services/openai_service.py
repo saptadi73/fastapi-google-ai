@@ -332,6 +332,33 @@ class OpenAIService:
                         except Exception as exc:
                             detail = " ".join(str(exc).split())[-400:]
                             parse_diagnostics.append(f"{candidate_model}:request={type(exc).__name__}:{detail}")
+                            # A parser exception (for example an empty structured
+                            # response) must still get the JSON-mode fallback.
+                            try:
+                                json_response = await client.responses.create(
+                                    model=candidate_model,
+                                    store=s.openai_store_responses,
+                                    input=[
+                                        {"role": "developer", "content": prompt + "\nReturn only one JSON object. Do not wrap it in markdown."},
+                                        {"role": "user", "content": context},
+                                    ],
+                                    text={"format": {"type": "json_object"}},
+                                    max_output_tokens=s.openai_max_output_tokens,
+                                    **({"reasoning": {"effort": "low"}} if candidate_model.startswith(("gpt-5", "o1", "o3", "o4")) else {}),
+                                )
+                                raw_json = (getattr(json_response, "output_text", "") or "").strip()
+                                decoded = json.loads(raw_json) if raw_json else None
+                                if isinstance(decoded, dict):
+                                    for wrapper in ("draft_configuration", "configuration", "etl_configuration"):
+                                        if isinstance(decoded.get(wrapper), dict):
+                                            decoded = decoded[wrapper]
+                                            break
+                                    parsed = _coerce_etl_draft(decoded, schema, context) if purpose == "ETL_CONFIG" else schema.model_validate(decoded)
+                                    response, parsed_output = json_response, parsed
+                                    responses.append(json_response)
+                                    break
+                            except Exception as fallback_exc:
+                                parse_diagnostics.append(f"{candidate_model}:json_exception={type(fallback_exc).__name__}:{' '.join(str(fallback_exc).split())[-250:]}")
                             continue
                     else:
                         error = (
