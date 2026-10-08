@@ -305,8 +305,10 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | Method | Path | Hak | Body / parameter | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
 | POST | `/sources/google-sheets` | E | SourceCreate dengan access_metadata wajib | 202 | `{source, job_id, status, status_url, already_registered, duplicate_source_ids}`; pengulangan oleh pemilik yang sama memakai sumber dan job discovery terakhir tanpa membuat duplikat |
-| GET | `/sources` | S | offset/limit | 200 | DataSource[]; meta pagination |
-| GET | `/sources/duplicate-groups` | S | - | 200 | Grup sumber dengan spreadsheet_id sama; admin melihat tenant, pengguna lain hanya sumber miliknya. `suggested_source_id` hanya diisi jika semua sumber satu pemilik. Tidak menghapus/menyatukan data. |
+| GET | `/sources` | S | offset/limit | 200 | DataSource[] aktif/terhubung; sumber yang di-unlink disembunyikan dari pilihan utama |
+| GET | `/sources/duplicate-groups` | S | - | 200 | Grup sumber aktif dengan spreadsheet_id sama; entri yang sudah di-unlink tidak ditampilkan. Admin melihat tenant, pengguna lain hanya sumber miliknya. `suggested_source_id` adalah sumber aktif paling awal jika semua satu pemilik. |
+| GET | `/sources/registration-check` | S | `spreadsheet_url` | 200 | Cek sebelum pendaftaran: `registered`, `owned_by_me`, `source_id`, `source_name`; detail sumber pemilik lain tidak dibuka. Pendaftaran tetap memakai guard atomik di server. |
+| POST | `/sources/{source_id}/unlink` | A | `{canonical_source_id: UUID, reason: string}` | 200 | Lepas pendaftaran duplikat secara reversibel; sumber utama harus aktif dan berasal dari Spreadsheet sama. 409 bila sumber mempunyai konfigurasi, hasil ETL, data product, binding master, dependensi, atau job aktif. |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
 | PATCH | `/sources/{source_id}/access-metadata` | E | SourceAccessMetadataUpdate | 200 | DataSource dengan access_revision terbaru dan access_status pending |
 | GET | `/sources/{source_id}/access-review-context` | R | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk reviewer sumber yang ditunjuk |

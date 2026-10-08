@@ -54,6 +54,10 @@ async def dependencies_ready(session, source):
 
 
 async def execute_job(session, job):
+    if job.source_id:
+        source = await session.get(DataSource, job.source_id)
+        if source and source.unlinked_at is not None:
+            raise AppError("SOURCE_UNLINKED", "Job sumber yang sudah di-unlink tidak dapat dijalankan.", 409)
     user = await session.get(User, job.requested_by)
     roles = REVIEW_ROLES if job.kind in ("DEPLOY", "ROLLBACK") else EDIT_ROLES
     if not user or not user.is_active or user.tenant_id != job.tenant_id or user.role not in roles:
@@ -127,7 +131,7 @@ async def run_pending(tenant_id=None):
             await fail_import_job(session, job, job.error_code)
             if job.source_id and job.kind in ("DISCOVER", "PROFILE", "AI_CONFIG"):
                 source = await session.get(DataSource, job.source_id)
-                if source:
+                if source and source.unlinked_at is None:
                     source.status = "AI_FAILED" if job.kind == "AI_CONFIG" else "PROFILE_FAILED"
     return {"processed": 1, "job_id": job_id}
 
@@ -169,6 +173,7 @@ async def schedule_sources():
             .where(
                 DataSource.sync_schedule.is_not(None),
                 DataSource.paused.is_(False),
+                DataSource.unlinked_at.is_(None),
                 DataSource.status == "ACTIVE",
             )
             .with_for_update(skip_locked=True)

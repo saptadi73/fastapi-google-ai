@@ -335,9 +335,25 @@ Body: —.
 
 Body: —.
 
+### GET /api/v1/sources/registration-check
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `spreadsheet_url` | query | Ya | `string` {} |
+
 ### GET /api/v1/sources/approver-options
 
 Body: —.
+
+### POST /api/v1/sources/{source_id}/unlink
+
+Body: [SourceUnlink](#sourceunlink).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
 
 ### GET /api/v1/sources/{source_id}
 
@@ -3530,6 +3546,22 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### SourceUnlink
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `canonical_source_id` | Ya | `string (uuid)` | — | — |
+| `reason` | Ya | `string` | — | {"maxLength":500,"minLength":3} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "canonical_source_id": "11111111-1111-4111-8111-111111111111",
+  "reason": "Pendaftaran ganda; gunakan sumber utama"
+}
+```
+
 ### TaxonomyAIRecommendRequest
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -4162,6 +4194,11 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `schedule_revision` | `INTEGER` | Tidak |
 | `paused` | `BOOLEAN` | Tidak |
 | `last_scheduled_at` | `DATETIME` | Ya |
+| `unlinked_at` | `DATETIME` | Ya |
+| `unlinked_by` | `CHAR(32)` | Ya |
+| `unlinked_to_source_id` | `CHAR(32)` | Ya |
+| `unlink_reason` | `VARCHAR(500)` | Ya |
+| `paused_before_unlink` | `BOOLEAN` | Ya |
 | `tenant_id` | `CHAR(32)` | Tidak |
 | `id` | `CHAR(32)` | Tidak |
 | `created_at` | `DATETIME` | Tidak |

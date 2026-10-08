@@ -11,7 +11,9 @@ from app.models.access import AccessAttribute, AccessPolicy, AccessPolicyBinding
 from app.models.auth import User
 from app.models.base import now
 from app.models.configuration import Configuration
-from app.models.etl import Job, Snapshot
+from app.models.etl import ETLRun, Job, Snapshot
+from app.models.master import MasterColumnBinding, MasterSourceBinding
+from app.models.semantic import DataProduct
 from app.models.source import DataSource, ProfilingRun, SourceDependency, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
@@ -132,6 +134,7 @@ class SourceService:
             .where(
                 DataSource.tenant_id == self.user.tenant_id,
                 DataSource.spreadsheet_id == sid,
+                DataSource.unlinked_at.is_(None),
             )
             .order_by(DataSource.created_at, DataSource.id)
         )).all())
@@ -213,12 +216,15 @@ class SourceService:
         )).all()
         grouped = {}
         for source in sources:
+            if source.unlinked_at is not None:
+                continue
             grouped.setdefault(source.spreadsheet_id, []).append(source)
         return [
             {
                 "spreadsheet_id": spreadsheet_id,
                 "same_owner": len({source.owner_user_id for source in items}) == 1,
-                "suggested_source_id": items[0].id if len({source.owner_user_id for source in items}) == 1 else None,
+                "suggested_source_id": next((source.id for source in items if source.unlinked_at is None), None)
+                if len({source.owner_user_id for source in items}) == 1 else None,
                 "sources": [
                     {
                         "id": source.id,
@@ -234,6 +240,84 @@ class SourceService:
             for spreadsheet_id, items in grouped.items()
             if len(items) > 1
         ]
+
+    async def check_registration(self, spreadsheet_url):
+        try:
+            sid = spreadsheet_id(spreadsheet_url)
+        except ValueError as exc:
+            raise AppError("INVALID_SPREADSHEET_ID", str(exc)) from None
+        existing = (await self.session.scalars(
+            select(DataSource).where(
+                DataSource.tenant_id == self.user.tenant_id,
+                DataSource.spreadsheet_id == sid,
+                DataSource.unlinked_at.is_(None),
+            ).order_by(DataSource.created_at, DataSource.id)
+        )).all()
+        own = next((item for item in existing if item.owner_user_id == self.user.id), None)
+        return {
+            "registered": bool(existing),
+            "owned_by_me": own is not None,
+            "source_id": own.id if own else None,
+            "source_name": own.name if own else None,
+        }
+
+    async def unlink_duplicate(self, source_id, data):
+        # Share the registration lock so a concurrent registration cannot pick a source
+        # while it is being unlinked. The source remains in the database for audit.
+        source = await self.repo.get(DataSource, source_id)
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"source-sheet:{self.user.tenant_id}:{source.spreadsheet_id}"},
+        )
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        canonical = await self.repo.get(DataSource, data.canonical_source_id, lock=True)
+        if source.unlinked_at is not None:
+            raise AppError("SOURCE_ALREADY_UNLINKED", "Sumber sudah di-unlink.", 409)
+        if (source.id == canonical.id or source.spreadsheet_id != canonical.spreadsheet_id
+                or canonical.unlinked_at is not None):
+            raise AppError("SOURCE_CANONICAL_INVALID", "Pilih sumber utama aktif dari Spreadsheet yang sama.", 409)
+        if source.status == "ACTIVE" or source.access_status == "POLICY_APPROVED":
+            raise AppError("SOURCE_UNLINK_IN_USE", "Sumber aktif atau policy akses sudah berlaku. Tinjau pemakaian sebelum unlink.", 409)
+        sheet_ids = select(SourceSheet.id).where(
+            SourceSheet.tenant_id == self.user.tenant_id, SourceSheet.source_id == source.id
+        )
+        checks = (
+            ("konfigurasi", select(Configuration.id).where(Configuration.source_id == source.id)),
+            ("hasil ETL", select(ETLRun.id).where(ETLRun.source_id == source.id)),
+            ("data product", select(DataProduct.id).where(DataProduct.source_sheet_id.in_(sheet_ids))),
+            ("binding master", select(MasterSourceBinding.id).where(MasterSourceBinding.source_sheet_id.in_(sheet_ids))),
+            ("binding kolom master", select(MasterColumnBinding.id).where(MasterColumnBinding.source_sheet_id.in_(sheet_ids))),
+            ("dependensi sumber", select(SourceDependency.id).where(or_(
+                SourceDependency.downstream_source_id == source.id,
+                SourceDependency.upstream_source_id == source.id,
+            ))),
+            ("job berjalan", select(Job.id).where(Job.source_id == source.id, Job.status.in_(["QUEUED", "RUNNING"]))),
+        )
+        for label, query in checks:
+            if await self.session.scalar(query.limit(1)):
+                raise AppError("SOURCE_UNLINK_IN_USE", f"Sumber masih memiliki {label}. Tinjau dahulu sebelum unlink.", 409)
+        source.paused_before_unlink = source.paused
+        source.paused = True
+        source.unlinked_at = now()
+        source.unlinked_by = self.user.id
+        source.unlinked_to_source_id = canonical.id
+        source.unlink_reason = data.reason.strip()
+        audit(self.session, self.user, "source.unlinked", source.id,
+              canonical_source_id=canonical.id, reason=source.unlink_reason)
+        return record(source)
+
+    async def restore_unlinked(self, source_id):
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        if source.unlinked_at is None:
+            raise AppError("SOURCE_NOT_UNLINKED", "Sumber belum di-unlink.", 409)
+        source.paused = source.paused_before_unlink if source.paused_before_unlink is not None else True
+        source.paused_before_unlink = None
+        source.unlinked_at = None
+        source.unlinked_by = None
+        source.unlinked_to_source_id = None
+        source.unlink_reason = None
+        audit(self.session, self.user, "source.unlink_restored", source.id)
+        return record(source)
 
     async def update_access_metadata(self, source_id, data):
         source = await self.session.scalar(
@@ -444,17 +528,36 @@ class SourceService:
         source = await self.repo.get(DataSource, source_id)
         metadata = await self.google.metadata(source.spreadsheet_id)
         existing = {s.sheet_id: s for s in await self.repo.sheets(source.id)}
+        discovered = []
         for tab in metadata.get("sheets", []):
             props = tab["properties"]
             if props.get("sheetType", "GRID") != "GRID":
                 continue
             if props["sheetId"] not in existing:
-                await self.repo.add(
+                sheet = await self.repo.add(
                     SourceSheet, source_id=source.id, sheet_id=props["sheetId"], sheet_name=props["title"]
                 )
             else:
-                existing[props["sheetId"]].sheet_name = props["title"]
-        return await self.profile(source.id)
+                sheet = existing[props["sheetId"]]
+                sheet.sheet_name = props["title"]
+            discovered.append({"id": sheet.id, "sheet_id": sheet.sheet_id, "sheet_name": sheet.sheet_name})
+        audit(self.session, self.user, "source.discovered", source.id, sheet_count=len(discovered))
+        if not discovered:
+            source.status = "PROFILE_FAILED"
+            raise AppError("SOURCE_NOT_FOUND", "Belum ada tab aktif; Google Sheet tidak memiliki tab GRID.", 404)
+        # Keep discovered tabs even when profiling rejects a header. A savepoint
+        # prevents profile snapshots/runs from being persisted while preserving
+        # the SourceSheet rows so the user can fix the tab and retry profiling.
+        try:
+            async with self.session.begin_nested():
+                return await self.profile(source.id)
+        except AppError as exc:
+            source.status = "PROFILE_FAILED"
+            return {
+                "sheets": discovered,
+                "profile_required": True,
+                "profile_error": {"code": exc.code, "message": exc.message},
+            }
 
     async def profile(self, source_id):
         source = await self.repo.get(DataSource, source_id)

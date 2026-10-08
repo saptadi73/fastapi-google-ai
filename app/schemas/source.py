@@ -21,6 +21,11 @@ class SourceAccessMetadata(StrictModel):
     sensitivity: Literal["LOW", "MEDIUM", "HIGH"]
 
 
+class SourceUnlink(StrictModel):
+    canonical_source_id: UUID
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class SourceAccessMetadataUpdate(StrictModel):
     revision_no: int = Field(ge=1)
     access_metadata: SourceAccessMetadata

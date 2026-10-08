@@ -160,6 +160,29 @@ async def request(ctx, method, path, *, who="admin", expected=200, data=None):
     return response.json()
 
 
+async def test_duplicate_source_unlink_and_re_registration_guard(context):
+    admin_id = decode_token(context.tokens["admin"]["access_token"])["sub"]
+    async with SessionFactory() as session, session.begin():
+        primary = DataSource(tenant_id=context.tenant_id, source_code="primary_" + uuid4().hex[:12],
+                             name="Primary", spreadsheet_id="unlink_sheet_123", owner_user_id=admin_id)
+        duplicate = DataSource(tenant_id=context.tenant_id, source_code="duplicate_" + uuid4().hex[:12],
+                               name="Duplicate", spreadsheet_id="unlink_sheet_123", owner_user_id=admin_id)
+        session.add_all([primary, duplicate])
+        await session.flush()
+        primary_id, duplicate_id = primary.id, duplicate.id
+    body = {"canonical_source_id": primary_id, "reason": "Pendaftaran ganda"}
+    await request(context, "POST", f"/sources/{duplicate_id}/unlink", who="viewer", expected=403, data=body)
+    unlinked = await request(context, "POST", f"/sources/{duplicate_id}/unlink", data=body)
+    assert unlinked["data"]["unlinked_at"] and unlinked["data"]["paused"] is True
+    checked = await request(context, "GET", "/sources/registration-check?spreadsheet_url=unlink_sheet_123")
+    assert checked["data"] == {"registered": True, "owned_by_me": True,
+                               "source_id": primary_id, "source_name": "Primary"}
+    assert duplicate_id not in {item["id"] for item in (await request(context, "GET", "/sources"))["data"]}
+    groups = (await request(context, "GET", "/sources/duplicate-groups"))["data"]
+    assert not any(item["spreadsheet_id"] == "unlink_sheet_123" for item in groups)
+    await request(context, "POST", f"/sources/{duplicate_id}/discover", expected=409)
+
+
 async def test_release_needs_it_and_each_related_unit_on_same_revision(context):
     async with SessionFactory() as session, session.begin():
         users = {item.username: item for item in (await session.scalars(
@@ -2547,6 +2570,8 @@ async def test_mixed_tabs_and_worker_gate(context, config_data, monkeypatch):
 
     monkeypatch.setattr(GoogleSheetsService, "metadata", metadata)
     await request(ctx, "POST", f"/sources/{source_id}/discover", expected=202)
+    await run_pending(ctx.tenant_id)
+    await request(ctx, "POST", f"/sources/{source_id}/profile", expected=202)
     await run_pending(ctx.tenant_id)
     sheets = (await request(ctx, "GET", f"/sources/{source_id}/sheets"))["data"]
     first = next(s for s in sheets if s["id"] == first_id)

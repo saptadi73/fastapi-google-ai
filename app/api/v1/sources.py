@@ -21,6 +21,7 @@ from app.schemas.source import (
     SourceCreate,
     SourceMetadataReview,
     SourceScheduleUpdate,
+    SourceUnlink,
 )
 from app.services.classification_service import ClassificationService
 from app.services.job_service import enqueue
@@ -53,7 +54,7 @@ async def sources(
     session: Session, user: CurrentUser, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)
 ):
     items = await SourceRepository(session, user.tenant_id).list(
-        DataSource, offset=offset, limit=limit
+        DataSource, offset=offset, limit=limit, conditions=(DataSource.unlinked_at.is_(None),)
     )
     return success(
         await source_records(session, items),
@@ -67,9 +68,19 @@ async def duplicate_groups(session: Session, user: CurrentUser):
     return success(await SourceService(session, user).duplicate_groups())
 
 
+@router.get("/sources/registration-check")
+async def registration_check(spreadsheet_url: str, session: Session, user: CurrentUser):
+    return success(await SourceService(session, user).check_registration(spreadsheet_url))
+
+
 @router.get("/sources/approver-options", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
 async def source_approver_options(session: Session, user: CurrentUser):
     return success(await SourceApproverService(session, user).options())
+
+
+@router.post("/sources/{source_id}/unlink", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+async def unlink_source(source_id: UUID, data: SourceUnlink, session: Session, user: CurrentUser):
+    return success(await SourceService(session, user).unlink_duplicate(source_id, data))
 
 
 @router.get("/sources/{source_id}")
