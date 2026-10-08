@@ -250,6 +250,7 @@ class OpenAIService:
                             "AI_TASK_BUDGET_EXCEEDED", "Budget harian policy AI tercapai.", 429
                         )
             error, response, actual_model = None, None, model
+            parsed_output = None
             responses = []
             models = [model] + ([fallback_model] if fallback_model and fallback_model != model else [])
             had_structured_failure = False
@@ -281,6 +282,7 @@ class OpenAIService:
                             responses.append(candidate_response)
                             response = candidate_response
                             if candidate_response.output_parsed is not None:
+                                parsed_output = candidate_response.output_parsed
                                 break
                             # Some models cannot satisfy the full ETL schema in strict
                             # structured mode. Retry as JSON mode, then validate the
@@ -309,7 +311,7 @@ class OpenAIService:
                                     parse_diagnostics.append(f"{candidate_model}:json_mode={type(exc).__name__}:{' '.join(str(exc).split())[-250:]}")
                                 else:
                                     response = json_response
-                                    response.output_parsed = parsed
+                                    parsed_output = parsed
                                     responses.append(json_response)
                                     break
                             # SDK parsing can be empty even when the response contains
@@ -387,7 +389,7 @@ class OpenAIService:
             )
         if error:
             raise error
-        return response.output_parsed, {
+        return parsed_output, {
             "ai_response_id": response.id,
             "ai_model": actual_model,
             "prompt_version": template,
