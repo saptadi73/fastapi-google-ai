@@ -1,3 +1,5 @@
+import json
+import re
 import time
 from datetime import datetime, timezone
 
@@ -16,6 +18,74 @@ PROMPT_PATHS = {
     "NL2SQL": "nl2sql_v1.md",
     "USER_HELP": "user_help_v1.md",
 }
+
+
+def _normalize_target(value: str, fallback: str = "data") -> str:
+    value = re.sub(r"[^a-zA-Z0-9]+", "_", str(value)).strip("_").lower()
+    if not value or not value[0].isalpha():
+        value = "data_" + value
+    return value[:29]
+
+
+def _coerce_etl_draft(value: dict, schema, context: str):
+    """Convert the compact AI draft shape into the runtime ETL contract."""
+    if "dataset_business_name" in value and "target_table" in value:
+        return schema.model_validate(value)
+    source = value.get("source") if isinstance(value.get("source"), dict) else {}
+    sheet_name = source.get("sheet_name") or "dataset"
+    columns = value.get("columns") if isinstance(value.get("columns"), list) else []
+    mapped, dimensions, keys = [], [], []
+    type_map = {
+        "int": "bigint", "integer": "bigint", "long": "bigint", "float": "numeric",
+        "double": "numeric", "decimal": "numeric", "number": "numeric",
+        "string": "text", "str": "text", "datetime": "timestamp", "date": "date",
+        "boolean": "boolean", "bool": "boolean",
+    }
+    pii_map = {"none": "NONE", "low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
+    for item in columns:
+        if not isinstance(item, dict):
+            continue
+        source_column = str(item.get("source_column") or item.get("name") or "").strip()
+        target_column = _normalize_target(item.get("target_column") or item.get("name"), "column")
+        if not source_column or any(c["source_column"] == source_column for c in mapped):
+            continue
+        target_type = type_map.get(str(item.get("target_type") or item.get("data_type") or "text").lower(), "text")
+        pii = pii_map.get(str(item.get("pii_classification") or item.get("pii_level") or "none").lower(), "NONE")
+        is_key = bool(item.get("is_business_key")) or target_column in {"id", "code", "no"} or str(item.get("semantic_type", "")).lower() == "key"
+        mapped.append({
+            "source_column": source_column, "target_column": target_column, "target_type": target_type,
+            "business_name": source_column, "nullable": not is_key, "is_business_key": is_key,
+            "is_primary_key": False, "transformation_codes": [], "transform_parameters": [],
+            "pii_classification": pii, "confidence": 0.6,
+            "reason": "Draft AI dinormalisasi dan divalidasi oleh backend.",
+        })
+        if str(item.get("semantic_type", "")).lower() == "dimension" and pii in ("NONE", "LOW"):
+            dimensions.append(target_column)
+        if is_key:
+            keys.append(target_column)
+    if not mapped:
+        raise ValueError("Draft AI tidak memiliki kolom yang dapat dipetakan")
+    if not keys:
+        keys = [mapped[0]["target_column"]]
+        mapped[0]["is_business_key"] = True
+        mapped[0]["nullable"] = False
+    grain = value.get("grain", "Satu baris sumber")
+    if isinstance(grain, list):
+        grain = "Satu record per " + ", ".join(str(item) for item in grain)
+    return schema.model_validate({
+        "dataset_business_name": sheet_name,
+        "dataset_description": "",
+        "grain": str(grain),
+        "target_schema": "trusted",
+        "target_table": _normalize_target(sheet_name),
+        "load_strategy": "UPSERT" if keys else "APPEND",
+        "append_duplicate_policy": None,
+        "columns": mapped,
+        "data_quality_rules": [],
+        "semantic": {"code": _normalize_target(sheet_name, "dataset"), "dimensions": dimensions, "metrics": []},
+        "unresolved_questions": value.get("unresolved_questions", []),
+        "overall_confidence": 0.6,
+    })
 
 
 class OpenAIService:
@@ -212,6 +282,36 @@ class OpenAIService:
                             response = candidate_response
                             if candidate_response.output_parsed is not None:
                                 break
+                            # Some models cannot satisfy the full ETL schema in strict
+                            # structured mode. Retry as JSON mode, then validate the
+                            # returned object with the same Pydantic schema server-side.
+                            json_response = await client.responses.create(
+                                model=candidate_model,
+                                store=s.openai_store_responses,
+                                input=[
+                                    {"role": "developer", "content": prompt + "\nReturn only one JSON object. Do not wrap it in markdown."},
+                                    {"role": "user", "content": context},
+                                ],
+                                text={"format": {"type": "json_object"}},
+                                max_output_tokens=s.openai_max_output_tokens,
+                                **({"reasoning": {"effort": "low"}} if candidate_model.startswith(("gpt-5", "o1", "o3", "o4")) else {}),
+                            )
+                            raw_json = (getattr(json_response, "output_text", "") or "").strip()
+                            if raw_json:
+                                try:
+                                    decoded = json.loads(raw_json)
+                                    for wrapper in ("draft_configuration", "configuration", "etl_configuration"):
+                                        if isinstance(decoded, dict) and isinstance(decoded.get(wrapper), dict):
+                                            decoded = decoded[wrapper]
+                                            break
+                                    parsed = _coerce_etl_draft(decoded, schema, context) if purpose == "ETL_CONFIG" else schema.model_validate(decoded)
+                                except Exception as exc:
+                                    parse_diagnostics.append(f"{candidate_model}:json_mode={type(exc).__name__}:{' '.join(str(exc).split())[-250:]}")
+                                else:
+                                    response = json_response
+                                    response.output_parsed = parsed
+                                    responses.append(json_response)
+                                    break
                             # SDK parsing can be empty even when the response contains
                             # valid JSON. Validate the raw text as a safe second path.
                             raw = (getattr(candidate_response, "output_text", "") or "").strip()
