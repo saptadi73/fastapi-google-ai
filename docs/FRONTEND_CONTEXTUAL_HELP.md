@@ -78,3 +78,7 @@ petunjuk khusus beserta contoh path ke `tests/unit/pageHelp.test.ts`.
 - tes browser login ke dashboard membuktikan isi mengikuti halaman, `Escape` bekerja, dan fokus kembali;
 - typecheck dan production build lulus.
 
+
+## Halaman Sumber & tracking
+
+Route `/sources` memiliki bantuan khusus untuk pencarian dan pagination sumber, pembacaan status discovery/profiling/configuration atau binding master/pemuatan, penanggung jawab Data Owner/Data Steward, serta navigasi Buka sumber. Panduan mengarahkan pengguna ke daftar ini jika sumber tidak ada di dropdown Workspace. Kegagalan tahap tidak menghapus sumber. Admin memerlukan alasan dan dua konfirmasi untuk unlink; pemulihan juga memerlukan dua konfirmasi. Status progres bukan bukti hak akses, dan binding master approved belum membuktikan record telah dimuat.

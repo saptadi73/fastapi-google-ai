@@ -27,6 +27,13 @@ DEPARTMENT/BUSINESS_DOMAIN/JURISDICTION/CLEARANCE/PURPOSE, metadata Google Sheet
 dan pertanyaan dashboard. Contoh bersifat fiktif; retrieval tidak boleh menyatakannya sebagai
 registry yang sudah ada pada tenant pengguna.
 
+Panduan kontekstual pada halaman **Binding kolom referensi master** dan artikel knowledge
+`master-dan-taxonomy`/`contoh-isian-master-dan-analitik` menjelaskan cara memilih header sumber,
+master approved, serta field master unik (biasanya business key). Jawaban harus menegaskan bahwa
+UUID internal dibuat/dipakai sistem, nilai tidak ditemukan atau ambigu diselesaikan pada review
+batch, binding hanya mencari satu field master, dan perubahan binding memerlukan approval serta
+batch import baru.
+
 ## API
 
 - `GET /api/v1/help/articles?route=/dashboard` menampilkan metadata artikel yang dapat diakses.
@@ -49,3 +56,21 @@ knowledge base.
 
 Jalankan `alembic upgrade head` saat deployment agar check constraint policy menerima purpose
 `USER_HELP`. Migration tidak membuat tabel knowledge base karena artikel dibaca dari file terkurasi.
+
+Knowledge base menjelaskan menu **Sumber & tracking** sebagai daftar lengkap sumber dengan
+pencarian, pagination, status discovery/profiling/configuration atau binding master/pemuatan,
+serta Data Owner dan Data Steward. Asisten mengarahkan pengguna ke halaman ini bila sumber
+lama tidak tampak pada dropdown Workspace dan menyarankan **Buka sumber** untuk melanjutkan.
+Sumber yang gagal pada satu tahap tetap tercatat; perbaiki lalu ulangi tahap relevan tanpa
+registrasi ulang. Unlink menyimpan riwayat dan mengeluarkan entri dari daftar aktif serta
+duplikat aktif. Unlink meminta alasan dan dua konfirmasi; pemulihan juga membutuhkan dua
+konfirmasi. Asisten tidak boleh menyatakan bahwa status tracking menjamin hak akses atau
+bahwa binding master saja berarti data sudah dimuat.
+
+Admin dapat menghapus permanen registrasi setup yang gagal dari tabel tracking. UI menampilkan
+preview dampak terlebih dahulu, meminta kode sumber dan alasan, lalu dua konfirmasi. Penghapusan
+hanya tersedia bila belum ada konfigurasi, snapshot/ETL, data product, binding, review import,
+kebijakan terikat, dependensi, atau job aktif; bila ada, arahkan admin untuk menyelesaikan
+ketergantungan atau memakai unlink jika memang sumber duplikat. Penghapusan membersihkan tab,
+hasil profiling, dan job terminal sumber tersebut, sementara event audit penghapusan tetap ada.
+Jangan menghapus sumber yang sudah menghasilkan data operasional hanya untuk mengulang profiling.

@@ -38,6 +38,17 @@ def test_example_questions_find_relevant_knowledge(question, role, route, expect
     assert KnowledgeBase().search(question, role, route)[0].article_id == expected
 
 
+def test_master_relation_question_retrieves_binding_guidance():
+    articles = KnowledgeBase().search(
+        "bagaimana menentukan field sumber berelasi dengan master",
+        "SOURCE_OWNER",
+        "/sources/source-id/sheets/sheet-id/column-bindings",
+    )
+    article_ids = {item.article_id for item in articles}
+    assert "master-dan-taxonomy" in article_ids
+    assert "contoh-isian-master-dan-analitik" in article_ids
+
+
 @pytest.mark.asyncio
 async def test_help_answer_only_keeps_retrieved_citations(tmp_path):
     article(tmp_path / "guide.md", "guide", "Panduan", '"*"', '"/guide"', "daftarkan sumber lalu profiling")

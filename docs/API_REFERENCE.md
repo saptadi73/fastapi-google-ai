@@ -305,10 +305,14 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | Method | Path | Hak | Body / parameter | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
 | POST | `/sources/google-sheets` | E | SourceCreate dengan access_metadata wajib | 202 | `{source, job_id, status, status_url, already_registered, duplicate_source_ids}`; pengulangan oleh pemilik yang sama memakai sumber dan job discovery terakhir tanpa membuat duplikat |
-| GET | `/sources` | S | offset/limit | 200 | DataSource[] aktif/terhubung; sumber yang di-unlink disembunyikan dari pilihan utama |
-| GET | `/sources/duplicate-groups` | S | - | 200 | Grup sumber aktif dengan spreadsheet_id sama; entri yang sudah di-unlink tidak ditampilkan. Admin melihat tenant, pengguna lain hanya sumber miliknya. `suggested_source_id` adalah sumber aktif paling awal jika semua satu pemilik. |
+| GET | `/sources` | S | `offset`, `limit`, `search`, `include_unlinked` | 200 | DataSource[] berhalaman beserta `meta.total`; sumber unlink disembunyikan secara default |
+| GET | `/sources/tracking` | S | `offset`, `limit`, `search`, `include_unlinked` | 200 | Daftar sumber berhalaman dengan progres per tab, `last_failures` berisi kegagalan terakhir per tahap, serta Data Owner/Data Steward; entri unlink disembunyikan secara default |
+| GET | `/sources/{source_id}/history` | S | UUID sumber; `offset`, `limit` | 200 | Audit trail tenant-scoped berisi aktivitas, aktor, waktu, tahap job, hasil, dan detail kegagalan; halaman berurutan terbaru dahulu |
+| GET | `/sources/duplicate-groups` | S | - | 200 | Grup sumber aktif dengan spreadsheet_id sama; entri yang sudah di-unlink tidak ditampilkan. Halaman Sumber & tracking menyediakan daftar utama dengan pencarian dan pagination. |
 | GET | `/sources/registration-check` | S | `spreadsheet_url` | 200 | Cek sebelum pendaftaran: `registered`, `owned_by_me`, `source_id`, `source_name`; detail sumber pemilik lain tidak dibuka. Pendaftaran tetap memakai guard atomik di server. |
 | POST | `/sources/{source_id}/unlink` | A | `{canonical_source_id: UUID, reason: string}` | 200 | Lepas pendaftaran duplikat secara reversibel; sumber utama harus aktif dan berasal dari Spreadsheet sama. 409 bila sumber mempunyai konfigurasi, hasil ETL, data product, binding master, dependensi, atau job aktif. |
+| GET | `/sources/{source_id}/delete-preview` | A | UUID sumber | 200 | `can_delete`, blockers, dan jumlah artefak setup yang akan dibersihkan |
+| DELETE | `/sources/{source_id}` | A | `{confirm_source_code, reason}` | 200 | Hapus permanen sumber setup yang gagal jika tidak memiliki data operasional; menulis event audit independen. 409 bila kode tidak cocok atau sumber masih dipakai. |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
 | PATCH | `/sources/{source_id}/access-metadata` | E | SourceAccessMetadataUpdate | 200 | DataSource dengan access_revision terbaru dan access_status pending |
 | GET | `/sources/{source_id}/access-review-context` | R | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk reviewer sumber yang ditunjuk |
@@ -595,7 +599,7 @@ Metadata master dan binding kini tersedia; kontrak lengkap, payload, respons, ve
 | POST | `/source-sheets/{sheet_id}/master-binding/approve` | R | MasterRevisionRequest | 200 | MasterSourceBinding APPROVED |
 | POST | `/source-sheets/{sheet_id}/master-binding/reject` | R | MasterRevisionRequest | 200 | MasterSourceBinding REJECTED |
 | GET | `/source-sheets/{sheet_id}/column-bindings` | S | UUID tab | 200 | daftar binding kolom ke master |
-| GET | `/source-sheets/{sheet_id}/column-bindings/recommendations` | S | UUID tab | 200 | kandidat binding berbobot; `requires_confirmation=true` |
+| GET | `/source-sheets/{sheet_id}/column-bindings/recommendations` | S | UUID tab | 200 | kandidat dari kemiripan nama normalisasi/padanan istilah; memuat master ID/kode/nama/versi, field/tipe, business-key flag, skor, confidence, alasan; `requires_confirmation=true`; tidak melakukan save |
 | PUT | `/source-sheets/{sheet_id}/column-bindings` | E | MasterColumnBindingCreate | 200 | binding kolom draft dengan revision baru |
 | POST | `/column-bindings/{binding_id}/approve` | R | MasterRevisionRequest | 200 | binding kolom APPROVED |
 | POST | `/column-bindings/{binding_id}/reject` | R | MasterRevisionRequest | 200 | binding kolom REJECTED |

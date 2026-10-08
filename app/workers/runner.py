@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
+from app.models.audit import AuditEvent
 from app.models.auth import User
 from app.models.base import now
 from app.models.etl import Job
@@ -83,6 +84,31 @@ async def execute_job(session, job):
     raise AppError("JOB_INVALID", "Jenis job tidak dikenal.")
 
 
+def _audit_stage(session, job, status, *, stage=None, error_code=None, error_message=None):
+    if not job.source_id:
+        return
+    details = {
+        "job_id": str(job.id),
+        "job_kind": job.kind,
+        "status": status,
+    }
+    if stage:
+        details["stage"] = stage
+    source_sheet_id = (job.payload or {}).get("source_sheet_id")
+    if source_sheet_id:
+        details["source_sheet_id"] = str(source_sheet_id)
+    if status == "FAILED":
+        details["error_code"] = error_code or job.error_code
+        details["error_message"] = error_message or job.error_message
+    session.add(AuditEvent(
+        tenant_id=job.tenant_id,
+        user_id=job.requested_by,
+        event=f"source.stage_{status.lower()}",
+        resource_id=str(job.source_id),
+        details=details,
+    ))
+
+
 async def run_pending(tenant_id=None):
     async with SessionFactory() as session, session.begin():
         query = select(Job)
@@ -97,6 +123,7 @@ async def run_pending(tenant_id=None):
         if not job:
             return {"processed": 0}
         job.status, job.started_at = "RUNNING", now()
+        _audit_stage(session, job, "STARTED")
         job_id = job.id
     try:
         async with SessionFactory() as session, session.begin():
@@ -106,6 +133,14 @@ async def run_pending(tenant_id=None):
             timeout = max(30, (get_settings().job_stale_minutes - 1) * 60)
             result = await asyncio.wait_for(execute_job(session, job), timeout=timeout)
             job.status, job.result, job.finished_at = "SUCCEEDED", result, now()
+            _audit_stage(session, job, "SUCCEEDED")
+            profile_error = (result or {}).get("profile_error") if job.kind == "DISCOVER" else None
+            if profile_error:
+                _audit_stage(
+                    session, job, "FAILED", stage="PROFILING",
+                    error_code=profile_error.get("code"),
+                    error_message=profile_error.get("message"),
+                )
     except Exception as exc:
         async with SessionFactory() as session, session.begin():
             job = await session.get(Job, job_id)
@@ -116,6 +151,7 @@ async def run_pending(tenant_id=None):
                 if isinstance(exc, AppError)
                 else "Job gagal. Periksa konfigurasi dan koneksi layanan."
             )
+            _audit_stage(session, job, "FAILED")
             add_notification(
                 session,
                 tenant_id=job.tenant_id,
@@ -155,6 +191,7 @@ async def schedule_sources():
                 "Worker terputus atau melewati batas durasi; retry job secara eksplisit.",
                 now(),
             )
+            _audit_stage(session, job, "FAILED")
             add_notification(
                 session,
                 tenant_id=job.tenant_id,

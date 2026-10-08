@@ -21,3 +21,5 @@ Gunakan urutan berikut agar data dapat dipakai dengan aman:
 
 Master dan taxonomy hanya diperlukan bila dataset membutuhkan rujukan atau kategori baku. Dataset transaksi sederhana tetap harus melalui klasifikasi, konfigurasi, review, import, dan kontrol akses.
 
+Gunakan menu **Sumber & tracking** sebagai daftar utama untuk mencari sumber dengan pencarian dan pagination, melihat status tiap tahap, serta mengetahui Data Owner dan Data Steward yang bertanggung jawab. Pilih **Buka sumber** untuk melanjutkan proses di Workspace ETL. Dropdown Workspace hanya untuk memilih konteks kerja dan tidak memuat seluruh daftar sumber.
+

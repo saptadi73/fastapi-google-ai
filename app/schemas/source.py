@@ -26,6 +26,11 @@ class SourceUnlink(StrictModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class SourceDelete(StrictModel):
+    confirm_source_code: str = Field(min_length=1, max_length=63)
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class SourceAccessMetadataUpdate(StrictModel):
     revision_no: int = Field(ge=1)
     access_metadata: SourceAccessMetadata

@@ -5,6 +5,22 @@ tab batch, kolom sumber, dan master yang diminta. Binding harus menunjuk versi
 master aktif yang sesuai. Kolom konfigurasi tujuannya wajib bertipe `uuid`.
 Tidak ada migrasi database.
 
+## Rekomendasi binding dari nama kolom
+
+GET `/source-sheets/{sheet_id}/column-bindings/recommendations` membandingkan header
+profil terbaru dengan field pada master tenant yang aktif dan berstatus APPROVED.
+Nama dinormalisasi terhadap kapitalisasi, tanda baca, separator, serta padanan umum
+Indonesia/Inggris (misalnya `Kode Produk` dan `product_code`). Kandidat dengan
+skor minimal 0,55 dikembalikan dengan skor, confidence HIGH/MEDIUM/LOW, alasan,
+master dan versi, tipe field, serta penanda business key. Business key diprioritaskan
+bila skornya sama.
+
+Ini hanya pencocokan nama; endpoint tidak membaca nilai baris untuk membuktikan relasi.
+Frontend tidak menyimpan binding otomatis. Editor memeriksa nilai sumber dan keunikan
+field tujuan, menyimpan draft, lalu reviewer menyetujui. Nilai yang tidak ditemukan
+atau ambigu tetap harus ditangani pada review batch. Header profil memakai field
+`source_column`; payload lama yang menggunakan `name` masih diterima.
+
 ## Resolver
 
 POST `/import-reviews/{review_id}/resolve-reference` kini mewajibkan `source_column`.

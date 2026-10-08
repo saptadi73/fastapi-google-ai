@@ -2446,6 +2446,34 @@ async def test_failed_google_job_is_observable(context, monkeypatch):
     await run_pending(ctx.tenant_id)
     job = (await request(context, "GET", "/jobs/" + data["data"]["job_id"]))["data"]
     assert job["status"] == "FAILED" and job["error_code"] == "SOURCE_ACCESS_DENIED"
+    source_id = data["data"]["source"]["id"]
+    tracking = (await request(context, "GET", "/sources/tracking?search=Missing%20access"))["data"][0]
+    assert tracking["id"] == source_id
+    assert tracking["last_failures"]["discovery"]["code"] == "SOURCE_ACCESS_DENIED"
+    history = (await request(context, "GET", f"/sources/{source_id}/history"))["data"]
+    assert any(item["event"] == "source.stage_failed" and item["error_code"] == "SOURCE_ACCESS_DENIED" for item in history)
+
+
+async def test_profile_failure_is_visible_in_tracking_and_history(context):
+    ctx = context
+    ctx.values[:] = [["Name", " name "], ["Alpha", "Beta"]]
+    metadata = await source_access_metadata(ctx)
+    registered = await request(
+        ctx, "POST", "/sources/google-sheets", expected=202,
+        data={
+            "source_code": "profile_collision",
+            "name": "Profile collision",
+            "spreadsheet_url": "fake_profile_collision_sheet",
+            "access_metadata": metadata,
+        },
+    )
+    await run_pending(ctx.tenant_id)
+    source_id = registered["data"]["source"]["id"]
+    tracking = (await request(ctx, "GET", "/sources/tracking?search=Profile%20collision"))["data"][0]
+    assert tracking["profiling_status"] == "FAILED"
+    assert tracking["last_failures"]["profiling"]["code"] == "PROFILE_FAILED"
+    history = (await request(ctx, "GET", f"/sources/{source_id}/history"))["data"]
+    assert any(item["stage"] == "PROFILING" and item["status"] == "FAILED" for item in history)
 
 
 async def test_database_rejects_cross_tenant_foreign_key(context):

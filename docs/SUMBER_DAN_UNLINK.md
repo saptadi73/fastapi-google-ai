@@ -1,0 +1,15 @@
+# Daftar sumber dan pengelolaan link
+
+Halaman **Sumber & tracking** menggunakan `GET /sources/tracking` untuk pagination (`offset`, `limit`), pencarian (`search`) pada nama, kode, dan ID Spreadsheet, serta `include_unlinked=true` untuk melihat riwayat. Metadata respons memuat `total` agar UI bisa menghitung halaman. Ringkasan menunjukkan status discovery, profiling, konfigurasi/binding master, pemuatan database, steward, owner, dan review akses. Status setiap tab tersedia di baris sumber. Tiap tahap memiliki ikon bantuan dan penanda kegagalan terakhir. Tombol **Riwayat** membuka timeline dari audit event dan seluruh percobaan job sumber.
+
+`GET /sources/{source_id}/history` menggabungkan audit aktivitas source/tab/konfigurasi/binding dengan event mulai, berhasil, atau gagal dari worker. Event baru ditambahkan sebagai catatan audit immutable sehingga percobaan berikutnya tidak menimpa kejadian sebelumnya. Riwayat menampilkan waktu, aktor, tahap, status, dan kode/pesan kegagalan yang aman untuk pengguna. Data dibatasi tenant aktif dan disajikan terbaru dahulu dengan pagination.
+
+Daftar pilihan pada Workspace hanya menampilkan sumber yang masih terhubung dan dibatasi per halaman. Gunakan halaman tracking sebagai daftar utama, lalu tombol **Buka** meneruskan sumber yang dipilih ke Workspace, termasuk sumber di luar halaman awal.
+
+Admin dapat meng-unlink sumber duplikat dengan memilih sumber utama pada Spreadsheet yang sama dan memasukkan alasan. UI meminta konfirmasi dua kali sebelum tindakan. Admin juga dapat memulihkan link dengan konfirmasi dua tahap. Unlink bersifat soft unlink untuk menjaga riwayat dan audit; backend menolak unlink jika sumber masih memiliki konfigurasi, hasil ETL, data product, binding master, dependensi, atau job aktif.
+
+Untuk membuang registrasi sumber setup yang gagal dan memulai ulang dari spreadsheet lain, admin dapat memakai ikon **Hapus permanen** pada kolom tindakan. Sebelum menghapus, UI memanggil `GET /sources/{source_id}/delete-preview` dan menampilkan dampak. Tombol hapus hanya aktif bila sumber belum ACTIVE/disetujui dan tidak memiliki konfigurasi, snapshot, hasil ETL, data product, binding master/taxonomy, review import, kebijakan AI/akses yang terikat, dependensi, referensi unlink, atau job aktif. Jika lolos, sistem menghapus registrasi, daftar tab, hasil profiling, serta job terminal. Catatan audit penghapusan tetap tersimpan secara terpisah. Admin harus mengetik kode sumber, mengisi alasan, lalu melewati dua konfirmasi. Penghapusan ini permanen; sumber yang punya data operasional harus ditinjau dan dibersihkan melalui alur tata kelola, bukan dipaksa dihapus.
+
+API: `DELETE /sources/{source_id}` dengan body `{"confirm_source_code":"...","reason":"..."}`. Endpoint hanya untuk `PLATFORM_ADMIN`, mengulang semua pemeriksaan di server, dan menolak bila kode konfirmasi tidak cocok atau sumber sudah dipakai.
+
+Jika sumber aktif tidak terlihat di dropdown, gunakan pencarian/pagination pada daftar administrasi. Jangan mendaftarkan spreadsheet yang sama kembali sebelum memastikan sumber sebelumnya benar-benar tidak ada.

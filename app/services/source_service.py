@@ -3,18 +3,21 @@ import unicodedata
 from datetime import datetime, timezone
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import delete, or_, select, text
+from sqlalchemy import delete, func, or_, select, text
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.access import AccessAttribute, AccessPolicy, AccessPolicyBinding, UserAssignment
+from app.models.ai_policy import AITaskPolicy
 from app.models.auth import User
 from app.models.base import now
 from app.models.configuration import Configuration
-from app.models.etl import ETLRun, Job, Snapshot
+from app.models.etl import ETLRun, Job, QualityIssue, Snapshot
+from app.models.import_review import ImportReview
 from app.models.master import MasterColumnBinding, MasterSourceBinding
 from app.models.semantic import DataProduct
 from app.models.source import DataSource, ProfilingRun, SourceDependency, SourceSheet
+from app.models.taxonomy import TaxonomyColumnBinding
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.import_review import ImportReviewCreate
@@ -259,6 +262,127 @@ class SourceService:
             "owned_by_me": own is not None,
             "source_id": own.id if own else None,
             "source_name": own.name if own else None,
+        }
+
+    async def delete_preview(self, source_id):
+        source = await self.repo.get(DataSource, source_id)
+        sheet_ids = select(SourceSheet.id).where(
+            SourceSheet.tenant_id == self.user.tenant_id,
+            SourceSheet.source_id == source.id,
+        )
+        checks = (
+            ("konfigurasi", select(Configuration.id).where(Configuration.source_id == source.id)),
+            ("hasil ETL", select(ETLRun.id).where(ETLRun.source_id == source.id)),
+            ("snapshot data", select(Snapshot.id).where(Snapshot.source_id == source.id)),
+            ("baris karantina", select(QualityIssue.id).where(QualityIssue.source_id == source.id)),
+            ("data product", select(DataProduct.id).where(DataProduct.source_sheet_id.in_(sheet_ids))),
+            ("binding master", select(MasterSourceBinding.id).where(MasterSourceBinding.source_sheet_id.in_(sheet_ids))),
+            ("binding kolom master", select(MasterColumnBinding.id).where(MasterColumnBinding.source_sheet_id.in_(sheet_ids))),
+            ("review batch import", select(ImportReview.id).where(ImportReview.source_id == source.id)),
+            ("kebijakan AI sumber", select(AITaskPolicy.id).where(
+                AITaskPolicy.tenant_id == self.user.tenant_id,
+                AITaskPolicy.data_source_id == source.id,
+            )),
+            ("policy akses sumber", select(AccessPolicyBinding.id).where(
+                AccessPolicyBinding.tenant_id == self.user.tenant_id,
+                AccessPolicyBinding.resource_type == "SOURCE",
+                AccessPolicyBinding.resource_id == str(source.id),
+            )),
+            ("dependensi sumber", select(SourceDependency.id).where(or_(
+                SourceDependency.downstream_source_id == source.id,
+                SourceDependency.upstream_source_id == source.id,
+            ))),
+            ("referensi unlink dari sumber lain", select(DataSource.id).where(
+                DataSource.tenant_id == self.user.tenant_id,
+                DataSource.unlinked_to_source_id == source.id,
+            )),
+            ("binding taxonomy", select(TaxonomyColumnBinding.id).where(
+                TaxonomyColumnBinding.source_sheet_id.in_(sheet_ids),
+            )),
+        )
+        blockers = [label for label, query in checks if await self.session.scalar(query.limit(1))]
+        if source.status == "ACTIVE":
+            blockers.append("sumber berstatus ACTIVE")
+        if source.access_status == "POLICY_APPROVED":
+            blockers.append("policy akses sudah disetujui")
+        if source.access_review_status == "APPROVED":
+            blockers.append("review akses sudah disetujui")
+        active_job = await self.session.scalar(select(Job.id).where(
+            Job.tenant_id == self.user.tenant_id,
+            Job.source_id == source.id,
+            Job.status.in_(["QUEUED", "RUNNING"]),
+        ).limit(1))
+        if active_job:
+            blockers.append("job masih berjalan atau dalam antrean")
+        return {
+            "source_id": str(source.id),
+            "source_name": source.name,
+            "source_code": source.source_code,
+            "status": source.status,
+            "can_delete": not blockers,
+            "blockers": blockers,
+            "will_delete": {
+                "source_registration": 1,
+                "tabs": await self.session.scalar(select(func.count()).select_from(SourceSheet).where(
+                    SourceSheet.tenant_id == self.user.tenant_id, SourceSheet.source_id == source.id,
+                )) or 0,
+                "profiling_runs": await self.session.scalar(select(func.count()).select_from(ProfilingRun).where(
+                    ProfilingRun.tenant_id == self.user.tenant_id, ProfilingRun.source_id == source.id,
+                )) or 0,
+                "terminal_jobs": await self.session.scalar(select(func.count()).select_from(Job).where(
+                    Job.tenant_id == self.user.tenant_id,
+                    Job.source_id == source.id,
+                    Job.status.notin_(["QUEUED", "RUNNING"]),
+                )) or 0,
+            },
+        }
+
+    async def permanently_delete_source(self, source_id, data):
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"source-sheet:{self.user.tenant_id}:{source.spreadsheet_id}"},
+        )
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        if source.source_code != data.confirm_source_code.strip():
+            raise AppError("SOURCE_DELETE_CONFIRMATION_MISMATCH", "Kode sumber tidak cocok.", 409)
+        preview = await self.delete_preview(source_id)
+        if not preview["can_delete"]:
+            raise AppError(
+                "SOURCE_DELETE_IN_USE",
+                "Sumber masih memiliki data turunan atau proses aktif: " + ", ".join(preview["blockers"]),
+                409,
+            )
+        source_id_value = str(source.id)
+        # Keep an independent audit event while removing only failed/disposable setup artifacts.
+        audit(
+            self.session, self.user, "source.permanently_deleted", source.id,
+            source_code=source.source_code, source_name=source.name,
+            spreadsheet_id=source.spreadsheet_id, reason=data.reason.strip(),
+            deleted_counts=preview["will_delete"],
+        )
+        await self.session.execute(delete(ProfilingRun).where(
+            ProfilingRun.tenant_id == self.user.tenant_id,
+            ProfilingRun.source_id == source.id,
+        ))
+        await self.session.execute(delete(Job).where(
+            Job.tenant_id == self.user.tenant_id,
+            Job.source_id == source.id,
+        ))
+        await self.session.execute(delete(SourceSheet).where(
+            SourceSheet.tenant_id == self.user.tenant_id,
+            SourceSheet.source_id == source.id,
+        ))
+        await self.session.execute(delete(DataSource).where(
+            DataSource.tenant_id == self.user.tenant_id,
+            DataSource.id == source.id,
+        ))
+        return {
+            "deleted": True,
+            "source_id": source_id_value,
+            "source_code": source.source_code,
+            "source_name": source.name,
+            "deleted_counts": preview["will_delete"],
         }
 
     async def unlink_duplicate(self, source_id, data):

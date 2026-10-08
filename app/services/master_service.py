@@ -21,6 +21,7 @@ from app.services.access_service import AccessService
 from app.services.audit_service import audit
 from app.services.classification_service import ClassificationService
 from app.services.configuration_service import ConfigurationService
+from app.services.master_recommendation import field_match_reason, field_name_similarity, source_header_name
 
 
 class MasterService:
@@ -492,15 +493,31 @@ class MasterService:
         ))).all()
         recommendations = []
         for header in headers:
-            source = str(header.get("name", header) if isinstance(header, dict) else header)
+            source = source_header_name(header)
+            if not source:
+                continue
             candidates = []
             for master in masters:
                 definition = MasterSchema.model_validate(master.approved_definition_json)
                 for field in definition.fields:
-                    score = SequenceMatcher(None, source.casefold().replace(" ", "_"), field.name.casefold()).ratio()
+                    score = field_name_similarity(source, field.name)
                     if score >= 0.55:
-                        candidates.append({"master_definition_id": master.id, "master_field": field.name, "score": round(score, 3)})
-            recommendations.append({"source_column": source, "candidates": sorted(candidates, key=lambda item: -item["score"])[:10]})
+                        candidates.append({
+                            "master_definition_id": master.id,
+                            "master_code": master.code,
+                            "master_name": master.name,
+                            "master_version": master.approved_version,
+                            "master_field": field.name,
+                            "field_type": field.type,
+                            "is_business_key": field.name in definition.business_key,
+                            "score": score,
+                            "confidence": "HIGH" if score >= 0.85 else "MEDIUM" if score >= 0.68 else "LOW",
+                            "match_reason": field_match_reason(score, source, field.name),
+                        })
+            recommendations.append({"source_column": source, "candidates": sorted(
+                candidates,
+                key=lambda item: (-item["score"], not item["is_business_key"], item["master_code"], item["master_field"]),
+            )[:10]})
         return {"items": recommendations, "requires_confirmation": True}
 
     async def save_column_binding(self, sheet_id, data):

@@ -20,3 +20,11 @@ Jika deploy atau rollback ditolak dengan `RELEASE_APPROVAL_REQUIRED`, buka statu
 
 Jika AI tidak menjawab, periksa health OpenAI, konfigurasi model, kuota pengguna, budget tenant atau policy, lalu coba sekali lagi dengan pertanyaan yang lebih spesifik. Jangan mengirim password, token, API key, isi credential, atau data pribadi ke asisten. Catat request ID dari respons error untuk pemeriksaan administrator.
 
+Jika sumber lama tidak terlihat di dropdown Workspace, buka menu **Sumber & tracking**. Dropdown hanya dipakai untuk memilih konteks kerja. Cari nama/kode sumber di tabel, gunakan pagination, lalu tekan **Buka sumber**. Status gagal pada satu tahap tidak berarti sumber terhapus; baca status tahap dan monitor job, perbaiki penyebabnya, lalu ulangi tahap yang relevan. Jangan registrasi ulang spreadsheet hanya karena sumber tidak ada di dropdown.
+
+Status **UNLINKED** berarti sumber dilepas dari daftar aktif dan grup duplikat aktif, sementara riwayat tetap disimpan. Admin dapat menampilkan entri unlink dan memulihkannya dengan dua konfirmasi. Untuk pendaftaran ganda yang masih aktif, admin gunakan **Unlink**, pilih sumber utama, dan isi alasan; sistem menolak tindakan bila masih ada relasi operasional yang menghalangi.
+
+Jika **DISCOVERY** belum sukses, buka sumber dan monitor job untuk memastikan Google Sheet dapat dibaca serta tab ditemukan. Jika **PROFILING** gagal, periksa pesan kesalahan/header; tab yang ditemukan mungkin tetap tersedia. Untuk **CONFIGURATION**, selesaikan mapping manual dan review konfigurasi. Untuk master, binding approved saja belum berarti record sudah dimuat: periksa batch import master dan status apply. Daftar tracking menunjukkan tahapan tersebut bersama Data Owner dan Data Steward.
+
+Di tabel tracking, buka ikon **!** pada tahap terkait untuk melihat kode, keterangan, dan waktu kegagalan terakhir. Ikon **?** berisi cara menyelesaikan tahap tersebut. Gunakan **Riwayat** untuk melihat kronologi lengkap aktivitas beserta siapa dan kapan tindakan dilakukan; muat riwayat lebih lama untuk menjangkau event terdahulu.
+

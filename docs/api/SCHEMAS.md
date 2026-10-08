@@ -355,6 +355,21 @@ Body: [SourceUnlink](#sourceunlink).
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/sources/{source_id}/delete-preview
+
+Admin-only preview of permanent deletion eligibility and disposable setup artifacts.
+
+### DELETE /api/v1/sources/{source_id}
+
+Body: [SourceDelete](#sourcedelete). Admin-only; server rechecks all blockers transactionally.
+
+### SourceDelete
+
+| Field | Wajib | Tipe / batas |
+|---|---|---|
+| `confirm_source_code` | Ya | `string`, 1–63 karakter; harus sama persis dengan kode sumber |
+| `reason` | Ya | `string`, 3–500 karakter |
+
 ### GET /api/v1/sources/{source_id}
 
 Body: —.
