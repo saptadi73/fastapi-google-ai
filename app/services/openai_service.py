@@ -228,7 +228,8 @@ class OpenAIService:
                             parse_diagnostics.append(f"{candidate_model}:status={status};incomplete={incomplete}")
                             had_structured_failure = True
                         except Exception as exc:
-                            parse_diagnostics.append(f"{candidate_model}:request={type(exc).__name__}")
+                            detail = " ".join(str(exc).split())[-400:]
+                            parse_diagnostics.append(f"{candidate_model}:request={type(exc).__name__}:{detail}")
                             continue
                     else:
                         error = (

@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     openai_allowed_models: list[str] = []
     openai_store_responses: bool = False
     openai_timeout_seconds: int = 60
-    openai_max_output_tokens: int = 12000
+    openai_max_output_tokens: int = Field(30000, ge=256, le=100000)
     openai_input_usd_per_million: float = Field(0, ge=0)
     openai_output_usd_per_million: float = Field(0, ge=0)
     ai_daily_tenant_budget_usd: float = Field(0, ge=0)
