@@ -11,7 +11,7 @@ from app.models.access import AccessAttribute, AccessPolicy, AccessPolicyBinding
 from app.models.auth import User
 from app.models.base import now
 from app.models.configuration import Configuration
-from app.models.etl import Snapshot
+from app.models.etl import Job, Snapshot
 from app.models.source import DataSource, ProfilingRun, SourceDependency, SourceSheet
 from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
@@ -120,6 +120,54 @@ class SourceService:
         except ValueError as exc:
             raise AppError("INVALID_SPREADSHEET_ID", str(exc)) from None
         metadata = await self._validated_access_metadata(data.access_metadata)
+        # Serialize all registrations of a Sheet within a tenant. This covers a
+        # repeated request after the client lost its first response and stops a
+        # different owner from creating a second source for the same Sheet.
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"source-sheet:{self.user.tenant_id}:{sid}"},
+        )
+        registered = list((await self.session.scalars(
+            select(DataSource)
+            .where(
+                DataSource.tenant_id == self.user.tenant_id,
+                DataSource.spreadsheet_id == sid,
+            )
+            .order_by(DataSource.created_at, DataSource.id)
+        )).all())
+        previous = [source for source in registered if source.owner_user_id == self.user.id]
+        if registered and not previous:
+            raise AppError(
+                "SOURCE_ALREADY_REGISTERED",
+                "Spreadsheet sudah terdaftar pada tenant ini. Hubungi admin untuk menggunakan sumber yang ada.",
+                409,
+            )
+        if previous:
+            canonical = previous[0]
+            latest_job = await self.session.scalar(
+                select(Job)
+                .where(
+                    Job.tenant_id == self.user.tenant_id,
+                    Job.source_id == canonical.id,
+                    Job.kind == "DISCOVER",
+                )
+                .order_by(Job.created_at.desc(), Job.id.desc())
+                .limit(1)
+            )
+            if latest_job is None:
+                job = await enqueue(self.session, self.user, "DISCOVER", canonical.id)
+            else:
+                job = {
+                    "job_id": latest_job.id,
+                    "status": latest_job.status,
+                    "status_url": f"/api/v1/jobs/{latest_job.id}",
+                }
+            return {
+                "source": record(canonical),
+                **job,
+                "already_registered": True,
+                "duplicate_source_ids": [source.id for source in previous[1:]],
+            }
         source_code = data.source_code
         if source_code is None:
             await self.session.execute(
@@ -154,7 +202,38 @@ class SourceService:
         )
         audit(self.session, self.user, "source.registered", source.id)
         job = await enqueue(self.session, self.user, "DISCOVER", source.id)
-        return {"source": record(source), **job}
+        return {"source": record(source), **job, "already_registered": False, "duplicate_source_ids": []}
+
+    async def duplicate_groups(self):
+        query = select(DataSource).where(DataSource.tenant_id == self.user.tenant_id)
+        if self.user.role != "PLATFORM_ADMIN":
+            query = query.where(DataSource.owner_user_id == self.user.id)
+        sources = (await self.session.scalars(
+            query.order_by(DataSource.spreadsheet_id, DataSource.created_at, DataSource.id)
+        )).all()
+        grouped = {}
+        for source in sources:
+            grouped.setdefault(source.spreadsheet_id, []).append(source)
+        return [
+            {
+                "spreadsheet_id": spreadsheet_id,
+                "same_owner": len({source.owner_user_id for source in items}) == 1,
+                "suggested_source_id": items[0].id if len({source.owner_user_id for source in items}) == 1 else None,
+                "sources": [
+                    {
+                        "id": source.id,
+                        "source_code": source.source_code,
+                        "name": source.name,
+                        "owner_user_id": source.owner_user_id,
+                        "status": source.status,
+                        "created_at": source.created_at,
+                    }
+                    for source in items
+                ],
+            }
+            for spreadsheet_id, items in grouped.items()
+            if len(items) > 1
+        ]
 
     async def update_access_metadata(self, source_id, data):
         source = await self.session.scalar(

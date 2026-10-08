@@ -331,6 +331,10 @@ Body: —.
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
 
+### GET /api/v1/sources/duplicate-groups
+
+Body: —.
+
 ### GET /api/v1/sources/approver-options
 
 Body: —.

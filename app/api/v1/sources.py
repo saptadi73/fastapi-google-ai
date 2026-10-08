@@ -62,6 +62,11 @@ async def sources(
     )
 
 
+@router.get("/sources/duplicate-groups")
+async def duplicate_groups(session: Session, user: CurrentUser):
+    return success(await SourceService(session, user).duplicate_groups())
+
+
 @router.get("/sources/approver-options", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
 async def source_approver_options(session: Session, user: CurrentUser):
     return success(await SourceApproverService(session, user).options())

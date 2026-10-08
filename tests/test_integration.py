@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from openpyxl import load_workbook
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
@@ -525,6 +525,33 @@ async def test_source_registration_checks_access_metadata(context):
     assert source["source_code"] == "scoped_source"
     assert source["access_status"] == "ACCESS_POLICY_REQUIRED"
     assert source["access_metadata"] == metadata
+    repeated = await request(
+        ctx,
+        "POST",
+        "/sources/google-sheets",
+        expected=202,
+        data={
+            **base,
+            "spreadsheet_url": "https://docs.google.com/spreadsheets/d/fake_sheet_12345/edit?gid=1",
+            "access_metadata": metadata,
+        },
+    )
+    assert repeated["data"]["already_registered"] is True
+    assert repeated["data"]["source"]["id"] == source["id"]
+    assert repeated["data"]["job_id"] == created["data"]["job_id"]
+    assert repeated["data"]["duplicate_source_ids"] == []
+    async with SessionFactory() as session:
+        source_count = await session.scalar(
+            select(func.count()).select_from(DataSource).where(
+                DataSource.tenant_id == ctx.tenant_id,
+                DataSource.spreadsheet_id == "fake_sheet_12345",
+            )
+        )
+        job_count = await session.scalar(
+            select(func.count()).select_from(Job).where(Job.source_id == source["id"])
+        )
+    assert source_count == 1
+    assert job_count == 1
     duplicate_name = await request(
         ctx,
         "POST",
@@ -533,6 +560,66 @@ async def test_source_registration_checks_access_metadata(context):
         data={**base, "spreadsheet_url": "fake_sheet_67890", "access_metadata": metadata},
     )
     assert duplicate_name["data"]["source"]["source_code"] == "scoped_source_2"
+    concurrent = await asyncio.gather(*[
+        request(
+            ctx,
+            "POST",
+            "/sources/google-sheets",
+            expected=202,
+            data={**base, "spreadsheet_url": "fake_sheet_concurrent", "access_metadata": metadata},
+        )
+        for _ in range(2)
+    ])
+    assert len({item["data"]["source"]["id"] for item in concurrent}) == 1
+    assert len({item["data"]["job_id"] for item in concurrent}) == 1
+    assert sorted(item["data"]["already_registered"] for item in concurrent) == [False, True]
+    admin_id = decode_token(ctx.tokens["admin"]["access_token"])["sub"]
+    async with SessionFactory() as session, session.begin():
+        legacy_duplicate = DataSource(
+            tenant_id=ctx.tenant_id,
+            source_code="legacy_duplicate",
+            name="Legacy duplicate",
+            spreadsheet_id="fake_sheet_12345",
+            owner_user_id=admin_id,
+            credential_ref="default",
+            access_metadata=metadata,
+        )
+        session.add(legacy_duplicate)
+        await session.flush()
+        legacy_duplicate_id = legacy_duplicate.id
+    groups = (await request(ctx, "GET", "/sources/duplicate-groups"))["data"]
+    group = next(item for item in groups if item["spreadsheet_id"] == "fake_sheet_12345")
+    assert group["same_owner"] is True
+    assert group["suggested_source_id"] == source["id"]
+    assert {item["id"] for item in group["sources"]} == {source["id"], legacy_duplicate_id}
+    assert (await request(ctx, "GET", "/sources/duplicate-groups", who="outsider"))["data"] == []
+    repeated_with_legacy = await request(
+        ctx,
+        "POST",
+        "/sources/google-sheets",
+        expected=202,
+        data={**base, "access_metadata": metadata},
+    )
+    assert repeated_with_legacy["data"]["source"]["id"] == source["id"]
+    assert repeated_with_legacy["data"]["duplicate_source_ids"] == [legacy_duplicate_id]
+    async with SessionFactory() as session, session.begin():
+        session.add(DataSource(
+            tenant_id=ctx.tenant_id,
+            source_code="other_owner_source",
+            name="Other owner's source",
+            spreadsheet_id="fake_sheet_other_owner",
+            owner_user_id=viewer_id,
+            credential_ref="default",
+            access_metadata=metadata,
+        ))
+    blocked_other_owner = await request(
+        ctx,
+        "POST",
+        "/sources/google-sheets",
+        expected=409,
+        data={**base, "spreadsheet_url": "fake_sheet_other_owner", "access_metadata": metadata},
+    )
+    assert blocked_other_owner["errors"][0]["code"] == "SOURCE_ALREADY_REGISTERED"
     async with SessionFactory() as session, session.begin():
         await session.execute(
             update(UserAssignment)

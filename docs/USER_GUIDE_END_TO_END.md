@@ -42,6 +42,8 @@ Sheet yang sama lagi. Jika job FAILED, sumber tetap tercatat dan penyebabnya per
 diperiksa pada monitor job. Jika request pendaftaran gagal, periksa pesan form dan
 daftar sumber sebelum mencoba ulang.
 
+Jika pemilik yang sama mengirim URL Sheet yang sama lagi (termasuk format URL dengan `gid` berbeda), sistem mengembalikan sumber yang sudah ada dan job discovery terakhir; tidak membuat sumber atau job baru. Jika Sheet sudah didaftarkan akun lain dalam tenant yang sama, pendaftaran ditolak dan pengguna perlu meminta admin membantu memakai sumber existing. Workspace menampilkan grup sumber duplikat lama untuk ditinjau. Admin melihat duplikat tenant; pengguna lain hanya melihat duplikat miliknya. Sumber lama tidak dihapus otomatis karena bisa mempunyai konfigurasi, metadata akses, atau data turunan yang berbeda. Pilih sumber yang benar, periksa dependensinya, dan lakukan keputusan pembersihan secara terpisah.
+
 Jika dropdown unit, domain bisnis, atau yurisdiksi kosong saat pendaftaran, pastikan
 ketiganya sudah menjadi assignment aktif **akun yang sedang login**, pada tenant yang
 sama. Atribut yang baru dibuat di Administrasi belum otomatis diberikan ke pengguna.

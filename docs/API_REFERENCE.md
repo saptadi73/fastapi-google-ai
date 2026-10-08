@@ -304,8 +304,9 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 
 | Method | Path | Hak | Body / parameter | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
-| POST | `/sources/google-sheets` | E | SourceCreate dengan access_metadata wajib | 202 | `{source: DataSource, ...EnqueuedJob}`; `source.access_status=ACCESS_POLICY_REQUIRED` |
+| POST | `/sources/google-sheets` | E | SourceCreate dengan access_metadata wajib | 202 | `{source, job_id, status, status_url, already_registered, duplicate_source_ids}`; pengulangan oleh pemilik yang sama memakai sumber dan job discovery terakhir tanpa membuat duplikat |
 | GET | `/sources` | S | offset/limit | 200 | DataSource[]; meta pagination |
+| GET | `/sources/duplicate-groups` | S | - | 200 | Grup sumber dengan spreadsheet_id sama; admin melihat tenant, pengguna lain hanya sumber miliknya. `suggested_source_id` hanya diisi jika semua sumber satu pemilik. Tidak menghapus/menyatukan data. |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
 | PATCH | `/sources/{source_id}/access-metadata` | E | SourceAccessMetadataUpdate | 200 | DataSource dengan access_revision terbaru dan access_status pending |
 | GET | `/sources/{source_id}/access-review-context` | R | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk reviewer sumber yang ditunjuk |
@@ -338,6 +339,8 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | GET | `/source-sheets/{sheet_id}/configurations/active` | S | UUID tab internal | 200 | Configuration atau null |
 | GET | `/sources/{source_id}/profiling-runs` | S | UUID source | 200 | ProfilingRun[]; maksimal 100 |
 | GET | `/sources/{source_id}/profiling-runs/{run_id}` | S | UUID source + profile | 200 | ProfilingRun |
+
+Pendaftaran memakai `spreadsheet_id` yang diekstrak dari URL, bukan `gid` tab. Permintaan berulang oleh pemilik yang sama mengembalikan sumber paling awal dan job `DISCOVER` terakhir (`already_registered=true`) tanpa membuat sumber/job baru; nama dan metadata yang dikirim ulang tidak mengganti data sumber lama. Jika spreadsheet sudah terdaftar hanya oleh pemilik lain pada tenant yang sama, API mengembalikan `409 SOURCE_ALREADY_REGISTERED`; pengguna harus meminta admin membantu memakai sumber yang ada. Grup duplikat lama hanya inventaris untuk review, bukan perintah merge/hapus.
 
 Untuk keputusan IT `APPROVE`, payload wajib memuat `technical_checks` dengan
 `schema_and_mapping`, `data_quality`, dan `security_and_access` semuanya `true`.
