@@ -52,6 +52,8 @@ class OpenAIService:
         policy_id = None
         policy_budget = None
         fallback_model = None
+        if purpose == "ETL_CONFIG":
+            fallback_model = s.openai_model_etl_fallback or None
         # A separate committed ledger persists usage even if downstream validation fails.
         async with SessionFactory() as usage_session, usage_session.begin():
             requested_scope = []
@@ -179,8 +181,9 @@ class OpenAIService:
                         )
             error, response, actual_model = None, None, model
             responses = []
-            models = [model] + ([fallback_model] if fallback_model else [])
+            models = [model] + ([fallback_model] if fallback_model and fallback_model != model else [])
             had_structured_failure = False
+            parse_diagnostics = []
             try:
                 async with AsyncOpenAI(
                     api_key=s.openai_api_key.get_secret_value(),
@@ -190,7 +193,7 @@ class OpenAIService:
                     for candidate_model in models:
                         actual_model = candidate_model
                         try:
-                            candidate_response = await client.responses.parse(
+                            request = dict(
                                 model=candidate_model,
                                 store=s.openai_store_responses,
                                 input=[
@@ -200,18 +203,39 @@ class OpenAIService:
                                 text_format=schema,
                                 max_output_tokens=s.openai_max_output_tokens,
                             )
+                            # Reasoning models can spend the entire budget reasoning and
+                            # return no structured output. Keep ETL generation focused.
+                            if candidate_model.startswith(("gpt-5", "o1", "o3", "o4")):
+                                request["reasoning"] = {"effort": "low"}
+                            candidate_response = await client.responses.parse(**request)
                             responses.append(candidate_response)
                             response = candidate_response
                             if candidate_response.output_parsed is not None:
                                 break
+                            # SDK parsing can be empty even when the response contains
+                            # valid JSON. Validate the raw text as a safe second path.
+                            raw = (getattr(candidate_response, "output_text", "") or "").strip()
+                            if raw:
+                                try:
+                                    parsed = schema.model_validate_json(raw)
+                                except Exception as exc:
+                                    parse_diagnostics.append(f"{candidate_model}:raw_parse={type(exc).__name__}")
+                                else:
+                                    response.output_parsed = parsed
+                                    break
+                            status = getattr(candidate_response, "status", None)
+                            incomplete = getattr(candidate_response, "incomplete_details", None)
+                            parse_diagnostics.append(f"{candidate_model}:status={status};incomplete={incomplete}")
                             had_structured_failure = True
-                        except Exception:
+                        except Exception as exc:
+                            parse_diagnostics.append(f"{candidate_model}:request={type(exc).__name__}")
                             continue
                     else:
                         error = (
                             AppError(
                                 "AI_CONFIGURATION_INVALID",
-                                "AI tidak menghasilkan output terstruktur yang valid.",
+                                "AI tidak menghasilkan output terstruktur yang valid. "
+                                + " ".join(parse_diagnostics)[-500:],
                             )
                             if had_structured_failure
                             else AppError(

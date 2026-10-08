@@ -23,6 +23,7 @@ Setelah mengganti konfigurasi, restart atau redeploy **API, worker Celery, dan s
 | `GOOGLE_CREDENTIAL_REF` | Alias kredensial server; contoh `default` |
 | `OPENAI_API_KEY` | API key dari project OpenAI tujuan |
 | `OPENAI_MODEL_ETL_CONFIG` | ID model untuk usulan pemetaan dan transformasi ETL |
+| `OPENAI_MODEL_ETL_FALLBACK` | Model cadangan ETL jika respons structured output model utama kosong/tidak valid |
 | `OPENAI_MODEL_NL2SQL` | ID model untuk rencana query terstruktur |
 | `OPENAI_INPUT_USD_PER_MILLION` / `OPENAI_OUTPUT_USD_PER_MILLION` | Tarif model untuk estimasi biaya aplikasi |
 | `AI_DAILY_TENANT_BUDGET_USD` | Budget harian aplikasi; `0` menonaktifkan batas USD |

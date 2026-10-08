@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     google_max_columns: int = Field(100, ge=1, le=1000)
     openai_api_key: SecretStr = SecretStr("")
     openai_model_etl_config: str = ""
+    openai_model_etl_fallback: str = ""
     openai_model_nl2sql: str = ""
     openai_model_help: str = ""
     openai_allowed_models: list[str] = []
