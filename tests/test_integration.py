@@ -2181,6 +2181,62 @@ async def onboard(ctx, config_data, *, classify=True, legacy_source=True):
     return source_id, sheet_id, config["data"]
 
 
+async def test_discovery_marks_removed_tabs_missing_without_deleting_history(context, config_data, monkeypatch):
+    ctx = context
+    source_id, original_sheet_id, _ = await onboard(ctx, config_data)
+
+    async def metadata_with_second_tab(self, spreadsheet_id):
+        return {
+            "sheets": [
+                {"properties": {"sheetId": 2, "title": "Products", "sheetType": "GRID"}},
+            ]
+        }
+
+    monkeypatch.setattr(GoogleSheetsService, "metadata", metadata_with_second_tab)
+    queued = (await request(ctx, "POST", f"/sources/{source_id}/discover", expected=202))["data"]
+    await run_pending(ctx.tenant_id)
+    job = (await request(ctx, "GET", f"/jobs/{queued['job_id']}"))["data"]
+    assert job["status"] == "SUCCEEDED", job
+
+    sheets = (await request(ctx, "GET", f"/sources/{source_id}/sheets"))["data"]
+    removed = next(item for item in sheets if item["id"] == original_sheet_id)
+    restored_sheet = next(item for item in sheets if item["sheet_id"] == 2)
+    assert removed["is_present"] is False and removed["enabled"] is False
+    assert restored_sheet["is_present"] is True and restored_sheet["enabled"] is True
+    tracked = (await request(ctx, "GET", "/sources/tracking"))["data"]
+    tracked_source = next(item for item in tracked if item["id"] == source_id)
+    tracked_removed = next(item for item in tracked_source["sheets"] if item["id"] == original_sheet_id)
+    assert tracked_removed["presence_status"] == "MISSING"
+    assert tracked_removed["enabled"] is False
+
+    async def metadata_with_restored_tab(self, spreadsheet_id):
+        return {
+            "sheets": [
+                {"properties": {"sheetId": 1, "title": "Sales Restored", "sheetType": "GRID"}},
+                {"properties": {"sheetId": 2, "title": "Products", "sheetType": "GRID"}},
+            ]
+        }
+
+    monkeypatch.setattr(GoogleSheetsService, "metadata", metadata_with_restored_tab)
+    queued = (await request(ctx, "POST", f"/sources/{source_id}/discover", expected=202))["data"]
+    await run_pending(ctx.tenant_id)
+    assert (await request(ctx, "GET", f"/jobs/{queued['job_id']}"))["data"]["status"] == "SUCCEEDED"
+    sheets = (await request(ctx, "GET", f"/sources/{source_id}/sheets"))["data"]
+    restored = next(item for item in sheets if item["id"] == original_sheet_id)
+    assert restored["is_present"] is True
+    assert restored["enabled"] is False
+
+    async def metadata_without_grid_tabs(self, spreadsheet_id):
+        return {"sheets": []}
+
+    monkeypatch.setattr(GoogleSheetsService, "metadata", metadata_without_grid_tabs)
+    queued = (await request(ctx, "POST", f"/sources/{source_id}/discover", expected=202))["data"]
+    await run_pending(ctx.tenant_id)
+    assert (await request(ctx, "GET", f"/jobs/{queued['job_id']}"))["data"]["status"] == "SUCCEEDED"
+    sheets = (await request(ctx, "GET", f"/sources/{source_id}/sheets"))["data"]
+    assert sheets and all(not item["is_present"] and not item["enabled"] for item in sheets)
+
+
 async def activate(ctx, config):
     validation = (await request(ctx, "POST", f"/configurations/{config['id']}/validate"))["data"]
     config = (

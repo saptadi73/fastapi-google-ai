@@ -2,13 +2,13 @@
 
 Status: implementasi backend tersedia. Policy mengikuti keputusan [BE-01](KEBIJAKAN_DATA_BE01.md): klasifikasi per tab dan kode master baru diusulkan untuk ditambahkan dengan persetujuan. BE-02 menyimpan jenis tab dan menegakkan gate eksekusi. Registry, binding, serta pemuatan master kanonis baru dilanjutkan pada BE-03 dan seterusnya.
 
-Pembaruan setelah BE-03: registry/binding metadata sudah tersedia. Blocker eksekusi MASTER kini `MASTER_RUNTIME_PENDING`; `MASTER_BINDING_REQUIRED` hanya dipakai pada GET binding yang belum ada. GET klasifikasi MASTER menambah ringkasan master_binding. Detail terbaru ada di [Registry master BE-03](REGISTRY_MASTER_BE03.md). Penjelasan implementasi awal BE-02 di bawah tetap menjadi riwayat tahap tersebut.
+Pembaruan: `MASTER_RUNTIME_PENDING` menolak tab MASTER hanya pada konfigurasi/sync ETL biasa. Master dapat diimpor melalui Batch import ketika binding approved dan storage siap; GET binding/klasifikasi menampilkan readiness aktual. `MASTER_BINDING_REQUIRED` menandai binding yang belum ada. Detail ada di [Registry master BE-03](REGISTRY_MASTER_BE03.md).
 
 ## Perilaku
 
 - Tab hasil discovery dan tab lama dari migrasi dimulai dengan `dataset_kind: null`, `classification_status: CLASSIFICATION_REQUIRED`, dan `classification_revision: 1`.
 - Editor mengonfirmasi `MASTER` atau `NON_MASTER`. Status menjadi `CONFIRMED`; revision naik dan actor/time dicatat.
-- Konfirmasi `MASTER` berhasil disimpan, tetapi `execution_ready` tetap false dengan alasan `MASTER_BINDING_REQUIRED`. Master tidak dialihkan diam-diam ke tabel dataset mandiri.
+- Konfirmasi `MASTER` tidak membuat tab menjadi dataset ETL. Sebelum binding disetujui, readiness memberi `MASTER_BINDING_REQUIRED`; setelah binding dan storage siap, tab bisa diproses lewat Batch import master.
 - `NON_MASTER` yang sudah dikonfirmasi dapat melanjutkan alur konfigurasi yang tersedia. `execution_ready` hanya menunjukkan kelulusan gate klasifikasi, bukan bukti bahwa DQ, approval, atau konfigurasi aktif sudah lengkap.
 - Discovery ulang mempertahankan klasifikasi tab yang sama. Sheet baru yang ditemukan tetap meminta konfirmasi.
 - Profiling, draft manual/AI, edit, export/import draft, dan dry-run tetap tersedia sebelum klasifikasi untuk membantu keputusan.

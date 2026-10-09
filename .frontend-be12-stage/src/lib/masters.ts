@@ -72,8 +72,27 @@ export interface BindingDetail {
   binding: Binding | null
   validation?: Validation
   metadata_ready?: boolean
+  storage_ready?: boolean
   execution_ready: boolean
   blocking_reason?: string
+}
+export interface MasterSourceBindings {
+  master_id: string
+  items: Array<{
+    source_id: string
+    source_name: string
+    source_code: string
+    source_sheet_id: string
+    sheet_name: string
+    dataset_kind: string | null
+    classification_status: string
+    binding: Binding | null
+    metadata_ready?: boolean
+    storage_ready?: boolean
+    execution_ready: boolean
+    blocking_reason?: string | null
+    validation?: { valid: boolean; errors?: Array<{ code?: string; message?: string }> }
+  }>
 }
 export interface ColumnBinding {
   id: string

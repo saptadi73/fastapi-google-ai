@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, Query
 from fastapi.responses import Response
 
 from app.api.dependencies import CurrentUser, Session, require_roles
@@ -25,6 +25,7 @@ from app.schemas.configuration import (
 from app.services.access_service import AccessService
 from app.services.configuration_review_service import CAPABILITIES, ConfigurationReviewService
 from app.services.configuration_service import ConfigurationService
+from app.services.retired_table_service import RetiredTableService
 
 router = APIRouter(
     prefix="/configurations",
@@ -135,6 +136,21 @@ async def create(data: ConfigurationCreate, session: Session, user: CurrentUser)
     return success(
         record(
             await ConfigurationService(session, user).create(str(data.source_sheet_id), data.configuration)
+        )
+    )
+
+
+@router.get("/retired-tables", dependencies=review)
+async def retired_tables(
+    session: Session,
+    user: CurrentUser,
+    search: str = Query("", max_length=200),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    return success(
+        await RetiredTableService(session, user.tenant_id).list(
+            search=search, offset=offset, limit=limit, user=user
         )
     )
 

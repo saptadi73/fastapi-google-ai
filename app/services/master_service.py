@@ -11,7 +11,7 @@ from app.models.access import AccessPolicy, AccessPolicyBinding
 from app.models.base import now
 from app.models.configuration import Configuration
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
-from app.models.source import SourceSheet
+from app.models.source import DataSource, SourceSheet
 from app.repositories.base import TenantRepository, record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.access import AccessEvaluationRequest
@@ -444,6 +444,7 @@ class MasterService:
             return {
                 "binding": None,
                 "metadata_ready": False,
+                "storage_ready": False,
                 "execution_ready": False,
                 "blocking_reason": "MASTER_BINDING_REQUIRED",
             }
@@ -460,22 +461,90 @@ class MasterService:
                 binding.classification_revision,
                 binding.fingerprint,
             )
-            ready = (
+            metadata_ready = (
                 binding.status == "APPROVED"
+                and sheet.is_present
+                and sheet.enabled
                 and validation["valid"]
                 and validation["snapshot_hash"] == binding.snapshot_hash
             )
-            reason = "MASTER_RUNTIME_PENDING" if ready else "MASTER_BINDING_REVIEW_REQUIRED"
+            storage_ready = False
+            reason = (
+                "SOURCE_TAB_MISSING"
+                if not sheet.is_present
+                else "SOURCE_TAB_DISABLED"
+                if not sheet.enabled
+                else "MASTER_BINDING_REVIEW_REQUIRED"
+            )
+            if metadata_ready:
+                from app.services.master_storage_service import check_storage
+                from app.services.schema_compiler_service import compile_master_table
+
+                target = compile_master_table(
+                    MasterSchema.model_validate(master.approved_definition_json),
+                    master.id,
+                    self.user.tenant_id,
+                )
+                try:
+                    connection = await self.session.connection()
+                    await connection.run_sync(lambda sync: check_storage(sync, target))
+                except AppError as exc:
+                    reason = exc.code
+                else:
+                    storage_ready = True
+                    reason = None
+            ready = metadata_ready and storage_ready
         except AppError as exc:
-            ready, reason = False, exc.code
+            metadata_ready, storage_ready, ready, reason = False, False, False, exc.code
             validation = {"valid": False, "errors": [{"code": exc.code, "message": exc.message}]}
         return {
             "binding": record(binding),
-            "metadata_ready": ready,
-            "execution_ready": False,
+            "metadata_ready": metadata_ready,
+            "storage_ready": storage_ready,
+            "execution_ready": ready,
             "blocking_reason": reason,
             "validation": validation,
         }
+
+    async def source_bindings(self, master_id):
+        self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
+        master = await self.repo.get(MasterDefinition, master_id)
+        rows = (
+            await self.session.execute(
+                select(MasterSourceBinding, SourceSheet, DataSource)
+                .join(
+                    SourceSheet,
+                    (SourceSheet.id == MasterSourceBinding.source_sheet_id)
+                    & (SourceSheet.tenant_id == MasterSourceBinding.tenant_id),
+                )
+                .join(
+                    DataSource,
+                    (DataSource.id == SourceSheet.source_id)
+                    & (DataSource.tenant_id == SourceSheet.tenant_id),
+                )
+                .where(
+                    MasterSourceBinding.tenant_id == self.user.tenant_id,
+                    MasterSourceBinding.master_definition_id == master.id,
+                )
+                .order_by(DataSource.name, SourceSheet.sheet_name)
+            )
+        ).all()
+        items = []
+        for binding, sheet, source in rows:
+            detail = await self.binding_detail(sheet.id)
+            items.append(
+                {
+                    "source_id": source.id,
+                    "source_name": source.name,
+                    "source_code": source.source_code,
+                    "source_sheet_id": sheet.id,
+                    "sheet_name": sheet.sheet_name,
+                    "dataset_kind": sheet.dataset_kind,
+                    "classification_status": sheet.classification_status,
+                    **detail,
+                }
+            )
+        return {"master_id": master.id, "items": items}
 
     async def column_bindings(self, sheet_id):
         await self.repo.get(SourceSheet, sheet_id)

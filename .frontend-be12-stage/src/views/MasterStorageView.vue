@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import EtlShell from '@/components/EtlShell.vue'
 import DataTable from '@/components/DataTable.vue'
 import { call, user, editRoles, reviewRoles } from '@/lib/etl'
+import { createImportReview } from '@/lib/importReviews'
+import type { MasterSourceBindings } from '@/lib/masters'
 import { useTask } from '@/lib/tasks'
 
 interface StoragePlan {
@@ -20,11 +22,13 @@ interface RecordsPage {
   masked_fields: string[]
 }
 const route = useRoute()
+const router = useRouter()
 const id = computed(() => String(route.params.id))
 const reviewer = computed(() => reviewRoles.includes(user.value?.role || ''))
 const reader = computed(() => [...editRoles, ...reviewRoles].includes(user.value?.role || ''))
 const { busy, error, notice, run } = useTask()
 const plan = ref<StoragePlan | null>(null)
+const bindings = ref<MasterSourceBindings | null>(null)
 const records = ref<RecordsPage | null>(null)
 const search = ref(''),
   recordId = ref(''),
@@ -41,6 +45,16 @@ async function loadPlan() {
   confirmed.value = false
   const result = await call<StoragePlan>('GET', `${base()}/storage-plan`)
   if (current === generation) plan.value = result
+}
+async function loadBindings() {
+  const current = generation
+  bindings.value = null
+  const result = await call<MasterSourceBindings>('GET', `${base()}/source-bindings`)
+  if (current === generation) bindings.value = result
+}
+async function startImport(sourceSheetId: string) {
+  const result = await createImportReview(sourceSheetId)
+  await router.push(`/import-reviews/${result.review.id}`)
 }
 async function loadRecords(next = 0, apply = false) {
   const current = generation
@@ -80,9 +94,10 @@ async function deploy() {
   )
   if (current !== generation) return
   notice.value = result.storage_ready
-    ? 'Storage siap. Lanjutkan import melalui halaman Batch import.'
+    ? 'Storage siap. Pilih tab terikat di bawah untuk membuat batch review/import master.'
     : 'Periksa kesiapan storage kembali.'
   await loadPlan()
+  await loadBindings()
   if (current === generation) await loadRecords(0)
 }
 let pendingLoad = false
@@ -91,7 +106,7 @@ function initialize() {
   pendingLoad = false
   const current = generation
   void run(async () => {
-    await loadPlan()
+    await Promise.all([loadPlan(), loadBindings()])
     if (current === generation && plan.value) await loadRecords()
   })
 }
@@ -100,6 +115,7 @@ watch(
   () => {
     ++generation
     plan.value = null
+    bindings.value = null
     records.value = null
     confirmed.value = false
     comment.value = ''
@@ -125,8 +141,8 @@ onBeforeUnmount(() => {
     <RouterLink :to="`/masters/${id}`">← Definisi master</RouterLink>
     <h1>Storage &amp; record master</h1>
     <p class="notice">
-      Storage siap tidak berarti import berhasil. Jalankan preview, approval, dan apply melalui
-      halaman Batch import.
+      Import master memakai batch terpisah dari konfigurasi ETL biasa. Setiap tab harus memiliki
+      binding approved dan storage siap; batch tetap memerlukan preview, approval, lalu apply.
     </p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
@@ -162,6 +178,32 @@ onBeforeUnmount(() => {
           Deployment hanya tersedia bagi Platform Admin dan Technical Approver.
         </p>
       </template>
+    </section>
+    <section class="panel">
+      <h2>Sumber master terikat</h2>
+      <button :disabled="busy" @click="run(loadBindings)">Muat ulang sumber terikat</button>
+      <p v-if="!bindings?.items.length" class="muted">
+        Belum ada tab sumber yang terikat ke definisi master ini. Atur binding dari halaman sumber
+        setelah profiling dan klasifikasi MASTER dikonfirmasi.
+      </p>
+      <div v-for="item in bindings?.items || []" :key="item.source_sheet_id" class="card-row">
+        <div class="toolbar">
+          <strong>{{ item.source_name }} · {{ item.sheet_name }}</strong>
+          <span v-if="item.execution_ready">✓ Siap diimpor</span>
+          <span v-else class="muted">Belum siap · {{ item.blocking_reason || 'MASTER_BINDING_REVIEW_REQUIRED' }}</span>
+          <button
+            v-if="editRoles.includes(user?.role || '')"
+            class="primary"
+            :disabled="busy || !item.execution_ready"
+            @click="run(() => startImport(item.source_sheet_id))"
+          >
+            Buat batch review/import
+          </button>
+        </div>
+        <p v-if="item.validation?.errors?.length" class="muted">
+          {{ item.validation.errors.length }} masalah mapping/data perlu diselesaikan.
+        </p>
+      </div>
     </section>
     <section class="panel">
       <h2>Record kanonis</h2>

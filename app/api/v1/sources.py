@@ -285,6 +285,8 @@ async def source_tracking(
                 "id": sheet.id,
                 "name": sheet.sheet_name,
                 "enabled": sheet.enabled,
+                "is_present": sheet.is_present,
+                "presence_status": "PRESENT" if sheet.is_present else "MISSING",
                 "dataset_kind": sheet.dataset_kind,
                 "profiling_status": profile.status if profile else ("FAILED" if source.status == "PROFILE_FAILED" else "NOT_STARTED"),
                 "profiled_at": profile.created_at if profile else None,
@@ -305,13 +307,13 @@ async def source_tracking(
         discovery_job = discover_by_source.get(str(source.id))
         result.append({
             **record(source),
-            "discovery_status": "SUCCEEDED" if source_sheets else (discovery_job.status if discovery_job else "NOT_STARTED"),
-            "profiling_status": rollup([item["profiling_status"] for item in sheet_records if item["enabled"]]),
+            "discovery_status": "SUCCEEDED" if any(item["is_present"] for item in sheet_records) else (discovery_job.status if discovery_job else "NOT_STARTED"),
+            "profiling_status": rollup([item["profiling_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
             "configuration_status": rollup([
                 item["master_binding_status"] if item["dataset_kind"] == "MASTER" else item["configuration_status"]
-                for item in sheet_records if item["enabled"]
+                for item in sheet_records if item["enabled"] and item["is_present"]
             ]),
-            "database_status": rollup([item["database_status"] for item in sheet_records if item["enabled"]]),
+            "database_status": rollup([item["database_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
             "access_review_status": source.access_review_status,
             "last_failures": source_failures.get(str(source.id), {}),
             "steward_name": (steward.full_name or steward.username) if steward else None,

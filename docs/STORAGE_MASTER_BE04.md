@@ -1,6 +1,6 @@
 # Storage master kanonis — BE-04
 
-BE-04 menyediakan tabel record bertipe dan pencarian terotorisasi. Registry/binding BE-03 tetap digunakan. Import Google Sheet belum mengisi tabel ini: review batch dan apply masih BE-05–BE-07, kemudian integrasi/validasi lengkap BE-08–BE-11. `execution_ready` tetap `false` dan sync MASTER tetap mendapat `MASTER_RUNTIME_PENDING`.
+BE-04 menyediakan tabel record bertipe dan pencarian terotorisasi. Batch review dan apply import master kini tersedia melalui workflow Batch import. Binding approved harus cocok dengan snapshot/profil/klasifikasi dan storage master harus siap sebelum batch dibuat. `MASTER_RUNTIME_PENDING` hanya menolak pemrosesan tab MASTER melalui konfigurasi atau sync ETL biasa; gunakan batch import master.
 
 ## Identitas dan schema fisik
 
@@ -100,7 +100,8 @@ Compiler menolak strategi selain UPSERT, termasuk FULL_REFRESH. Primitive intern
 | 409 | MASTER_STORAGE_REQUIRED | Jalankan deploy-storage |
 | 409 | MASTER_STORAGE_STALE | Deploy storage setelah perubahan versi approved |
 | 409 | MASTER_SCHEMA_MIGRATION_REQUIRED | Perlu penanganan migrasi khusus; jangan retry otomatis |
-| 409 | MASTER_RUNTIME_PENDING | Review/apply import belum tersedia |
+| 409 | MASTER_RUNTIME_PENDING | Tab MASTER tidak boleh dimuat lewat sync/configuration ETL biasa; gunakan Batch import |
+| 409 | MASTER_STORAGE_REQUIRED | Deploy storage master approved sebelum membuat batch |
 | 422 | VALIDATION_ERROR | Koreksi parameter/payload |
 
 ## Rollout dan batas transaksi

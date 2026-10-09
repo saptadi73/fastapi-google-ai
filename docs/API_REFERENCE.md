@@ -576,12 +576,13 @@ Kontrak lengkap dan mekanisme deployment: [Storage master BE-04](STORAGE_MASTER_
 | Method | Path | Role | Payload / parameter | Status | Data |
 |---|---|---|---|---|---|
 | GET | `/master-definitions/{master_id}/storage-plan` | S | UUID master | 200 | target, master_version, revision_no, ddl, schema_policy, execution_ready=false |
+| GET | `/master-definitions/{master_id}/source-bindings` | S | UUID master | 200 | items[] tab terikat, readiness binding/storage, blocking_reason |
 | POST | `/master-definitions/{master_id}/deploy-storage` | R | MasterRevisionRequest | 200 | target, master_version, storage_ready=true, execution_ready=false |
 | GET | `/master-definitions/{master_id}/records` | S | search, offset, limit, active_only, record_id, as_of | 200 | items[], has_more, masked_fields[] |
 
 ## Registry master dan binding sumber (BE-03)
 
-Metadata master dan binding kini tersedia; kontrak lengkap, payload, respons, versioning, dan error ada di [Registry master BE-03](REGISTRY_MASTER_BE03.md). Storage kanonis tersedia pada BE-04; pemuatan master masih menunggu review/apply import. Semua body baru tersedia di PAYLOADS.json dan SCHEMAS.md.
+Metadata master dan binding tersedia; kontrak lengkap, payload, respons, versioning, dan error ada di [Registry master BE-03](REGISTRY_MASTER_BE03.md). Storage kanonis tersedia pada BE-04, dan batch review/apply master dapat dijalankan dari tab yang binding serta storage-nya siap. Semua body baru tersedia di PAYLOADS.json dan SCHEMAS.md.
 
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
@@ -594,8 +595,8 @@ Metadata master dan binding kini tersedia; kontrak lengkap, payload, respons, ve
 | POST | `/master-definitions/{master_id}/approve` | R | MasterRevisionRequest | 200 | MasterDefinition APPROVED, versi approved baru |
 | POST | `/master-definitions/{master_id}/reject` | R | MasterRevisionRequest | 200 | MasterDefinition REJECTED |
 | POST | `/master-definitions/{master_id}/deactivate` | R | MasterRevisionRequest | 200 | MasterDefinition INACTIVE |
-| GET | `/source-sheets/{sheet_id}/master-binding` | S | UUID tab | 200 | binding/null, validation, metadata_ready, execution_ready=false, blocking_reason |
-| PUT | `/source-sheets/{sheet_id}/master-binding` | E | MasterBindingUpdate | 200 | binding, validation, execution_ready=false |
+| GET | `/source-sheets/{sheet_id}/master-binding` | S | UUID tab | 200 | binding/null, validation, metadata_ready, storage_ready, execution_ready, blocking_reason |
+| PUT | `/source-sheets/{sheet_id}/master-binding` | E | MasterBindingUpdate | 200 | binding, validation, readiness aktual |
 | POST | `/source-sheets/{sheet_id}/master-binding/approve` | R | MasterRevisionRequest | 200 | MasterSourceBinding APPROVED |
 | POST | `/source-sheets/{sheet_id}/master-binding/reject` | R | MasterRevisionRequest | 200 | MasterSourceBinding REJECTED |
 | GET | `/source-sheets/{sheet_id}/column-bindings` | S | UUID tab | 200 | daftar binding kolom ke master |
@@ -607,7 +608,7 @@ Metadata master dan binding kini tersedia; kontrak lengkap, payload, respons, ve
 | GET | `/master-definitions/reference-orphans` | S | Tidak ada | 200 | items per binding, orphan_count, orphan_values, type validation, execution_ready |
 | POST | `/master-definitions/deploy-foreign-keys` | R | Tidak ada | 200 | created constraints, execution_ready=true |
 
-Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-binding yang belum mempunyai binding menggunakan MASTER_BINDING_REQUIRED. Binding metadata ready tidak memberi izin load. GET klasifikasi MASTER menambah ringkasan master_binding; field klasifikasi lainnya tetap seperti BE-02.
+Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIME_PENDING`) agar master tidak dimuat sebagai dataset mandiri. Untuk import master, buat batch review dari tab yang binding-nya approved dan storage-nya siap; kirim `source_sheet_id` tanpa `configuration_id` ke POST `/import-reviews`. GET master-binding mengembalikan `metadata_ready`, `storage_ready`, dan `execution_ready`; GET klasifikasi MASTER menyertakan ringkasan ini. GET `/master-definitions/{master_id}/source-bindings` menampilkan tab terkait beserta blocker dan kesiapan import.
 
 ## 4. Konfigurasi ETL dan approval
 
@@ -616,6 +617,7 @@ Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-bind
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
 | GET | `/configurations/parameter-catalog` | S | — | 200 | parameter runtime, tipe, default, supported, capabilities |
+| GET | `/configurations/retired-tables?search=&offset=0&limit=50` | R | pencarian opsional dan pagination (limit maks. 200) | 200 | Inventaris tabel fisik `trusted` dari revisi `SUPERSEDED` yang tidak lagi dipakai konfigurasi `ACTIVE` |
 | POST | `/configurations` | E | ConfigurationCreate | 201 | Configuration |
 | GET | `/configurations/{config_id}` | S | — | 200 | Configuration |
 | PATCH | `/configurations/{config_id}` | E | ConfigurationPatch | 200 | Configuration |
@@ -635,6 +637,8 @@ Klasifikasi MASTER sekarang ditahan oleh MASTER_RUNTIME_PENDING; GET master-bind
 | GET | `/configurations/{config_id}/artifacts/{artifact_id}/download` | S | — | 200 | File binary/teks tanpa envelope |
 | GET | `/configurations/{config_id}/questions` | S | — | 200 | string[] pertanyaan |
 | GET | `/configurations/{config_id}/diff` | S | `against` UUID wajib | 200 | map field → `{before, after}` |
+
+`GET /configurations/retired-tables` adalah inventaris baca-saja untuk reviewer. Respons memuat sumber, tab, nama tabel `trusted`, revisi konfigurasi lama, konfigurasi aktif pengganti, serta status `REVIEW_REQUIRED`. Hanya tabel yang masih ada di database yang ditampilkan. Endpoint ini tidak menghapus data dan belum menandai tabel aman dihapus (`delete_ready: false`); sebelum fitur cleanup tersedia, administrator perlu memeriksa kebutuhan rollback, dependensi, dan retensi data secara terpisah.
 
 ## 5. Taxonomy (BE-13)
 
@@ -1435,7 +1439,9 @@ Pada environment non-production, FastAPI menangani CORS sesuai `CORS_ORIGINS`, m
 | 503 | DATABASE_UNAVAILABLE, REDIS_UNAVAILABLE | Tampilkan layanan belum siap |
 | 500 | INTERNAL_ERROR | Simpan request ID dan tampilkan pesan umum |
 
-Error Google seperti GOOGLE_NOT_CONFIGURED (503), SOURCE_ACCESS_DENIED (403), SOURCE_NOT_FOUND (404), SOURCE_READ_FAILED (422), dan UPSTREAM_RATE_LIMITED (503) biasanya muncul pada **Job.error_code/error_message** karena operasi Google berjalan melalui worker. PROFILE_FAILED (422) dapat terjadi karena header kosong/duplikat/bertabrakan. Worker error non-AppError dibungkus JOB_EXECUTION_FAILED.
+Error Google seperti GOOGLE_NOT_CONFIGURED (503), SOURCE_ACCESS_DENIED (403), SOURCE_NOT_FOUND (404), SOURCE_READ_FAILED (422), dan UPSTREAM_RATE_LIMITED (503) biasanya muncul pada **Job.error_code/error_message** karena operasi Google berjalan melalui worker. PROFILE_FAILED (422) dapat terjadi karena header kosong/duplikat/bertabrakan. Error PostgreSQL `42501` dari worker ditampilkan sebagai `DATABASE_PERMISSION_DENIED`; untuk DEPLOY/ROLLBACK, periksa privilege role `DATABASE_DDL_URL` pada schema `trusted` dan `semantic`. SQLSTATE kelas `08` ditampilkan sebagai `DATABASE_CONNECTION_FAILED`. Error tak terduga tetap memakai `JOB_EXECUTION_FAILED`, tetapi stack trace lengkap dicatat pada log worker bersama ID job dan jenis job; detail driver mentah tidak dikirim ke pengguna.
+
+Deploy ETL memberi role `DATABASE_URL` privilege minimum pada objek target: `APPEND` mendapat `INSERT`, `UPSERT` mendapat `SELECT/INSERT/UPDATE`, dan semua strategi mendapat `SELECT` pada semantic view. `FULL_REFRESH` memerlukan `DELETE` pada tabel; aplikasi tidak memberikan hak itu otomatis dan deployment dihentikan dengan pesan `DATABASE_PERMISSION_DENIED` jika privilege belum disiapkan administrator.
 
 ### Keterbatasan yang perlu dipertahankan dalam UI
 

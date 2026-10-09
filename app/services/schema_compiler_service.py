@@ -20,6 +20,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import make_url
 from sqlalchemy.schema import CreateTable
 
 from app.core.config import get_settings
@@ -128,6 +129,17 @@ def schema_plan(config, sheet_id, tenant_id):
     }
 
 
+def operator_table_privileges(load_strategy):
+    """Return non-destructive privileges needed by the runtime load path."""
+    if load_strategy == "APPEND":
+        return ("INSERT",)
+    if load_strategy == "UPSERT":
+        return ("SELECT", "INSERT", "UPDATE")
+    if load_strategy == "FULL_REFRESH":
+        return ("INSERT",)
+    raise AppError("LOAD_STRATEGY_INVALID", "Strategi pemuatan tidak dikenal.")
+
+
 async def deploy_schema(config, sheet_id, tenant_id):
     s = get_settings()
     engine = make_engine(s.database_ddl_url.get_secret_value() or s.database_url.get_secret_value())
@@ -172,6 +184,28 @@ async def deploy_schema(config, sheet_id, tenant_id):
                     )
 
             await conn.run_sync(create_or_check)
+            quote = conn.dialect.identifier_preparer.quote
+            operator = make_url(s.database_url.get_secret_value()).username
+            if operator:
+                privileges = ", ".join(operator_table_privileges(config.load_strategy))
+                await conn.execute(
+                    text(
+                        f"GRANT {privileges} ON trusted.{quote(table.name)} "
+                        f"TO {quote(operator)}"
+                    )
+                )
+                if config.load_strategy == "FULL_REFRESH":
+                    can_delete = await conn.scalar(
+                        text("SELECT has_table_privilege(:role, :target, 'DELETE')"),
+                        {"role": operator, "target": table.fullname},
+                    )
+                    if not can_delete:
+                        raise AppError(
+                            "DATABASE_PERMISSION_DENIED",
+                            "FULL_REFRESH memerlukan privilege DELETE pada tabel trusted. "
+                            "Minta administrator memberi izin secara eksplisit sebelum deploy.",
+                            409,
+                        )
             public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
             if not public:
                 raise AppError("SEMANTIC_INVALID", "Setidaknya satu kolom non-sensitif diperlukan.")
@@ -179,13 +213,14 @@ async def deploy_schema(config, sheet_id, tenant_id):
                 table.c._tenant_id == tenant_id
             )
             query = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-            quote = conn.dialect.identifier_preparer.quote
             # Identifier generated exclusively from UUID; data values quoted by SQLAlchemy.
             await conn.execute(text(f"CREATE OR REPLACE VIEW semantic.{quote(view_name)} AS {query}"))
             await conn.execute(text(f"SELECT * FROM semantic.{quote(view_name)} LIMIT 0"))
+            if operator:
+                await conn.execute(
+                    text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(operator)}")
+                )
             if s.database_nl2sql_url.get_secret_value():
-                from sqlalchemy.engine import make_url
-
                 reader = make_url(s.database_nl2sql_url.get_secret_value()).username
                 await conn.execute(text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(reader)}"))
     finally:

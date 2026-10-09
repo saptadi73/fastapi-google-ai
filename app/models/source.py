@@ -121,6 +121,7 @@ class SourceSheet(TenantEntity, Base):
     header_row: Mapped[int] = mapped_column(Integer, default=1)
     data_start_row: Mapped[int] = mapped_column(Integer, default=2)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_present: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     last_fingerprint: Mapped[str | None] = mapped_column(String(64))
     dataset_kind: Mapped[str | None] = mapped_column(String(20))
     classification_status: Mapped[str] = mapped_column(

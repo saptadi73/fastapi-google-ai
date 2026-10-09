@@ -1,6 +1,6 @@
 # BE-03 — Registry master dan binding sumber
 
-Status: API dan penyimpanan metadata registry/binding tersedia. BE-03 sendiri tidak membuat tabel record master di `trusted`, tidak melakukan UPSERT master, dan tidak mengaktifkan FK transaksi. Storage kanonis kini tersedia melalui [BE-04](STORAGE_MASTER_BE04.md); review/apply data tetap mengikuti BE-05–BE-11.
+Status: API registry, binding sumber, storage, dan batch review/apply master tersedia. Binding approved dan storage siap membuka batch import terpisah; tab MASTER tetap dilarang diproses sebagai dataset ETL biasa. Batch mengikuti preview, approval terpisah, dan apply dengan audit.
 
 ## Alur
 
@@ -9,7 +9,9 @@ Status: API dan penyimpanan metadata registry/binding tersedia. BE-03 sendiri ti
 3. Jika membutuhkan definisi baru, jalankan preview kandidat. Pilih master lama jika sama; jika memang berbeda, tinjau kandidat dan catat alasan sebelum create.
 4. Buat draft definisi, submit-review, lalu approve menggunakan akun berbeda. Approval menghasilkan `approved_version: 1`.
 5. Simpan mapping tab ke versi master approved melalui PUT master-binding. Satu tab memiliki satu binding; beberapa tab/sumber dapat menunjuk master yang sama.
-6. Reviewer memeriksa dry-run dan menyetujui binding. `metadata_ready: true` berarti binding/snapshot/versi sudah sesuai, tetapi `execution_ready` tetap false sampai runtime master tersedia.
+6. Reviewer memeriksa dry-run dan menyetujui binding. `metadata_ready: true` berarti binding/snapshot/versi sudah sesuai. `execution_ready` baru true setelah storage master approved juga tersedia; jika belum, respons menyebut blocker yang perlu diselesaikan.
+7. Dari halaman **Storage & record master**, pilih tab sumber yang siap dan buat batch review/import. Batch MASTER tidak menggunakan `configuration_id`; sistem mem-pin versi binding, master, klasifikasi, profil, dan snapshot.
+8. Steward menyelesaikan validasi/pertanyaan, membuat preview, meminta approval terpisah, lalu menjalankan apply. Periksa status batch dan record master setelah apply.
 
 Semua operasi memerlukan bearer token dan tenant scope. Hak baca metadata: PLATFORM_ADMIN, SOURCE_OWNER, DATA_STEWARD, TECHNICAL_APPROVER. Editor adalah tiga role pertama; approver adalah PLATFORM_ADMIN atau TECHNICAL_APPROVER. ANALYST/VIEWER tidak mendapat akses katalog metadata ini.
 
@@ -143,7 +145,7 @@ Contoh disingkat; respons nyata memuat semua kolom mapping, metadata actor/time,
 
 Binding tidak mempunyai endpoint submit terpisah: save menghasilkan draft yang dapat direview approver. Approve/reject menggunakan MasterRevisionRequest. Approve memeriksa ulang versi master, klasifikasi, fingerprint, snapshot hash, dan DQ. Snapshot berubah memerlukan save/review ulang, walaupun header sama.
 
-GET master-binding mengembalikan `binding`, `validation`, `metadata_ready`, `execution_ready:false`, dan `blocking_reason`. Jika belum ada binding, binding=null, metadata_ready=false, blocker=MASTER_BINDING_REQUIRED. Binding approved yang masih sesuai mempunyai metadata_ready=true dengan blocker=MASTER_RUNTIME_PENDING. GET klasifikasi MASTER juga menambahkan ringkasan `master_binding`; runtime tetap tertahan.
+GET master-binding mengembalikan `binding`, `validation`, `metadata_ready`, `storage_ready`, `execution_ready`, dan `blocking_reason`. Jika belum ada binding, binding=null dan blocker=MASTER_BINDING_REQUIRED. Binding approved yang masih sesuai tetapi storage belum tersedia memberi blocker=MASTER_STORAGE_REQUIRED. Ketika ketiganya siap, `execution_ready=true` untuk membuat batch import master. GET klasifikasi MASTER menyertakan ringkasan status ini. Endpoint konfigurasi/sync ETL biasa tetap menolak tab MASTER agar tidak dimuat sebagai dataset mandiri.
 
 ## Error utama
 
@@ -159,7 +161,8 @@ GET master-binding mengembalikan `binding`, `validation`, `metadata_ready`, `exe
 | 409 | MASTER_BINDING_CONFLICT / MASTER_BINDING_STALE | Muat ulang binding dan snapshot; save ulang dengan revision terbaru |
 | 422 | MASTER_MAPPING_INVALID / MASTER_BINDING_INVALID | Perbaiki mapping atau error data dry-run |
 | 403 | SEPARATE_APPROVER_REQUIRED | Gunakan akun approver berbeda |
-| 409 | MASTER_RUNTIME_PENDING | Metadata dan storage tersedia; tunggu review/apply import master |
+| 409 | MASTER_STORAGE_REQUIRED | Deploy storage versi master approved sebelum membuat batch |
+| 409 | MASTER_RUNTIME_PENDING | Tab MASTER tidak dapat diproses lewat konfigurasi/sync ETL biasa; gunakan batch import master |
 
 Hak role salah tetap 403 dan referensi lintas tenant/tidak ada 404. Error header/fingerprint/profiling juga dapat memakai kode ETL yang sudah tersedia pada API Reference. GET detail binding dapat memberi valid=false dan blocker pada respons 200 untuk membantu perbaikan, tanpa mengklaim binding siap.
 
@@ -173,6 +176,6 @@ Migrasi `d83a5f12c906` menambah `platform.master_definition` dan `platform.maste
 
 Migrasi diterapkan hanya pada database test selama pengembangan; database aplikasi belum dimigrasikan. Downgrade menghapus metadata registry/binding baru, sehingga memerlukan backup metadata dan versi backend yang sesuai. Schema database test sudah diperiksa terhadap model melalui Alembic.
 
-Perubahan terhadap BE-02: blocker eksekusi MASTER kini `MASTER_RUNTIME_PENDING`; `MASTER_BINDING_REQUIRED` tetap dipakai pada GET binding yang belum ada. NON_MASTER dan gate klasifikasi lainnya tetap berlaku. Frontend katalog/binding belum dibuat; endpoint dapat dipakai melalui Swagger/API.
+Perubahan terhadap BE-02: `MASTER_RUNTIME_PENDING` hanya menjadi penolakan eksplisit untuk jalur konfigurasi/sync ETL biasa. Jalur batch import master menggunakan kesiapan binding dan storage; halaman storage menampilkan sumber terikat dan menyediakan aksi buat batch. `MASTER_BINDING_REQUIRED` tetap dipakai pada GET binding yang belum ada.
 
 Hasil verifikasi: **83 tes backend lulus**, Ruff lulus, Alembic tidak menemukan perbedaan model/schema database test, dan exporter memverifikasi **104 operasi API**. Tes mencakup lifecycle terpisah, pencarian/duplikat, concurrency create, dua tab ke satu master, binding stale saat snapshot/versi berubah, master nonaktif, mismatch mapping, dan FK actor lintas tenant. Provider Google/OpenAI pada pengujian menggunakan mock; ini bukan verifikasi integrasi akun nyata.

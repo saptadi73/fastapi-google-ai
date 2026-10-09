@@ -45,6 +45,11 @@ async def master_storage_plan(master_id: UUID, session: Session, user: CurrentUs
     return success(await MasterStorageService(session, user).plan(master_id))
 
 
+@router.get("/master-definitions/{master_id}/source-bindings")
+async def master_source_bindings(master_id: UUID, session: Session, user: CurrentUser):
+    return success(await MasterService(session, user).source_bindings(master_id))
+
+
 @router.post("/master-definitions/{master_id}/deploy-storage", dependencies=review)
 async def deploy_master_storage(
     master_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import timedelta
 
 from sqlalchemy import func, select, text
@@ -19,6 +20,46 @@ from app.services.etl_execution_service import ETLExecutionService
 from app.services.import_review_service import ImportReviewService, fail_import_job
 from app.services.notification_service import add_notification
 from app.services.source_service import SourceService
+
+logger = logging.getLogger(__name__)
+
+
+def _job_failure_details(exc, job_kind):
+    """Return a user-safe diagnosis while keeping raw driver details in server logs."""
+    if isinstance(exc, AppError):
+        return exc.code, exc.message
+
+    sqlstate = None
+    for candidate in (exc, getattr(exc, "orig", None), getattr(exc, "__cause__", None)):
+        if candidate is not None:
+            sqlstate = getattr(candidate, "sqlstate", None) or getattr(candidate, "pgcode", None)
+            if sqlstate:
+                break
+
+    if sqlstate == "42501":
+        if job_kind in ("DEPLOY", "ROLLBACK"):
+            return (
+                "DATABASE_PERMISSION_DENIED",
+                "Database menolak hak akses (PostgreSQL 42501). Untuk deploy ETL, minta administrator "
+                "memastikan role pada DATABASE_DDL_URL memiliki USAGE dan CREATE pada schema trusted "
+                "dan semantic, serta hak pada objek target. Detail teknis tersedia di log worker.",
+            )
+        return (
+            "DATABASE_PERMISSION_DENIED",
+            "Database menolak hak akses (PostgreSQL 42501). Minta administrator memeriksa privilege "
+            "role database pada schema atau objek yang digunakan. Detail teknis tersedia di log worker.",
+        )
+    if sqlstate and str(sqlstate).startswith("08"):
+        return (
+            "DATABASE_CONNECTION_FAILED",
+            f"Koneksi database gagal (SQLSTATE {sqlstate}). Periksa ketersediaan database dan konfigurasi "
+            "DATABASE_URL/DATABASE_DDL_URL. Detail teknis tersedia di log worker.",
+        )
+    return (
+        "JOB_EXECUTION_FAILED",
+        f"Job gagal karena kesalahan backend ({type(exc).__name__}). Tim teknis dapat melacak detail "
+        "lengkap melalui log worker menggunakan ID job ini.",
+    )
 
 
 async def dependencies_ready(session, source):
@@ -142,15 +183,15 @@ async def run_pending(tenant_id=None):
                     error_message=profile_error.get("message"),
                 )
     except Exception as exc:
+        if not isinstance(exc, AppError):
+            logger.exception(
+                "Unhandled background job failure",
+                extra={"job_id": str(job_id), "job_kind": job.kind},
+            )
         async with SessionFactory() as session, session.begin():
             job = await session.get(Job, job_id)
             job.status, job.finished_at = "FAILED", now()
-            job.error_code = exc.code if isinstance(exc, AppError) else "JOB_EXECUTION_FAILED"
-            job.error_message = (
-                exc.message
-                if isinstance(exc, AppError)
-                else "Job gagal. Periksa konfigurasi dan koneksi layanan."
-            )
+            job.error_code, job.error_message = _job_failure_details(exc, job.kind)
             _audit_stage(session, job, "FAILED")
             add_notification(
                 session,

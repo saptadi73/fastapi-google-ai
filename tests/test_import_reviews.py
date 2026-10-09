@@ -212,7 +212,7 @@ async def test_import_worker_failure_rolls_back_then_records_failed(context, con
     body = await non_master(ctx, config_data)
     review = await create(ctx, body)
 
-    def broken(*args):
+    def broken(*args, **kwargs):
         raise RuntimeError("sensitive provider detail")
 
     monkeypatch.setattr("app.services.import_review_service.transform_rows", broken)
@@ -233,12 +233,25 @@ async def test_import_master_pins_binding_and_approved_version(context, config_d
     ctx = context
     master = await approved_master(ctx, config_data)
     _, sheet, _ = await master_sheet(ctx, config_data)
+    master_path = f"/master-definitions/{master['id']}"
+    await request(
+        ctx,
+        "POST",
+        master_path + "/deploy-storage",
+        who="approver",
+        data={"revision_no": master["revision_no"]},
+    )
     await request(
         ctx, "PUT", f"/source-sheets/{sheet}/master-binding", data=binding_body(master, config_data)
     )
     await request(
         ctx, "POST", f"/source-sheets/{sheet}/master-binding/approve", who="approver", data={"revision_no": 1}
     )
+    binding_detail = (await request(ctx, "GET", f"/source-sheets/{sheet}/master-binding"))["data"]
+    assert binding_detail["metadata_ready"] and binding_detail["storage_ready"]
+    assert binding_detail["execution_ready"] and binding_detail["blocking_reason"] is None
+    bindings = (await request(ctx, "GET", master_path + "/source-bindings"))["data"]
+    assert len(bindings["items"]) == 1 and bindings["items"][0]["execution_ready"]
     review = await create(ctx, {"source_sheet_id": sheet})
     assert (
         review["master_version"] == 1 and review["policy"]["master"]["new_record_policy"] == "PROPOSE_INSERT"

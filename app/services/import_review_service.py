@@ -107,6 +107,8 @@ class ImportReviewService:
         # Refresh identity-map objects: dependency checks can run twice in one transaction.
         await self.session.refresh(sheet)
         await self.session.refresh(source)
+        if not sheet.is_present:
+            raise AppError("IMPORT_SOURCE_TAB_MISSING", "Tab sudah tidak ditemukan pada Google Sheet; jalankan discovery ulang setelah tab dipulihkan.", 409)
         if not sheet.enabled or source.paused:
             raise AppError("IMPORT_SOURCE_UNAVAILABLE", "Sumber/tab nonaktif atau dijeda.", 409)
         if sheet.classification_status != "CONFIRMED" or not sheet.last_fingerprint:
@@ -172,6 +174,11 @@ class ImportReviewService:
                 or master.approved_version != binding.master_version
             ):
                 raise AppError("IMPORT_MASTER_STALE", "Versi master tidak aktif atau berubah.", 409)
+            _, _, master_table = await MasterStorageService(
+                self.session, self.user
+            ).target(master.id)
+            connection = await self.session.connection()
+            await connection.run_sync(lambda sync: check_storage(sync, master_table))
             definition = master.approved_definition_json
             master_policy = definition["policy"]
             config = ETLConfiguration(
@@ -759,7 +766,7 @@ class ImportReviewService:
         master = await self.repo.get(MasterDefinition, master_id)
         source = await self.session.scalar(self.repo.query(DataSource).where(
             DataSource.id == sheet.source_id).with_for_update().execution_options(populate_existing=True)) if sheet else None
-        if (not binding or not sheet or not source or not sheet.enabled or source.paused
+        if (not binding or not sheet or not source or not sheet.is_present or not sheet.enabled or source.paused
                 or sheet.dataset_kind != "MASTER" or sheet.classification_status != "CONFIRMED"
                 or binding.classification_revision != sheet.classification_revision
                 or binding.fingerprint != sheet.last_fingerprint

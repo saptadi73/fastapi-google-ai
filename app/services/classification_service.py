@@ -15,7 +15,7 @@ def classification_blocker(sheet):
     if sheet.dataset_kind == "MASTER":
         return {
             "code": "MASTER_RUNTIME_PENDING",
-            "message": "Registry, binding, dan storage master tersedia, tetapi alur review/apply import belum tersedia. Jangan memuat master sebagai dataset mandiri.",
+            "message": "Tab MASTER tidak dapat diproses lewat konfigurasi atau sync ETL biasa. Gunakan Batch import master setelah binding disetujui dan storage siap.",
         }
     if sheet.dataset_kind != "NON_MASTER":
         return {"code": "CLASSIFICATION_INVALID", "message": "Jenis dataset tidak didukung."}
@@ -67,7 +67,14 @@ class ClassificationService:
 
             binding = await MasterService(self.session, self.user).binding_detail(sheet_id)
             result["master_binding"] = {
-                key: binding[key] for key in ("binding", "metadata_ready", "blocking_reason")
+                key: binding[key]
+                for key in (
+                    "binding",
+                    "metadata_ready",
+                    "storage_ready",
+                    "execution_ready",
+                    "blocking_reason",
+                )
             }
         return result
 

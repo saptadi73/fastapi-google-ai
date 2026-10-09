@@ -653,10 +653,12 @@ class SourceService:
         metadata = await self.google.metadata(source.spreadsheet_id)
         existing = {s.sheet_id: s for s in await self.repo.sheets(source.id)}
         discovered = []
+        discovered_ids = set()
         for tab in metadata.get("sheets", []):
             props = tab["properties"]
             if props.get("sheetType", "GRID") != "GRID":
                 continue
+            discovered_ids.add(props["sheetId"])
             if props["sheetId"] not in existing:
                 sheet = await self.repo.add(
                     SourceSheet, source_id=source.id, sheet_id=props["sheetId"], sheet_name=props["title"]
@@ -664,11 +666,32 @@ class SourceService:
             else:
                 sheet = existing[props["sheetId"]]
                 sheet.sheet_name = props["title"]
+                sheet.is_present = True
             discovered.append({"id": sheet.id, "sheet_id": sheet.sheet_id, "sheet_name": sheet.sheet_name})
-        audit(self.session, self.user, "source.discovered", source.id, sheet_count=len(discovered))
+        missing = []
+        for sheet_id, sheet in existing.items():
+            if sheet_id not in discovered_ids and sheet.is_present:
+                sheet.is_present = False
+                sheet.enabled = False
+                missing.append({"source_sheet_id": sheet.id, "sheet_id": sheet.sheet_id, "sheet_name": sheet.sheet_name})
+        audit(
+            self.session,
+            self.user,
+            "source.discovered",
+            source.id,
+            sheet_count=len(discovered),
+            missing_tabs=missing,
+        )
         if not discovered:
             source.status = "PROFILE_FAILED"
-            raise AppError("SOURCE_NOT_FOUND", "Belum ada tab aktif; Google Sheet tidak memiliki tab GRID.", 404)
+            return {
+                "sheets": [],
+                "profile_required": True,
+                "profile_error": {
+                    "code": "SOURCE_NOT_FOUND",
+                    "message": "Tidak ada tab GRID yang ditemukan. Tab lama ditandai hilang dan riwayatnya tetap disimpan.",
+                },
+            }
         # Keep discovered tabs even when profiling rejects a header. A savepoint
         # prevents profile snapshots/runs from being persisted while preserving
         # the SourceSheet rows so the user can fix the tab and retry profiling.
@@ -685,7 +708,7 @@ class SourceService:
 
     async def profile(self, source_id):
         source = await self.repo.get(DataSource, source_id)
-        sheets = [s for s in await self.repo.sheets(source.id) if s.enabled]
+        sheets = [s for s in await self.repo.sheets(source.id) if s.enabled and s.is_present]
         if not sheets:
             raise AppError("SOURCE_NOT_FOUND", "Belum ada tab aktif; jalankan discovery.", 404)
         results = []
@@ -745,6 +768,12 @@ class SourceService:
 
     async def update_sheet(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
+        if data.enabled is True and not sheet.is_present:
+            raise AppError(
+                "SOURCE_TAB_MISSING",
+                "Tab ini tidak ditemukan di Google Sheet. Jalankan Temukan tab lagi setelah memulihkannya.",
+                409,
+            )
         if sheet.active_configuration_id:
             raise AppError(
                 "CONFIGURATION_CONFLICT", "Range/header tab aktif tidak dapat diubah langsung.", 409
