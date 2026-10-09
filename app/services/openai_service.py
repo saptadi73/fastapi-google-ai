@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 
 from openai import AsyncOpenAI
-from sqlalchemy import and_, case, func, or_, select, text
+from sqlalchemy import and_, case, func, literal, or_, select, text
 
 from app.core.config import ROOT, get_settings
 from app.core.database import SessionFactory
@@ -139,7 +139,11 @@ class OpenAIService:
                 AITaskPolicy.taxonomy_id.is_(None),
             )
             policy_scope = or_(*requested_scope, global_scope)
-            scope_priority = case(*((condition, 1) for condition in requested_scope), else_=0)
+            scope_priority = (
+                case(*((condition, 1) for condition in requested_scope), else_=0)
+                if requested_scope
+                else literal(0)
+            )
             policy = await usage_session.scalar(
                 select(AITaskPolicy).where(
                     AITaskPolicy.tenant_id == user.tenant_id,

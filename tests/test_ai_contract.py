@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
@@ -75,6 +76,7 @@ async def test_responses_api_contract_and_usage(monkeypatch, config_data, purpos
     assert metadata["prompt_version"] == ("taxonomy_recommend_v1.md" if purpose == "TAXONOMY_RECOMMEND" else "etl_configuration_v1.md")
     assert "platform.ai_task_policy.approved_at DESC" in str(scalar_queries[0])
     assert "platform.ai_task_policy.data_product_code IS NULL" in str(scalar_queries[0])
+    assert "CASE ELSE" not in str(scalar_queries[0].compile(dialect=postgresql.dialect()))
     scoped_query_index = len(scalar_queries)
     scope_field = "data_source_id" if purpose == "ETL_CONFIG" else "taxonomy_id"
     await openai_service.OpenAIService().generate(

@@ -235,6 +235,12 @@ async def test_release_needs_it_and_each_related_unit_on_same_revision(context):
                            data={"revision": 1, "technical_approver_ids": [technical_id],
                                  "unit_groups": groups})
     assert policy["data"]["revision"] == 2
+    tracked_source = next(
+        item for item in (await request(context, "GET", "/sources/tracking"))["data"]
+        if item["id"] == source_id
+    )
+    assert tracked_source["it_approval_status"] == "PENDING_IT_APPROVAL"
+    assert tracked_source["it_approval_pending_tabs"] == ["Penjualan"]
     status = await request(context, "GET", f"/release-approvals/configurations/{config_id}", who="viewer")
     assert not status["data"]["ready"]
     assert [group["status"] for group in status["data"]["groups"]] == ["PENDING"] * 3
@@ -264,6 +270,12 @@ async def test_release_needs_it_and_each_related_unit_on_same_revision(context):
                                         "technical_checks": {"schema_and_mapping": True,
                                                              "data_quality": True,
                                                              "security_and_access": True}})
+    tracked_source = next(
+        item for item in (await request(context, "GET", "/sources/tracking"))["data"]
+        if item["id"] == source_id
+    )
+    assert tracked_source["it_approval_status"] == "APPROVED"
+    assert tracked_source["it_approval_pending_tabs"] == []
     await request(context, "POST", f"/configurations/{config_id}/deploy", who="approver", expected=409)
     partial = await request(context, "POST", f"/release-approvals/configurations/{config_id}/decisions",
                               who="viewer", data={"revision_no": 1, "group_type": "UNIT",
@@ -2235,6 +2247,36 @@ async def test_discovery_marks_removed_tabs_missing_without_deleting_history(con
     assert (await request(ctx, "GET", f"/jobs/{queued['job_id']}"))["data"]["status"] == "SUCCEEDED"
     sheets = (await request(ctx, "GET", f"/sources/{source_id}/sheets"))["data"]
     assert sheets and all(not item["is_present"] and not item["enabled"] for item in sheets)
+
+
+async def test_source_tracking_marks_tabs_waiting_for_it_approval(context, config_data):
+    ctx = context
+    source_id, sheet_id, config = await onboard(ctx, config_data)
+
+    tracking = (await request(ctx, "GET", "/sources/tracking"))["data"]
+    source = next(item for item in tracking if item["id"] == source_id)
+    sheet = next(item for item in source["sheets"] if item["id"] == sheet_id)
+    assert sheet["it_approval_status"] == "NOT_SUBMITTED"
+
+    validation = (await request(ctx, "POST", f"/configurations/{config['id']}/validate"))["data"]
+    await request(
+        ctx,
+        "POST",
+        f"/configurations/{config['id']}/submit-review",
+        data={
+            "revision_no": config["revision_no"],
+            "snapshot_hash": validation["snapshot_hash"],
+            "reviewed_columns": [column["target_column"] for column in config_data["columns"]],
+            "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+        },
+    )
+
+    tracking = (await request(ctx, "GET", "/sources/tracking"))["data"]
+    source = next(item for item in tracking if item["id"] == source_id)
+    sheet = next(item for item in source["sheets"] if item["id"] == sheet_id)
+    assert sheet["it_approval_status"] == "PENDING_IT_APPROVAL"
+    assert source["it_approval_status"] == "PENDING_IT_APPROVAL"
+    assert source["it_approval_pending_tabs"] == [sheet["name"]]
 
 
 async def activate(ctx, config):

@@ -34,6 +34,7 @@ from app.schemas.source import (
 )
 from app.services.classification_service import ClassificationService
 from app.services.job_service import enqueue
+from app.services.release_approval_service import release_status
 from app.services.source_approver_service import SourceApproverService
 from app.services.source_service import SourceService, source_records
 
@@ -264,6 +265,45 @@ async def source_tracking(
             return "FAILED"
         return "IN_PROGRESS"
 
+    def it_approval_status(config, source):
+        if config is None:
+            return "NOT_STARTED"
+        status = str(config.status or "").upper()
+        if status == "NEEDS_REVIEW":
+            review_state = config.review_state or {}
+            return (
+                "PENDING_IT_APPROVAL"
+                if review_state.get("submitted_revision") == config.revision_no
+                else "NOT_SUBMITTED"
+            )
+        if status in {"APPROVED", "SUPERSEDED", "ACTIVE"}:
+            release = release_status(config, source)
+            technical = next((group for group in release["groups"] if group["key"] == "TECHNICAL"), None)
+            if technical and technical["status"] == "PENDING":
+                return "PENDING_IT_APPROVAL"
+            if technical and technical["status"] == "REJECTED":
+                return "REJECTED"
+            return "APPROVED"
+        if status == "REJECTED":
+            return "REJECTED"
+        return "NOT_SUBMITTED"
+
+    def it_approval_rollup(values):
+        applicable = [value for value in values if value != "NOT_APPLICABLE"]
+        if not applicable:
+            return "NOT_APPLICABLE"
+        if "PENDING_IT_APPROVAL" in applicable:
+            return "PENDING_IT_APPROVAL"
+        if "REJECTED" in applicable:
+            return "REJECTED"
+        if "NOT_SUBMITTED" in applicable:
+            return "NOT_SUBMITTED"
+        if all(value == "APPROVED" for value in applicable):
+            return "APPROVED"
+        if all(value == "NOT_STARTED" for value in applicable):
+            return "NOT_STARTED"
+        return "IN_PROGRESS"
+
     result = []
     for source in sources:
         source_sheets = sheets_by_source.get(str(source.id), [])
@@ -276,6 +316,11 @@ async def source_tracking(
             product = product_by_sheet.get(str(sheet.id))
             import_review = import_by_sheet.get(str(sheet.id))
             master_binding = binding_by_sheet.get(str(sheet.id))
+            sheet_it_approval_status = (
+                "NOT_APPLICABLE"
+                if sheet.dataset_kind == "MASTER"
+                else it_approval_status(config, source)
+            )
             database_status = etl_run.status if etl_run else (
                 import_review.status if import_review else "NOT_STARTED"
             )
@@ -291,6 +336,7 @@ async def source_tracking(
                 "profiling_status": profile.status if profile else ("FAILED" if source.status == "PROFILE_FAILED" else "NOT_STARTED"),
                 "profiled_at": profile.created_at if profile else None,
                 "configuration_status": config.status if config else ("AI_FAILED" if source.status == "AI_FAILED" else "NOT_STARTED"),
+                "it_approval_status": sheet_it_approval_status,
                 "configuration_id": config.id if config else None,
                 "configured_at": config.created_at if config else None,
                 "database_status": database_status,
@@ -314,6 +360,15 @@ async def source_tracking(
                 for item in sheet_records if item["enabled"] and item["is_present"]
             ]),
             "database_status": rollup([item["database_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
+            "it_approval_status": it_approval_rollup([
+                item["it_approval_status"] for item in sheet_records
+                if item["enabled"] and item["is_present"]
+            ]),
+            "it_approval_pending_tabs": [
+                item["name"] for item in sheet_records
+                if item["enabled"] and item["is_present"]
+                and item["it_approval_status"] == "PENDING_IT_APPROVAL"
+            ],
             "access_review_status": source.access_review_status,
             "last_failures": source_failures.get(str(source.id), {}),
             "steward_name": (steward.full_name or steward.username) if steward else None,
