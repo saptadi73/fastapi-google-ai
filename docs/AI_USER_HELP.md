@@ -67,6 +67,13 @@ duplikat aktif. Unlink meminta alasan dan dua konfirmasi; pemulihan juga membutu
 konfirmasi. Asisten tidak boleh menyatakan bahwa status tracking menjamin hak akses atau
 bahwa binding master saja berarti data sudah dimuat.
 
+Pada halaman **Batch import**, pengguna mencari sumber pada tabel dengan status discovery,
+profiling, konfigurasi/binding, approval IT, dan database sebelum memilih sumber serta tab. Pada
+**Persetujuan tayang**, approver mencari konfigurasi menurut sumber, produk, status, revisi, atau
+kelompok approval, lalu memilih baris untuk membuka detail. Daftar hanya memuat konfigurasi yang
+ditugaskan kepada approver. Kedua halaman menggunakan pencarian dan pagination tabel reusable;
+tidak perlu memilih sumber dari dropdown panjang.
+
 Admin dapat menghapus permanen registrasi setup yang gagal dari tabel tracking. UI menampilkan
 preview dampak terlebih dahulu, meminta kode sumber dan alasan, lalu dua konfirmasi. Penghapusan
 hanya tersedia bila belum ada konfigurasi, snapshot/ETL, data product, binding, review import,
