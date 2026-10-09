@@ -46,11 +46,10 @@ async def list_policy_resources(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ):
-    return success(
-        await AccessService(session, user).list_policy_resources(resource_type, search, offset, limit),
-        offset=offset,
-        limit=limit,
+    items, total = await AccessService(session, user).list_policy_resources(
+        resource_type, search, offset, limit
     )
+    return success(items, offset=offset, limit=limit, total=total)
 
 
 @router.get("/attributes", dependencies=admin)

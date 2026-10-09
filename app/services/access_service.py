@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.core.exceptions import AppError
 from app.models.access import (
@@ -393,12 +393,20 @@ class AccessService:
 
     async def list_policy_resources(self, resource_type, search="", offset=0, limit=100):
         model, code = POLICY_RESOURCES[resource_type]
-        conditions = [code.ilike(f"%{search}%")] if search else []
+        conditions = [or_(code.ilike(f"%{search}%"), model.name.ilike(f"%{search}%"))] if search else []
         items = await self.repo.list(model, offset=offset, limit=limit, conditions=conditions)
-        return [
-            {"id": item.id, "code": getattr(item, code.key), "name": item.name, "status": item.status}
-            for item in items
-        ]
+        total = await self.session.scalar(
+            select(func.count()).select_from(model).where(
+                model.tenant_id == self.actor.tenant_id, *conditions
+            )
+        )
+        return (
+            [
+                {"id": item.id, "code": getattr(item, code.key), "name": item.name, "status": item.status}
+                for item in items
+            ],
+            total or 0,
+        )
 
     async def _policy_values(self, data, current=None):
         values = data.model_dump(exclude_unset=True)
