@@ -74,3 +74,11 @@ kebijakan terikat, dependensi, atau job aktif; bila ada, arahkan admin untuk men
 ketergantungan atau memakai unlink jika memang sumber duplikat. Penghapusan membersihkan tab,
 hasil profiling, dan job terminal sumber tersebut, sementara event audit penghapusan tetap ada.
 Jangan menghapus sumber yang sudah menghasilkan data operasional hanya untuk mengulang profiling.
+
+Halaman **Katalog data** menggunakan `GET /api/v1/semantic/data-product-inventory` untuk
+menampilkan Data Product aktif yang memang boleh dilihat pengguna, bersama tabel fisik, semantic
+view, sumber spreadsheet/tab, versi ETL, dan metadata semantic. Katalog membantu menemukan metadata
+yang belum lengkap; sarannya bukan perubahan otomatis. Untuk NL2SQL, lengkapi deskripsi dataset,
+nama bisnis kolom, dimensi, definisi metrik beserta unit dan sinonim. Perbaiki data/header di sumber,
+struktur/mapping lewat revisi ETL, dan semantic melalui Governance. Relasi lintas dataset dibuat
+hanya bila diperlukan dan kolom kunci serta kardinalitasnya telah diverifikasi.

@@ -92,6 +92,38 @@ async def test_join_relationship_list_hides_inaccessible_product_metadata(monkey
 
 
 @pytest.mark.asyncio
+async def test_product_inventory_links_active_product_to_source_and_physical_table():
+    product_id = "product-1"
+    sheet_id = "11111111-2222-4333-8444-555555555555"
+    product = SimpleNamespace(id=product_id, view_name="v_11111111222243338444555555555555", freshness_version=4)
+    sheet = SimpleNamespace(
+        id=sheet_id, sheet_id=98765, sheet_name="Rekap Mingguan", enabled=True, is_present=True,
+    )
+    source = SimpleNamespace(
+        id="source-1", name="Laporan mingguan", source_code="REPORT_WEEKLY", spreadsheet_id="spreadsheet-1",
+    )
+    config = SimpleNamespace(
+        id="config-1", version_no=3, revision_no=5, status="ACTIVE",
+        configuration_json={"target_table": "weekly_report"},
+    )
+    session = Mock()
+    session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [(product, sheet, source, config)]))
+    service = SemanticCatalogService(session, SimpleNamespace(tenant_id="tenant", role="VIEWER"))
+    service.products = AsyncMock(return_value=[{
+        "id": product_id, "code": "WEEKLY_REPORT", "name": "Laporan Mingguan",
+        "source_sheet_id": sheet_id, "columns": [], "metrics": [], "dimensions": [],
+    }])
+
+    result = await service.product_inventory()
+
+    assert result[0]["database_schema"] == "trusted"
+    assert result[0]["database_table"] == "weekly_report_11111111222243338444555555555555"
+    assert result[0]["spreadsheet_url"].endswith("/spreadsheet-1/edit")
+    assert result[0]["sheet_name"] == "Rekap Mingguan"
+    assert result[0]["configuration_version"] == 3
+
+
+@pytest.mark.asyncio
 async def test_metadata_lock_conflict_and_version_invalidation(monkeypatch):
     session = Mock()
     user = SimpleNamespace(tenant_id="tenant", id="editor")

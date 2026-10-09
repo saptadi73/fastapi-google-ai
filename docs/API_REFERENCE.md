@@ -1000,6 +1000,7 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | POST | `/saved-queries/{code}/run` | Auth | — | 200 | QueryRow[]; meta query |
 | GET | `/semantic/data-products` | Auth | — | 200 | Alias daftar DataProduct aktif yang diizinkan |
 | PATCH | `/semantic/data-products/{product_id}` | D | ProductUpdate | 200 | DataProduct; name/description/metric_metadata memerlukan expected_version; PRODUCT_VERSION_CONFLICT 409, METRIC_NOT_FOUND/METRIC_SYNONYM_CONFLICT 422; lihat FRONTEND_BE14.md |
+| GET | `/semantic/data-product-inventory` | Auth | — | 200 | Data Product aktif yang diizinkan beserta tabel fisik, semantic view, spreadsheet, dan tab sumber |
 | GET | `/semantic/metrics` | Auth | — | 200 | `[{data_product: code, ...MetricDefinition}]` |
 | GET | `/semantic/join-relationships` | Auth | — | 200 | Registry relationship tenant-scoped |
 | POST | `/semantic/join-relationships` | D | JoinRelationshipCreate | 201 | Relationship DRAFT; validasi product/column/cardinality |

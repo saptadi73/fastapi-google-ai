@@ -26,6 +26,11 @@ async def products(session: Session, user: CurrentUser):
     return success(await SemanticCatalogService(session, user).products())
 
 
+@router.get("/data-product-inventory")
+async def product_inventory(session: Session, user: CurrentUser):
+    return success(await SemanticCatalogService(session, user).product_inventory())
+
+
 @router.patch("/data-products/{product_id}", dependencies=admin)
 async def patch_product(product_id: UUID, data: ProductUpdate, session: Session, user: CurrentUser):
     return success(await SemanticCatalogService(session, user).update_product(product_id, data))

@@ -1,6 +1,9 @@
+from sqlalchemy import select
+
 from app.core.exceptions import AppError
+from app.models.configuration import Configuration
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
-from app.models.source import DataSource
+from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
 from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.semantic import QueryPlan
@@ -148,6 +151,68 @@ class SemanticCatalogService:
                 continue
             result.append(await self.repo.product_record(product.code, self.user))
         return result
+
+    async def product_inventory(self):
+        """List active ETL outputs with their source tab and database locations."""
+        accessible = await self.products()
+        product_ids = [item["id"] for item in accessible]
+        if not product_ids:
+            return []
+        rows = (await self.session.execute(
+            select(DataProduct, SourceSheet, DataSource, Configuration)
+            .join(
+                SourceSheet,
+                (SourceSheet.id == DataProduct.source_sheet_id)
+                & (SourceSheet.tenant_id == DataProduct.tenant_id),
+            )
+            .join(
+                DataSource,
+                (DataSource.id == SourceSheet.source_id)
+                & (DataSource.tenant_id == SourceSheet.tenant_id),
+            )
+            .join(
+                Configuration,
+                (Configuration.id == SourceSheet.active_configuration_id)
+                & (Configuration.tenant_id == SourceSheet.tenant_id),
+            )
+            .where(
+                DataProduct.tenant_id == self.user.tenant_id,
+                DataProduct.id.in_(product_ids),
+                DataProduct.status == "ACTIVE",
+                Configuration.status == "ACTIVE",
+            )
+            .order_by(DataProduct.name, DataSource.name, SourceSheet.sheet_name)
+        )).all()
+        products_by_id = {item["id"]: item for item in accessible}
+        inventory = []
+        for product, sheet, source, config in rows:
+            product_data = products_by_id.get(str(product.id))
+            if product_data is None:
+                continue
+            sheet_uuid = str(sheet.id).replace("-", "")
+            target_table = config.configuration_json["target_table"]
+            inventory.append({
+                **product_data,
+                "source_id": source.id,
+                "source_name": source.name,
+                "source_code": source.source_code,
+                "spreadsheet_id": source.spreadsheet_id,
+                "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{source.spreadsheet_id}/edit",
+                "sheet_name": sheet.sheet_name,
+                "sheet_id": sheet.sheet_id,
+                "source_sheet_id": sheet.id,
+                "source_enabled": sheet.enabled,
+                "source_present": sheet.is_present,
+                "database_schema": "trusted",
+                "database_table": f"{target_table}_{sheet_uuid}",
+                "semantic_view": product.view_name,
+                "configuration_id": config.id,
+                "configuration_version": config.version_no,
+                "configuration_revision": config.revision_no,
+                "configuration_status": config.status,
+                "freshness_version": product.freshness_version,
+            })
+        return inventory
 
     async def join_relationships(self):
         product_codes = {product["code"] for product in await self.products()}
