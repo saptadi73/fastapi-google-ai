@@ -100,6 +100,15 @@ konversi otomatis nama bulan. Filter rentang tanggal tersedia; pemilihan tanggal
 dan analisis overlap periode tetap harus ditentukan eksplisit, bukan fitur otomatis.
 Penambahan kolom target tanggal pada tabel non-master yang ada tetap memerlukan migrasi.
 
+Nama tabel tujuan berbeda pada draft baru tidak otomatis menghindari migrasi:
+nama view semantic tetap mengikuti ID tab, bukan nama tabel. Perubahan tipe dari
+`bigint` ke `date`, rename, urutan, atau penghapusan kolom view memerlukan migrasi
+terkontrol. `SEMANTIC_SCHEMA_MIGRATION_REQUIRED` menunjukkan perubahan tersebut;
+deploy biasa tidak menjatuhkan view/data atau menggunakan `DROP ... CASCADE`.
+Tim teknis memeriksa dependency, menjaga owner/grant serta data lama, lalu
+migrasi dalam transaksi dan deploy versi APPROVED yang benar. URL versi draft
+lama tidak selalu sama dengan konfigurasi yang tercantum pada payload job DEPLOY.
+
 ### Pengecualian untuk schema master
 
 Master tidak memakai konfigurasi ETL biasa. Perbarui definisi master dan minta approval.

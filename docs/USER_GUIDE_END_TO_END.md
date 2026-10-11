@@ -111,6 +111,26 @@ untuk rekap periode, sambil mempertahankan label asal. Map sebagai `date` dan di
 lalu periksa dry-run; jangan mengarang tanggal dari label yang ambigu. Panduan lengkap:
 [perubahan sumber, kolom, dan periode waktu](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
 
+### Review ulang start_date/end_date
+
+Tanggal native Google Sheets dibaca sebagai angka serial, misalnya `46023` =
+`2026-01-01`. Target `date` saja tidak cukup: tambahkan `parse_date_id` pada
+**Cleansing** untuk kedua kolom; pola tanggal boleh kosong untuk serial.
+Text tanggal menggunakan pola strptime sesuai sumber jika diperlukan.
+**Simpan draft**, **Dry-run ulang**, periksa kolom/baris `TYPE_OR_NULL_ERROR`,
+lengkapi checklist lalu **Ajukan review**. Jangan mengubah nullable atau menghapus
+record hanya untuk menutupi kegagalan parsing.
+
+Untuk revisi dataset yang sama, jaga target tabel lama kecuali perpindahan memang
+direncanakan. Draft manual dari profil bukan clone seluruh konfigurasi lama.
+Nama view semantic mengikuti ID tab; target baru tidak menghindari perubahan
+tipe view. `SEMANTIC_SCHEMA_MIGRATION_REQUIRED` meminta migrasi terkontrol
+data/dependency/owner/grant, bukan deploy berulang atau DROP CASCADE. Dry-run
+lulus memeriksa data snapshot, bukan kompatibilitas schema database.
+Cocokkan `configuration_id` pada payload job DEPLOY dengan versi APPROVED
+yang dimaksud; URL draft lama dapat menunjuk versi berbeda. Setelah deploy
+SUCCEEDED, jalankan sync untuk memuat data. Helper frontend: `/guide#review-ulang-tanggal`.
+
 ## Contoh pertanyaan dashboard
 
 - `Tampilkan total penjualan per cabang bulan ini.`

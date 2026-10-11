@@ -140,6 +140,29 @@ def operator_table_privileges(load_strategy):
     raise AppError("LOAD_STRATEGY_INVALID", "Strategi pemuatan tidak dikenal.")
 
 
+def validate_semantic_view_columns(existing, proposed, dialect):
+    for index, column in enumerate(existing):
+        if index >= len(proposed):
+            reason = f"Kolom {column['name']} dihapus dari view."
+        else:
+            expected = proposed[index]
+            old_type = str(column["type"].compile(dialect=dialect)).lower()
+            new_type = str(expected.type.compile(dialect=dialect)).lower()
+            if column["name"] == expected.name and old_type == new_type:
+                continue
+            reason = (
+                f"Kolom {column['name']} ({old_type}) menjadi "
+                f"{expected.name} ({new_type}) pada posisi {index + 1}."
+            )
+        raise AppError(
+            "SEMANTIC_SCHEMA_MIGRATION_REQUIRED",
+            f"{reason} PostgreSQL tidak dapat mengganti tipe, nama, urutan, atau menghapus "
+            "kolom view melalui deploy biasa. Tim teknis perlu migrasi view yang direview "
+            "dengan mempertahankan data, dependency, dan izin akses; lalu deploy ulang.",
+            409,
+        )
+
+
 async def deploy_schema(config, sheet_id, tenant_id):
     s = get_settings()
     engine = make_engine(s.database_ddl_url.get_secret_value() or s.database_url.get_secret_value())
@@ -184,6 +207,20 @@ async def deploy_schema(config, sheet_id, tenant_id):
                     )
 
             await conn.run_sync(create_or_check)
+            public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
+            if not public:
+                raise AppError("SEMANTIC_INVALID", "Setidaknya satu kolom non-sensitif diperlukan.")
+
+            def check_view(sync):
+                inspector = inspect(sync)
+                if view_name in inspector.get_view_names(schema="semantic"):
+                    validate_semantic_view_columns(
+                        inspector.get_columns(view_name, schema="semantic"),
+                        [table.c._tenant_id, *(table.c[name] for name in public)],
+                        sync.dialect,
+                    )
+
+            await conn.run_sync(check_view)
             quote = conn.dialect.identifier_preparer.quote
             operator = make_url(s.database_url.get_secret_value()).username
             if operator:
@@ -206,9 +243,6 @@ async def deploy_schema(config, sheet_id, tenant_id):
                             "Minta administrator memberi izin secara eksplisit sebelum deploy.",
                             409,
                         )
-            public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
-            if not public:
-                raise AppError("SEMANTIC_INVALID", "Setidaknya satu kolom non-sensitif diperlukan.")
             stmt = select(table.c._tenant_id, *(table.c[n] for n in public)).where(
                 table.c._tenant_id == tenant_id
             )

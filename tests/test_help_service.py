@@ -60,6 +60,20 @@ def test_dataset_identity_question_retrieves_source_names_and_format_limits():
     assert "63 karakter" in body and "200 karakter" in body
 
 
+@pytest.mark.parametrize("route", ["/workspace", "/configurations/config-id/review"])
+def test_date_review_guidance_explains_serial_values_and_view_migrations(route):
+    articles = KnowledgeBase().search(
+        "review ulang start_date end_date parse_date_id SEMANTIC_SCHEMA_MIGRATION_REQUIRED",
+        "DATA_STEWARD", route,
+    )
+    content = "\n".join(item.body[:6000] for item in articles)
+    for required in (
+        "parse_date_id", "serial", "TYPE_OR_NULL_ERROR",
+        "SEMANTIC_SCHEMA_MIGRATION_REQUIRED", "configuration_id", "DROP CASCADE",
+    ):
+        assert required in content
+
+
 @pytest.mark.parametrize(
     "question,role,route",
     [

@@ -10,23 +10,25 @@ Jika sumber tidak terbaca, periksa URL, akses Viewer service account, credential
 
 Jika kolom sumber berubah atau fingerprint tidak cocok (`CONFIGURATION_CONFLICT`), perbaiki Sheet lalu profiling ulang sumber yang sama dan buat draft dari profile terbaru. Clone hanya berhasil jika header mapping lama masih ada. Jika target tabel non-master berubah (`SCHEMA_CHANGE_UNSAFE`), minta migrasi manual yang direview; jangan menghapus tabel, registrasi ulang, atau mengulang deploy tanpa penanganan schema. Range/header tab aktif tidak dapat diubah langsung. Untuk periode text `w1`, `w2`, `january`, atau `february`, lengkapi tanggal dan tahun sesuai grain serta kalender bisnis, bukan sekadar mengganti tipe kolom.
 
-Jika NL2SQL tidak bisa membaca data meskipun health database utama sukses, administrator perlu memeriksa koneksi reader yang terpisah, izin akses schema semantic dan SELECT pada view yang diizinkan, serta memastikan reader tidak memiliki hak tulis/superuser. Health database utama bukan bukti kesiapan reader atau keberhasilan panggilan OpenAI.
+`SEMANTIC_SCHEMA_MIGRATION_REQUIRED` berarti tipe/nama/urutan kolom view semantic berubah atau kolom dihapus. Mengganti nama tabel target pada draft tidak mengganti nama view yang mengikuti ID tab. PostgreSQL tidak dapat mengubah bigint menjadi date lewat CREATE OR REPLACE VIEW. Tim teknis perlu migrasi dalam transaksi dengan menjaga data, dependency, owner dan grant; deploy biasa tidak DROP CASCADE. Periksa configuration_id pada payload job: versi yang gagal dideploy bisa berbeda dari URL draft lama. Tanggal native Sheets berbentuk angka serial memerlukan parse_date_id sebelum target date; dry-run lulus tidak berarti schema database sudah kompatibel.
 
-Jika Hubungkan & profiling tampak tidak bereaksi, lihat pesan di bawah tombol dan lengkapi field wajib. Pendaftaran gagal: periksa daftar sumber sebelum mencoba lagi. Job QUEUED/RUNNING: tunggu worker atau buka monitor. Discovery FAILED: sumber tetap tercatat, baca penyebabnya dan ulangi tahap relevan, bukan pendaftaran.
+NL2SQL gagal meski health utama sukses: periksa koneksi reader terpisah, USAGE schema semantic dan SELECT view; reader tidak boleh menulis/superuser. Health utama bukan bukti reader/OpenAI siap.
 
-Dropdown unit/domain/yurisdiksi memakai assignment aktif akun pendaftar pada tenant yang sama. Registry saja tidak memberi assignment; minta admin lain menugaskan atribut melalui Administrasi → Pengguna lalu Muat ulang pilihan. Admin tidak dapat menugaskan diri sendiri. Purpose berasal dari registry aktif; owner/steward dari akun aktif. Pesan gagal memuat pilihan berbeda dari assignment kosong.
+Hubungkan & profiling tidak bereaksi: baca pesan/field wajib. Pendaftaran gagal: periksa daftar sebelum retry. QUEUED/RUNNING: tunggu/buka monitor. Discovery FAILED: sumber tetap tercatat; perbaiki tahapnya, bukan pendaftaran.
+
+Dropdown unit/domain/yurisdiksi memakai assignment aktif akun/tenant pendaftar. Registry bukan assignment: admin lain menugaskan lewat Administrasi → Pengguna, lalu Muat ulang pilihan. Admin tidak menugaskan diri sendiri. Purpose dari registry; owner/steward akun aktif. Gagal memuat berbeda dari assignment kosong.
 
 Panel Berikan unit/departemen memuat DEPARTMENT; domain/yurisdiksi lewat form Atribut. Centang unit dan pastikan akun tujuan sama dengan pengguna Workspace.
 
-Jika data belum muncul di dashboard, pastikan discovery, profiling, klasifikasi, konfigurasi, deploy, activation, import, dan job terakhir berhasil. Periksa master atau taxonomy binding, pertanyaan batch, data karantina, freshness, metadata sumber, serta policy akses.
+Data belum muncul: periksa discovery/profiling/klasifikasi/review/deploy/activation/import/job, binding master/taxonomy, pertanyaan, karantina, freshness, metadata dan policy akses.
 
-Untuk `RELEASE_APPROVAL_REQUIRED`, buka **Persetujuan tayang**. IT harus melengkapi checklist teknis dan setiap unit terkait menyetujui revisi yang sama. Penolakan atau perubahan revisi/snapshot/aturan membatalkan keputusan lama; perbaiki versi/aturan sebelum deploy. Persetujuan ini bukan approval batch atau izin membaca data.
+RELEASE_APPROVAL_REQUIRED: buka Persetujuan tayang, IT melengkapi checklist dan tiap unit menyetujui revisi sama. Penolakan/perubahan revisi/snapshot/aturan membatalkan keputusan; perbaiki sebelum deploy. Bukan approval batch/izin membaca.
 
 Untuk `DATABASE_PERMISSION_DENIED` (42501), admin memeriksa role DDL: USAGE/CREATE pada schema trusted/semantic serta izin/ownership objek target. `DATABASE_CONNECTION_FAILED` memerlukan pemeriksaan koneksi aplikasi/DDL. Catat ID job agar admin dapat mencari log worker.
 
 Deploy memberi role runtime SELECT/INSERT untuk APPEND (preview membaca target), SELECT/INSERT/UPDATE untuk UPSERT, dan SELECT view semantic. Tabel APPEND lama perlu grant SELECT terarah atau deploy ulang. FULL_REFRESH memerlukan DELETE dari admin; aplikasi tidak menambahkannya otomatis.
 
-Jika AI gagal, periksa health OpenAI, model, kuota, budget/policy, dan request ID sebelum mencoba lagi. Jangan kirim password, token, API key, credential, atau data pribadi ke asisten.
+AI gagal: periksa health/model/kuota/budget/policy/request ID. Jangan kirim password/token/API key/credential/data pribadi ke asisten.
 
 Sumber tidak ada di dropdown? Cari nama/kode melalui **Sumber & tracking**, pagination, lalu **Buka sumber**. Dropdown hanya memilih konteks, bukan daftar lengkap. Kegagalan tahap tidak menghapus sumber; jangan registrasi ulang.
 
