@@ -1,0 +1,331 @@
+[
+  {
+    "group": "sumber",
+    "code": "SOURCE_READ_FAILED",
+    "kind": "error",
+    "cause": "Google menolak range; tab bisa hilang/berganti nama, atau permintaan tidak valid.",
+    "action": "Buka monitor job. Source Owner/Steward/Admin: Workspace, pilih sumber, Temukan tab, tunggu SUCCEEDED, lalu Profiling ulang. Jika tetap gagal, admin periksa respons Google."
+  },
+  {
+    "group": "sumber",
+    "code": "SOURCE_ACCESS_DENIED",
+    "kind": "error",
+    "cause": "Service Account tidak mendapat akses atau Google menolak otorisasi.",
+    "action": "Pemilik Sheet memberi Service Account akses Viewer; admin memeriksa kredensial. Coba ulang setelah akses benar."
+  },
+  {
+    "group": "sumber",
+    "code": "SOURCE_NOT_FOUND",
+    "kind": "error",
+    "cause": "Spreadsheet/tab tidak ditemukan atau tidak tersedia untuk kredensial server.",
+    "action": "Periksa URL/ID, pemulihan file/tab, dan akses Viewer. Temukan tab ulang pada sumber yang sama."
+  },
+  {
+    "group": "sumber",
+    "code": "INVALID_RANGE",
+    "kind": "error",
+    "cause": "Range A1 tidak didukung atau tidak dimulai dari baris 1.",
+    "action": "Periksa pengaturan range, misalnya A:CV atau A1:CV1000. Tentukan header_row/data_start_row terpisah; review perubahan konfigurasi."
+  },
+  {
+    "group": "sumber",
+    "code": "SOURCE_TOO_LARGE",
+    "kind": "error",
+    "cause": "Jumlah baris/kolom melebihi batas server.",
+    "action": "Persempit range yang diperlukan atau bagi data. Admin meninjau kapasitas/batas sebelum menaikkannya; jangan memotong data diam-diam."
+  },
+  {
+    "group": "sumber",
+    "code": "UPSTREAM_RATE_LIMITED",
+    "kind": "error",
+    "cause": "Google masih membatasi permintaan atau tidak tersedia setelah retry.",
+    "action": "Tunggu lalu coba ulang sekali; admin memeriksa kuota dan status layanan. Jangan menumpuk job."
+  },
+  {
+    "group": "sumber",
+    "code": "GOOGLE_NOT_CONFIGURED",
+    "kind": "error",
+    "cause": "File Service Account tidak tersedia atau konfigurasinya tidak valid.",
+    "action": "Admin memperbaiki konfigurasi backend dan memeriksa health, lalu ulang proses. Jangan mengirim file key ke helper."
+  },
+  {
+    "group": "sumber",
+    "code": "IMPORT_SOURCE_TAB_MISSING",
+    "kind": "error",
+    "cause": "Tab pada registry tidak lagi ditemukan di Sheet.",
+    "action": "Source Owner/Steward/Admin menjalankan Temukan tab lalu Profiling ulang; pulihkan tab jika masih diperlukan. Riwayat lama tetap tersimpan."
+  },
+  {
+    "group": "sumber",
+    "code": "SOURCE_JOB_RUNNING",
+    "kind": "error",
+    "cause": "Sumber memiliki job yang masih QUEUED/RUNNING.",
+    "action": "Buka monitor job dan tunggu proses selesai. Jika macet, admin periksa worker sebelum retry."
+  },
+  {
+    "group": "review",
+    "code": "REVIEW_STALE",
+    "kind": "error",
+    "cause": "Isi atau header Sheet saat deploy berbeda dari snapshot review; formula juga dapat berubah.",
+    "action": "Profiling ulang, buat draft terbaru, perbaiki mapping header, Dry-run, review/approval ulang lalu Deploy. Retry versi approved lama tidak memperbarui bukti."
+  },
+  {
+    "group": "review",
+    "code": "CONFIGURATION_CONFLICT",
+    "kind": "error",
+    "cause": "Kolom/fingerprint sumber tidak sesuai mapping yang direview.",
+    "action": "Temukan tab jika nama tab berubah, lalu Profiling ulang. Clone bila header lama masih ada; jika hilang, buat draft dari profil terbaru dan ajukan ulang."
+  },
+  {
+    "group": "review",
+    "code": "APPROVAL_REQUIRED",
+    "kind": "error",
+    "cause": "Status konfigurasi belum memenuhi persyaratan deploy/aktivasi.",
+    "action": "Selesaikan review dan approval oleh reviewer berwenang yang berbeda dari pembuat, lalu deploy versi yang benar."
+  },
+  {
+    "group": "review",
+    "code": "RELEASE_APPROVAL_REQUIRED",
+    "kind": "error",
+    "cause": "Keputusan IT/unit pada Persetujuan tayang belum lengkap atau sudah tidak berlaku.",
+    "action": "Lengkapi checklist dan semua kelompok pada revisi/snapshot sama; perubahan membatalkan keputusan lama. Approval rilis tidak memberi akses baca."
+  },
+  {
+    "group": "review",
+    "code": "SCHEMA_REVIEW_REQUIRED",
+    "kind": "error",
+    "cause": "Versi konfigurasi belum memiliki bukti review schema yang diwajibkan.",
+    "action": "Buat/clone draft, lihat Preview perubahan schema di langkah 7, konfirmasi, lalu submit dan approval ulang."
+  },
+  {
+    "group": "review",
+    "code": "SCHEMA_MIGRATION_STALE",
+    "kind": "error",
+    "cause": "Schema/data target berubah setelah preview schema disetujui.",
+    "action": "Muat ulang preview dan review draft terbaru. Jangan mengulangi deploy dengan bukti lama."
+  },
+  {
+    "group": "review",
+    "code": "SCHEMA_MIGRATION_BLOCKED",
+    "kind": "error",
+    "cause": "Perubahan schema tidak aman atau bukti konversi tidak cukup.",
+    "action": "Baca blocker preview. Bigint ke date wajib Serial Google Sheets hanya jika terbukti serial; periksa contoh/nilai gagal. Rename/drop/key/dependency tidak aman memerlukan rencana migrasi yang direview."
+  },
+  {
+    "group": "review",
+    "code": "SEMANTIC_SCHEMA_MIGRATION_REQUIRED",
+    "kind": "error",
+    "cause": "View/proyeksi atau dependency memerlukan perubahan yang harus ditinjau.",
+    "action": "Tinjau Preview perubahan schema pada draft terbaru; deploy melalui worker jika didukung. Jika diblokir, admin meninjau dependency/ACL, tanpa DROP CASCADE sembarang."
+  },
+  {
+    "group": "review",
+    "code": "SCHEMA_CHANGE_UNSAFE",
+    "kind": "legacy",
+    "cause": "Error dari alur lama saat perubahan tipe/nullability belum didukung otomatis.",
+    "action": "Periksa apakah job lama. Gunakan draft dan preview schema terbaru; selesaikan blocker sebelum approval/deploy. Jangan hapus tabel untuk melewatinya."
+  },
+  {
+    "group": "review",
+    "code": "ARTIFACT_MISSING",
+    "kind": "error",
+    "cause": "Runtime artifact yang diperlukan deploy belum tersedia.",
+    "action": "Periksa versi konfigurasi dan proses export/generasi artifact; admin memeriksa storage/log. Buat artifact melalui aplikasi pada versi yang benar."
+  },
+  {
+    "group": "review",
+    "code": "ARTIFACT_HASH_MISMATCH",
+    "kind": "error",
+    "cause": "Isi artifact berbeda dari registry konfigurasi.",
+    "action": "Hentikan deploy versi tersebut. Admin periksa integritas artifact/storage; buat ulang melalui alur aplikasi dan review jika revisi berubah."
+  },
+  {
+    "group": "import",
+    "code": "TYPE_OR_NULL_ERROR",
+    "kind": "finding",
+    "cause": "Nilai gagal konversi tipe, melebihi batas, atau kosong pada kolom wajib.",
+    "action": "Lihat detail baris/kolom. Periksa parser/format tanggal dan angka. Text/varchar di-trim otomatis; spasi saja menjadi NULL. Nullable hanya jika sah, bukan untuk menutupi format salah."
+  },
+  {
+    "group": "import",
+    "code": "DUPLICATE_BUSINESS_KEY",
+    "kind": "finding",
+    "cause": "Business key berulang dalam batch, termasuk setelah trim.",
+    "action": "Periksa grain dan key di baris yang ditunjuk; perbaiki duplikat sumber atau mapping, kemudian validasi ulang. Jangan menghapus key hanya agar lolos."
+  },
+  {
+    "group": "import",
+    "code": "AI_REVIEW_ISSUES",
+    "kind": "checkpoint",
+    "cause": "AI menemukan nilai yang perlu diverifikasi atau coverage belum lengkap.",
+    "action": "Buka Lihat detail dan batch. KEEP_ORIGINAL hanya untuk nilai sah dengan alasan; koreksi sumber bila perlu. Sync manual dapat recheck batch AI-only tanpa keputusan; blocker nyata tetap berlaku."
+  },
+  {
+    "group": "import",
+    "code": "AI_REVIEW_NOT_IMPLEMENTED",
+    "kind": "checkpoint",
+    "cause": "Pemeriksaan AI wajib belum dapat dijalankan karena konfigurasi/capability tidak tersedia.",
+    "action": "Admin memeriksa key/model, health dan dukungan AI; lanjutkan batch melalui alur aplikasi setelah capability tersedia. Menunggu saja tidak menyelesaikan blocker."
+  },
+  {
+    "group": "import",
+    "code": "IMPORT_INPUT_PENDING",
+    "kind": "error",
+    "cause": "Pertanyaan, keputusan, atau blocker batch belum selesai.",
+    "action": "Buka batch dan selesaikan semua temuan wajib. Keputusan pengguna tidak dihapus oleh sync ulang; master/batch biasa tetap perlu preview, approval, Apply."
+  },
+  {
+    "group": "import",
+    "code": "IMPORT_STALE_REVIEW",
+    "kind": "error",
+    "cause": "Snapshot, konfigurasi, atau dependency batch berubah.",
+    "action": "Perbarui profil/dependency dan buat batch sesuai sumber terbaru; jangan menerapkan preview/approval lama."
+  },
+  {
+    "group": "import",
+    "code": "IMPORT_PREVIEW_STALE",
+    "kind": "error",
+    "cause": "Revisi atau rencana pemuatan berubah setelah preview/approval.",
+    "action": "Buat preview ulang pada revisi terbaru; revalidate dan approval ulang bila diperlukan, lalu Apply dengan token terbaru."
+  },
+  {
+    "group": "import",
+    "code": "IMPORT_ACTIVE_APPROVAL_REQUIRED",
+    "kind": "error",
+    "cause": "Sync langsung tidak memenuhi syarat konfigurasi ACTIVE, approval terpisah, akses/rilis, atau strategi load.",
+    "action": "Pastikan deploy selesai dan akses/rilis siap. FULL_REFRESH/master memakai alur review batch yang sesuai; jangan bypass approval."
+  },
+  {
+    "group": "import",
+    "code": "MASTER_BINDING_REQUIRED",
+    "kind": "error",
+    "cause": "Sumber master belum memiliki binding yang diwajibkan.",
+    "action": "Buka Registry master, lengkapi/review source binding pada versi/profil terbaru, lalu buat batch master."
+  },
+  {
+    "group": "import",
+    "code": "MASTER_STORAGE_REQUIRED",
+    "kind": "error",
+    "cause": "Storage master belum tersedia atau siap.",
+    "action": "Reviewer deploy storage definisi approved melalui Registry master; periksa binding lalu ulang batch master."
+  },
+  {
+    "group": "akses",
+    "code": "DEFAULT_DENY",
+    "kind": "access",
+    "cause": "Tidak ada policy ALLOW yang cocok; assignment wajib belum lengkap, kedaluwarsa, atau scope/policy tidak sesuai.",
+    "action": "Admin cek Preview keputusan untuk akun/action/resource yang sama. Semua required attributes berlaku AND. Lengkapi assignment lewat approval admin lain atau revisi policy sesuai kewenangan; role admin/IT tidak otomatis lolos."
+  },
+  {
+    "group": "akses",
+    "code": "EXPLICIT_DENY",
+    "kind": "access",
+    "cause": "Ada policy DENY aktif yang cocok.",
+    "action": "Admin meninjau alasan dan scope DENY. Perubahan mengikuti review policy; menambah ALLOW tidak mengalahkan DENY."
+  },
+  {
+    "group": "akses",
+    "code": "ACTION_NOT_GRANTED",
+    "kind": "access",
+    "cause": "Akun tidak mendapat tindakan yang diminta dari role/paket izin efektif.",
+    "action": "Admin meninjau role dan permission grant aktif. Berikan hanya tindakan yang sah melalui alur approval; login ulang bila sesi berubah."
+  },
+  {
+    "group": "akses",
+    "code": "DATA_PRODUCT_NOT_FOUND",
+    "kind": "error",
+    "cause": "Produk tidak aktif/tidak ada, role tidak diizinkan, atau policy sumber/produk menolak akses.",
+    "action": "Pastikan produk ACTIVE dan data dimuat. Periksa allowed_roles, SOURCE DISCOVER/READ/QUERY, lalu policy produk. Policy DATA_PRODUCT saja tidak menggantikan SOURCE; approval ETL bukan izin membaca."
+  },
+  {
+    "group": "akses",
+    "code": "SELF_ACCESS_CHANGE",
+    "kind": "error",
+    "cause": "Pengguna mencoba mengubah atau menyetujui aksesnya sendiri.",
+    "action": "Minta admin berwenang lain memproses assignment/paket izin/approval. Reviewer harus berbeda dari subjek akses sesuai aturan aplikasi."
+  },
+  {
+    "group": "akses",
+    "code": "FORBIDDEN",
+    "kind": "error",
+    "cause": "Peran atau kepemilikan tidak mengizinkan tindakan.",
+    "action": "Gunakan akun berwenang atau ajukan akses. Temukan tab/Profiling ulang tersedia untuk SOURCE_OWNER, DATA_STEWARD, PLATFORM_ADMIN; TECHNICAL_APPROVER mereview sesuai tugas."
+  },
+  {
+    "group": "akses",
+    "code": "STALE_REVISION",
+    "kind": "error",
+    "cause": "Objek akses berubah sejak halaman dimuat.",
+    "action": "Muat ulang detail, tinjau perubahan dan kirim dengan revisi terbaru. Jangan overwrite perubahan pengguna lain."
+  },
+  {
+    "group": "layanan",
+    "code": "DATABASE_PERMISSION_DENIED",
+    "kind": "error",
+    "cause": "Role runtime/DDL tidak memiliki izin atau ownership objek PostgreSQL yang diperlukan.",
+    "action": "Admin memeriksa log job, role DDL, USAGE/CREATE trusted/semantic serta ownership/ACL target. Jangan memberi runtime hak superuser."
+  },
+  {
+    "group": "layanan",
+    "code": "DATABASE_CONNECTION_FAILED",
+    "kind": "error",
+    "cause": "Aplikasi/worker tidak dapat terhubung ke database.",
+    "action": "Admin memeriksa koneksi, host/port, kredensial, pool dan health database; retry setelah koneksi pulih."
+  },
+  {
+    "group": "layanan",
+    "code": "OPENAI_NOT_CONFIGURED",
+    "kind": "error",
+    "cause": "Key atau model AI yang diperlukan belum dikonfigurasi.",
+    "action": "Admin melengkapi konfigurasi backend dan memeriksa health/policy model. Jangan menempelkan API key pada helper."
+  },
+  {
+    "group": "layanan",
+    "code": "AI_UPSTREAM_FAILED",
+    "kind": "error",
+    "cause": "Permintaan ke layanan AI gagal.",
+    "action": "Admin memeriksa request ID/log, model, key, kuota dan jaringan; coba ulang setelah penyebab diperbaiki."
+  },
+  {
+    "group": "layanan",
+    "code": "AI_BUDGET_EXCEEDED",
+    "kind": "error",
+    "cause": "Budget AI tenant tercapai.",
+    "action": "Admin meninjau penggunaan/budget; tunggu periode budget berikutnya atau ubah limit sesuai kewenangan. Retry terus akan tetap ditolak."
+  },
+  {
+    "group": "layanan",
+    "code": "AI_TASK_BUDGET_EXCEEDED",
+    "kind": "error",
+    "cause": "Budget harian policy task AI tercapai.",
+    "action": "Admin meninjau policy task dan biaya; lanjutkan saat budget tersedia atau limit disetujui untuk diubah."
+  },
+  {
+    "group": "review",
+    "code": "VALIDATION_ERROR",
+    "kind": "error",
+    "cause": "Field permintaan tidak sesuai schema API; parameter wajib, tipe, format atau batas nilai tidak valid.",
+    "action": "Baca details.field pada respons atau pesan field di form. Perbaiki nilai sesuai mapping/format yang didukung, lalu kirim ulang; approval tidak melewati validasi."
+  },
+  {
+    "group": "review",
+    "code": "RESOURCE_CONFLICT",
+    "kind": "error",
+    "cause": "Data duplikat atau relasi melanggar constraint database.",
+    "action": "Periksa kode/nama yang sudah terdaftar dan relasi objek. Muat ulang daftar/detail sebelum mencoba; jangan mendaftarkan ulang sumber yang sama."
+  },
+  {
+    "group": "layanan",
+    "code": "DATABASE_UNAVAILABLE",
+    "kind": "error",
+    "cause": "Operasi database gagal; respons umum tidak menjelaskan penyebab rinci.",
+    "action": "Catat request ID/job ID. Admin memeriksa log dan health database untuk membedakan koneksi, izin, constraint atau kegagalan query; retry setelah diperbaiki."
+  },
+  {
+    "group": "layanan",
+    "code": "INTERNAL_ERROR",
+    "kind": "error",
+    "cause": "Aplikasi mengalami kegagalan yang tidak tertangani secara spesifik.",
+    "action": "Catat request ID, halaman, waktu dan tindakan terakhir; admin memeriksa log API/worker. Periksa status job sebelum mengulangi tindakan agar tidak membuat proses ganda."
+  }
+]

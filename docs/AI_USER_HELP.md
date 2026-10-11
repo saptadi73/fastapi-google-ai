@@ -105,3 +105,8 @@ yang belum lengkap; sarannya bukan perubahan otomatis. Untuk NL2SQL, lengkapi de
 nama bisnis kolom, dimensi, definisi metrik beserta unit dan sinonim. Perbaiki data/header di sumber,
 struktur/mapping lewat revisi ETL, dan semantic melalui Governance. Relasi lintas dataset dibuat
 hanya bila diperlukan dan kolom kunci serta kardinalitasnya telah diverifikasi.
+
+
+### Tabel error response
+
+Lihat [Error response: kemungkinan penyebab dan tindakan](ERROR_RESPONSES.md). Tabel mencakup error sumber, review/deploy schema, validasi/import, akses katalog serta layanan database/AI. Di aplikasi: **Bantuan > Tabel error response** atau **Panduan lengkap > Tabel error response**; gunakan pencarian kode. Alasan keputusan akses dan blocker batch dibedakan dari error HTTP.

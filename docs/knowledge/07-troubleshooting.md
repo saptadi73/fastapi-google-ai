@@ -47,6 +47,8 @@ Aktivasi versi baru membuat konfigurasi lama SUPERSEDED. Inventaris tabel retire
 
 MASTER_RUNTIME_PENDING menolak konfigurasi/sync ETL biasa pada MASTER. Jangan ubah klasifikasi untuk melewatinya. Buka Registry master → Storage & record master, pastikan source binding approved dan storage siap, lalu buat batch dari **Sumber master terikat**. MASTER_BINDING_REQUIRED: atur/review binding. MASTER_STORAGE_REQUIRED: reviewer deploy storage approved. Batch tetap perlu preview, approval, dan apply.
 
-DDL, view, hash, aktivasi, audit sukses dan status job satu transaksi; gagal sebelum commit mempertahankan kondisi lama. Audit gagal/UI memberi alasan setelah rollback. Retry memeriksa fingerprint review.
+DDL/aktivasi satu transaksi; gagal mempertahankan kondisi lama. UI/audit mencatat alasan setelah rollback; retry memeriksa fingerprint.
 
 Text/varchar mendapat trim otomatis. Temuan dari [REDACTED] tidak sah; duplikat wajib terbukti dari data asli. Lihat panduan cleansing text dan review AI.
+
+Tabel kode, penyebab dan tindakan tersedia di Bantuan serta /guide#error-responses.

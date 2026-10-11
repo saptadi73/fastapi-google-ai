@@ -107,3 +107,10 @@ Setelah jawaban temuan selesai, sync manual kembali dapat memuat batch siap sesu
 membuka modal keterangan, kode, baris asli Sheet pada snapshot (termasuk header), kolom,
 pagination temuan dan tautan batch. Audit menyimpan ringkasan lokasi tanpa nilai mentah.
 Membuka detail tidak menjalankan sync/approval. Kegagalan lama bukan status pemuatan terbaru.
+
+
+### Tabel error response
+
+Lihat [Error response: kemungkinan penyebab dan tindakan](ERROR_RESPONSES.md). Tabel mencakup error sumber, review/deploy schema, validasi/import, akses katalog serta layanan database/AI. Di aplikasi: **Bantuan > Tabel error response** atau **Panduan lengkap > Tabel error response**; gunakan pencarian kode. Alasan keputusan akses dan blocker batch dibedakan dari error HTTP.
+
+Pemeliharaan tabel: edit `docs/error-responses.json` di backend, lalu jalankan `python scripts/export_error_reference.py --frontend-root D:/projek/vue-googlesheet-ai`. Opsi `--check` memverifikasi dokumentasi, artikel knowledge base dan salinan frontend tetap sinkron. Artikel dibatasi 6000 karakter agar helper AI menerima tabel lengkap.
