@@ -114,3 +114,10 @@ Membuka detail tidak menjalankan sync/approval. Kegagalan lama bukan status pemu
 Lihat [Error response: kemungkinan penyebab dan tindakan](ERROR_RESPONSES.md). Tabel mencakup error sumber, review/deploy schema, validasi/import, akses katalog serta layanan database/AI. Di aplikasi: **Bantuan > Tabel error response** atau **Panduan lengkap > Tabel error response**; gunakan pencarian kode. Alasan keputusan akses dan blocker batch dibedakan dari error HTTP.
 
 Pemeliharaan tabel: edit `docs/error-responses.json` di backend, lalu jalankan `python scripts/export_error_reference.py --frontend-root D:/projek/vue-googlesheet-ai`. Opsi `--check` memverifikasi dokumentasi, artikel knowledge base dan salinan frontend tetap sinkron. Artikel dibatasi 6000 karakter agar helper AI menerima tabel lengkap.
+
+
+### Format Google Sheet ideal untuk analitik dan action plan
+
+Baca [Panduan lengkap format Google Sheet](PANDUAN_FORMAT_GOOGLE_SHEET.md): penamaan file/tab dan produk, header tabular, grain/key, master/taxonomy, tipe/satuan/presisi, waktu/periode wajib untuk data periodik, metrik, kualitas, provenance, action plan berbasis bukti dan contoh tabel. Di aplikasi buka **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Waktu kejadian/pengukuran, periode data dan waktu pengambilan dibedakan; tanggal sync bukan pengganti waktu bisnis. Definisi metrik dan tindakan tetap perlu review, bukan asumsi otomatis dari nama kolom.
+
+Pemeliharaan panduan Sheet: edit `docs/google-sheet-format.json`, lalu jalankan `python scripts/export_sheet_format_guide.py --frontend-root D:/projek/vue-googlesheet-ai`; `--check` memverifikasi dokumentasi, knowledge base dan konten helper tetap sinkron.
