@@ -69,7 +69,7 @@ def test_date_review_guidance_explains_serial_values_and_view_migrations(route):
     content = "\n".join(item.body[:6000] for item in articles)
     for required in (
         "parse_date_id", "serial", "TYPE_OR_NULL_ERROR",
-        "SEMANTIC_SCHEMA_MIGRATION_REQUIRED", "configuration_id", "DROP CASCADE",
+        "SCHEMA_MIGRATION_STALE", "Preview perubahan schema", "configuration_id", "DROP CASCADE",
     ):
         assert required in content
 
@@ -105,7 +105,7 @@ async def test_help_passes_source_date_and_migration_guidance_to_provider():
             assert purpose == "USER_HELP"
             assert all(len(item["content"]) <= 6000 for item in payload["knowledge_articles"])
             assert "Workspace tidak menulis data ke Sheet" in content
-            assert "migrasi manual yang direview" in content
+            assert "Preview perubahan schema" in content
             assert "jangan" in content.lower() and "menebak tanggal" in content
             assert "periode mulai dan selesai" in content
             article_id = payload["knowledge_articles"][0]["id"]

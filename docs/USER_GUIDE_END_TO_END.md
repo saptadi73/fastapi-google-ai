@@ -103,7 +103,8 @@ Untuk menambah kolom sumber, ubah Google Sheets dahulu, lalu profiling ulang sum
 sama. Workspace ETL hanya mengubah konfigurasi, bukan isi Sheet. Clone konfigurasi lama
 menjadi draft bila header lama masih sesuai; jika tidak, buat draft baru dari profile terbaru.
 Validate, review, approve, dan deploy. Perubahan kolom target non-master yang sudah deployed
-memerlukan migrasi schema yang direview; persetujuan di form bukan migrasi otomatis.
+ditampilkan pada Preview perubahan schema di langkah Validasi & persetujuan.
+Konfirmasi dan review fingerprint diperlukan; worker memigrasikan perubahan aman saat deploy.
 
 Label `w1`, `w2`, `january`, atau `february` tidak cukup untuk query tanggal. Lengkapi tahun
 dan kalender minggu. Gunakan tanggal kejadian untuk transaksi, atau batas mulai/selesai
@@ -124,9 +125,13 @@ record hanya untuk menutupi kegagalan parsing.
 Untuk revisi dataset yang sama, jaga target tabel lama kecuali perpindahan memang
 direncanakan. Draft manual dari profil bukan clone seluruh konfigurasi lama.
 Nama view semantic mengikuti ID tab; target baru tidak menghindari perubahan
-tipe view. `SEMANTIC_SCHEMA_MIGRATION_REQUIRED` meminta migrasi terkontrol
-data/dependency/owner/grant, bukan deploy berulang atau DROP CASCADE. Dry-run
-lulus memeriksa data snapshot, bukan kompatibilitas schema database.
+tipe view. Periksa preview schema, jumlah record lama, contoh serial menjadi tanggal,
+dan blocker; centang konfirmasi schema sebelum Ajukan review. Tabel kosong dapat berubah
+tipe; tabel berisi data mendukung serial bigint menjadi date dengan parse_date_id dan
+kolom nullable baru (record lama null). Worker menjaga data/dependency/grant tanpa CASCADE,
+memperbarui hash, dan membatalkan seluruh DDL/konversi bila gagal.
+Rename/drop fisik, key dan perubahan berisiko lain tetap diblokir. Jika fingerprint stale,
+review ulang dengan preview terkini; versi approved lama tanpa bukti schema perlu clone/review.
 Cocokkan `configuration_id` pada payload job DEPLOY dengan versi APPROVED
 yang dimaksud; URL draft lama dapat menunjuk versi berbeda. Setelah deploy
 SUCCEEDED, jalankan sync untuk memuat data. Helper frontend: `/guide#review-ulang-tanggal`.

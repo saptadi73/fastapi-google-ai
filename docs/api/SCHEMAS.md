@@ -3340,6 +3340,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `snapshot_hash` | Ya | `string` | — | {"pattern":"^[a-f0-9]{64}$"} |
 | `reviewed_columns` | Ya | `array<string>` | — | {"maxItems":100,"minItems":1} |
 | `reviewed_sections` | Ya | `array<enum ["identity","columns","cleansing","quality","load","semantic"]>` | — | — |
+| `reviewed_schema_fingerprint` | Tidak | `string / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 

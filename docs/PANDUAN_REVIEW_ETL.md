@@ -4,7 +4,7 @@ Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runt
 
 ## Menjalankan
 
-1. Jalankan migrasi pada database aplikasi yang dituju setelah meninjau konfigurasi koneksinya. Migrasi `9c32a61d740e` menambahkan kolom JSONB `review_state` pada `platform.configuration_version`, tanpa mengubah tabel data ETL. Migrasi ini sudah diuji pada database test terpisah; penerapan pada database aplikasi/production dilakukan saat rollout.
+1. Jalankan migrasi pada database aplikasi yang dituju setelah meninjau konfigurasi koneksinya. `9c32a61d740e` menambahkan `review_state`; `a7q0d3n6u9w2` memberi role `DATABASE_DDL_URL` hanya USAGE schema audit dan INSERT event_log agar audit migrasi tersimpan dalam transaksi DDL. Role penerap Alembic harus berhak memberi grant tersebut. Izin terbatas ini tetap dipertahankan saat downgrade untuk retry/audit historis.
 
    ```powershell
    .\venv\Scripts\python.exe -m alembic upgrade head
@@ -47,9 +47,10 @@ Urutan untuk kolom baru:
 5. Validate/dry-run, selesaikan pertanyaan, submit-review, approve, dan selesaikan
    persetujuan tayang bila diaktifkan. Jangan mengubah Sheet lagi di antara review dan deploy;
    deploy membaca ulang sumber dan menolak snapshot yang sudah berubah.
-6. Untuk tabel non-master yang sudah deployed, koordinasikan migrasi schema terlebih dahulu
-   jika kolom target bertambah/berubah. Deploy hanya membuat tabel baru atau menerima schema
-   identik; `SCHEMA_CHANGE_UNSAFE` bukan alasan untuk menghapus tabel atau registrasi ulang.
+6. Pada langkah **Validasi & persetujuan**, periksa **Preview perubahan schema**:
+   operasi, jumlah record lama, contoh tanggal, dan blocker. Centang konfirmasi schema
+   sebelum submit bila target/view berubah. Approval mengikat fingerprint schema dan data;
+   worker menjalankan perubahan aman saat deploy, bukan saat dry-run atau approval.
 7. Deploy, tunggu sukses, kemudian Sync manual untuk NON_MASTER yang memenuhi syarat; master/batch biasa tetap review import sebelum Apply.
 
 ### Draft manual APPEND dan key
@@ -100,14 +101,23 @@ konversi otomatis nama bulan. Filter rentang tanggal tersedia; pemilihan tanggal
 dan analisis overlap periode tetap harus ditentukan eksplisit, bukan fitur otomatis.
 Penambahan kolom target tanggal pada tabel non-master yang ada tetap memerlukan migrasi.
 
-Nama tabel tujuan berbeda pada draft baru tidak otomatis menghindari migrasi:
-nama view semantic tetap mengikuti ID tab, bukan nama tabel. Perubahan tipe dari
-`bigint` ke `date`, rename, urutan, atau penghapusan kolom view memerlukan migrasi
-terkontrol. `SEMANTIC_SCHEMA_MIGRATION_REQUIRED` menunjukkan perubahan tersebut;
-deploy biasa tidak menjatuhkan view/data atau menggunakan `DROP ... CASCADE`.
-Tim teknis memeriksa dependency, menjaga owner/grant serta data lama, lalu
-migrasi dalam transaksi dan deploy versi APPROVED yang benar. URL versi draft
-lama tidak selalu sama dengan konfigurasi yang tercantum pada payload job DEPLOY.
+Nama view semantic mengikuti ID tab, bukan tabel. Preview juga menampilkan perubahan
+proyeksi atau perpindahan target view; mengganti tabel bukan jalan pintas menghindari review.
+Worker mendukung kolom nullable baru (record lama null), perubahan tipe pada tabel kosong,
+serta `bigint` serial Sheets menjadi `date` pada tabel berisi data bila mapping memakai
+`parse_date_id` dan seluruh serial valid. Hash record diperbarui agar APPEND tetap mengenali
+record identik. View dibuat ulang hanya tanpa dependency yang menghalangi, menjaga ACL dan
+komentar, tanpa CASCADE atau menghapus record. DDL/konversi/hash/audit berada dalam satu
+transaksi; kegagalan membatalkannya. Aktivasi registry terpisah: jika gagal setelah DDL,
+schema dan audit tetap konsisten; retry deploy melanjutkan tanpa mengulang konversi.
+
+Rename/drop kolom fisik, perubahan key, tipe lain pada tabel berisi data, kolom wajib baru
+pada tabel berisi data, dan dependency/owner/grant tidak aman tetap diblokir.
+`SCHEMA_REVIEW_REQUIRED`: clone/review versi lama yang belum punya bukti schema.
+`SCHEMA_MIGRATION_STALE`: schema/data berubah sejak review; muat preview baru pada draft
+dan ajukan ulang. `SCHEMA_MIGRATION_BLOCKED`: selesaikan blocker, bukan deploy berulang.
+Migrasi aplikasi bukan untuk schema master atau backfill otomatis kolom baru.
+Cocokkan konfigurasi APPROVED dengan payload job DEPLOY, bukan URL draft lama.
 
 ### Pengecualian untuk schema master
 

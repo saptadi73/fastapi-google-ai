@@ -125,7 +125,7 @@ def schema_plan(config, sheet_id, tenant_id):
         "target": f"trusted.{table.name}",
         "semantic_view": "semantic.v_" + str(sheet_id).replace("-", ""),
         "ddl": str(CreateTable(table).compile(dialect=postgresql.dialect())),
-        "policy": "CREATE_ONLY_OR_IDENTICAL; schema changes require a reviewed migration",
+        "policy": "REVIEWED_NON_DESTRUCTIVE_EVOLUTION",
     }
 
 
@@ -163,64 +163,47 @@ def validate_semantic_view_columns(existing, proposed, dialect):
         )
 
 
-async def deploy_schema(config, sheet_id, tenant_id):
+async def preview_schema_migration(config, sheet_id, tenant_id):
+    from app.services.schema_migration_service import inspect_migration
+    settings = get_settings()
+    engine = make_engine(settings.database_ddl_url.get_secret_value() or settings.database_url.get_secret_value())
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+            await conn.execute(text("SET LOCAL statement_timeout = '120s'"))
+            return (await conn.run_sync(lambda sync: inspect_migration(
+                sync, compile_table(config, sheet_id), "v_" + str(sheet_id).replace("-", ""),
+                {"parsed": config, "tenant_id": tenant_id},
+            )))[0]
+    finally:
+        await engine.dispose()
+
+
+async def deploy_schema(config, sheet_id, tenant_id, *, migration_fingerprint=None, audit_user_id=None, configuration_id=None):
+    from app.services.schema_migration_service import apply_migration, restore_view_access
     s = get_settings()
     engine = make_engine(s.database_ddl_url.get_secret_value() or s.database_url.get_secret_value())
     table = compile_table(config, sheet_id)
     view_name = "v_" + str(sheet_id).replace("-", "")
     try:
         async with engine.begin() as conn:
+            await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            await conn.execute(text("SET LOCAL statement_timeout = '120s'"))
             await conn.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:name))"), {"name": table.fullname}
             )
 
-            def create_or_check(sync):
-                inspector = inspect(sync)
-                if not inspector.has_table(table.name, schema="trusted"):
-                    table.create(sync)
-                    return
-                existing = inspector.get_columns(table.name, schema="trusted")
-                actual = {c["name"]: c for c in existing}
-                if set(actual) != set(table.c.keys()):
-                    raise AppError(
-                        "SCHEMA_CHANGE_UNSAFE", "Perubahan kolom memerlukan migration manual yang direview."
-                    )
-                for c in table.c:
-                    expected = str(c.type.compile(dialect=sync.dialect)).lower()
-                    found = str(actual[c.name]["type"].compile(dialect=sync.dialect)).lower()
-                    if expected != found or bool(actual[c.name]["nullable"]) != bool(c.nullable):
-                        raise AppError(
-                            "SCHEMA_CHANGE_UNSAFE", "Perubahan tipe/nullability memerlukan migration manual."
-                        )
-                unique_sets = {
-                    tuple(u["column_names"])
-                    for u in inspector.get_unique_constraints(table.name, schema="trusted")
-                }
-                expected_sets = {
-                    tuple(c.name for c in u.columns)
-                    for u in table.constraints
-                    if isinstance(u, UniqueConstraint)
-                }
-                if unique_sets != expected_sets:
-                    raise AppError(
-                        "SCHEMA_CHANGE_UNSAFE", "Perubahan business key memerlukan migration manual."
-                    )
-
-            await conn.run_sync(create_or_check)
+            await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:name))"),
+                               {"name": f"semantic.{view_name}"})
+            if await conn.run_sync(lambda sync: inspect(sync).has_table(table.name, schema="trusted")):
+                await conn.execute(text(f"LOCK TABLE trusted.{conn.dialect.identifier_preparer.quote(table.name)} IN ACCESS EXCLUSIVE MODE"))
+            migration, grants, comments, info = await conn.run_sync(lambda sync: apply_migration(
+                sync, table, view_name, config, tenant_id, migration_fingerprint,
+            ))
             public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
             if not public:
                 raise AppError("SEMANTIC_INVALID", "Setidaknya satu kolom non-sensitif diperlukan.")
 
-            def check_view(sync):
-                inspector = inspect(sync)
-                if view_name in inspector.get_view_names(schema="semantic"):
-                    validate_semantic_view_columns(
-                        inspector.get_columns(view_name, schema="semantic"),
-                        [table.c._tenant_id, *(table.c[name] for name in public)],
-                        sync.dialect,
-                    )
-
-            await conn.run_sync(check_view)
             quote = conn.dialect.identifier_preparer.quote
             operator = make_url(s.database_url.get_secret_value()).username
             if operator:
@@ -249,6 +232,7 @@ async def deploy_schema(config, sheet_id, tenant_id):
             query = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
             # Identifier generated exclusively from UUID; data values quoted by SQLAlchemy.
             await conn.execute(text(f"CREATE OR REPLACE VIEW semantic.{quote(view_name)} AS {query}"))
+            await conn.run_sync(lambda sync: restore_view_access(sync, view_name, grants, comments, info))
             await conn.execute(text(f"SELECT * FROM semantic.{quote(view_name)} LIMIT 0"))
             if operator:
                 await conn.execute(
@@ -257,6 +241,13 @@ async def deploy_schema(config, sheet_id, tenant_id):
             if s.database_nl2sql_url.get_secret_value():
                 reader = make_url(s.database_nl2sql_url.get_secret_value()).username
                 await conn.execute(text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(reader)}"))
+            if migration["requires_migration"] and configuration_id:
+                from app.models.audit import AuditEvent
+
+                await conn.execute(AuditEvent.__table__.insert().values(
+                    tenant_id=tenant_id, user_id=audit_user_id, resource_id=str(configuration_id),
+                    event="configuration.schema.migrated", details=migration,
+                ))
     finally:
         await engine.dispose()
-    return table, view_name
+    return table, view_name, migration

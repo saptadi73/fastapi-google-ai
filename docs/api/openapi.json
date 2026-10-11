@@ -27146,6 +27146,18 @@
             },
             "type": "array",
             "title": "Reviewed Sections"
+          },
+          "reviewed_schema_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Schema Fingerprint"
           }
         },
         "additionalProperties": false,

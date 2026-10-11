@@ -23,7 +23,7 @@ from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
 from app.services.release_approval_service import require_release_ready
-from app.services.schema_compiler_service import deploy_schema, schema_plan
+from app.services.schema_compiler_service import deploy_schema, preview_schema_migration, schema_plan
 from app.services.source_approver_service import require_source_approver
 from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
 
@@ -49,6 +49,9 @@ class ConfigurationService:
             )
         if data.snapshot_hash != validation["snapshot_hash"]:
             raise AppError("REVIEW_STALE", "Snapshot berubah; validasi kembali.", 409)
+        migration = validation["deployment_plan"]["migration"]
+        if any(op["action"] != "CREATE_TABLE" for op in migration["operations"]) and data.reviewed_schema_fingerprint != migration["fingerprint"]:
+            raise AppError("SCHEMA_REVIEW_REQUIRED", "Periksa dan konfirmasi rencana perubahan schema sebelum mengajukan review.", 409)
         expected_columns = {c["target_column"] for c in config.configuration_json["columns"]}
         if set(data.reviewed_columns) != expected_columns or set(data.reviewed_sections) != set(
             REVIEW_SECTIONS
@@ -67,6 +70,7 @@ class ConfigurationService:
             "snapshot_id": validation["snapshot_id"],
             "classification_revision": sheet.classification_revision,
             "dataset_kind": sheet.dataset_kind,
+            "schema_migration": validation["deployment_plan"]["migration"],
         }
         audit(self.session, self.user, "configuration.review_requested", config.id)
         return config
@@ -180,11 +184,13 @@ class ConfigurationService:
                 )
                 after[column.target_column] = "[REDACTED]" if sensitive else output[column.target_column]
             previews.append({"source_row": row_number, "before": before, "after": after})
+        migration = await preview_schema_migration(parsed, sheet.id, self.user.tenant_id)
         return {
-            "valid": not parsed.unresolved_questions and not issues,
+            "valid": not parsed.unresolved_questions and not issues and migration["allowed"],
             "classification": classification_record(sheet),
             "ready_for_review": not parsed.unresolved_questions
             and not issues
+            and migration["allowed"]
             and classification_record(sheet)["execution_ready"],
             "sample_rows_valid": len(good),
             "sample_rows_invalid": len(issues),
@@ -194,7 +200,7 @@ class ConfigurationService:
             "snapshot_hash": snapshot.content_hash,
             "row_previews": previews,
             "issues": [{"source_row": i["source_row"], "errors": i["errors"]} for i in issues[:50]],
-            "deployment_plan": schema_plan(parsed, sheet.id, self.user.tenant_id),
+            "deployment_plan": {**schema_plan(parsed, sheet.id, self.user.tenant_id), "migration": migration},
         }
 
     async def patch(self, config_id, data):
@@ -259,6 +265,10 @@ class ConfigurationService:
                 raise AppError(
                     "REVIEW_STALE", "Snapshot berubah setelah review; validasi dan ajukan kembali.", 409
                 )
+            migration = validation["deployment_plan"]["migration"]
+            if migration["requires_migration"] and (evidence.get("schema_migration") or {}).get("fingerprint") != migration["fingerprint"]:
+                code = "SCHEMA_MIGRATION_STALE" if evidence.get("schema_migration") else "SCHEMA_REVIEW_REQUIRED"
+                raise AppError(code, "Rencana schema berubah; editor perlu mengajukan review ulang dari aplikasi.", 409)
             if not validation["valid"]:
                 raise AppError(
                     "CONFIGURATION_INVALID", "Selesaikan pertanyaan dan error dry-run sebelum approval."
@@ -368,7 +378,11 @@ class ConfigurationService:
         )
         if collision:
             raise AppError("CONFIGURATION_CONFLICT", "Kode data product sudah digunakan tab lain.", 409)
-        _, view_name = await deploy_schema(parsed, sheet.id, self.user.tenant_id)
+        _, view_name, _migration = await deploy_schema(
+            parsed, sheet.id, self.user.tenant_id,
+            migration_fingerprint=((config.review_state or {}).get("schema_migration") or {}).get("fingerprint"),
+            audit_user_id=self.user.id, configuration_id=config.id,
+        )
         if sheet.active_configuration_id:
             old = await self.repo.get(Configuration, sheet.active_configuration_id)
             old.status = "SUPERSEDED"
