@@ -742,7 +742,7 @@ Contoh ConfigurationCreate lengkap yang valid secara schema:
     "load_strategy": "UPSERT",
     "columns": [
       {"source_column":"ID","target_column":"transaction_id","target_type":"text","nullable":false,"is_business_key":true,"transformation_codes":["trim"]},
-      {"source_column":"Tanggal","target_column":"transaction_date","target_type":"date","nullable":false,"transformation_codes":["parse_date_id"]},
+      {"source_column":"Tanggal","target_column":"transaction_date","target_type":"date","nullable":false,"transformation_codes":["parse_date_id"],"date_input_format":"TEXT"},
       {"source_column":"Cabang","target_column":"branch_name","target_type":"text","nullable":false,"transformation_codes":["trim"]},
       {"source_column":"Total","target_column":"net_amount","target_type":"numeric","nullable":false,"transformation_codes":["parse_decimal_id"]}
     ],
@@ -1924,3 +1924,13 @@ konfigurasi dan Apply transaksional. `checkpoint.approval_mode=ACTIVE_CONFIGURAT
 mencatat dasar approval, bukan impersonasi reviewer. Master/FULL_REFRESH serta
 drift/PII/konflik berhenti dengan blocker. Hasil job memuat setiap tab dan status;
 SUCCEEDED berarti telah dimuat. `checkpoint.applied_at` mencatat waktu pemuatan.
+
+### Review perubahan schema NON_MASTER
+
+Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Reviewer menyetujui schema dan mapping pada revisi serta fingerprint schema/data yang sama. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
+
+Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal = Serial Google Sheets** (`date_input_format: "GOOGLE_SHEETS_SERIAL"`) bersama `parse_date_id`. Tipe bigint atau angka dalam rentang valid saja tidak membuktikan bahwa nilainya tanggal. Konfirmasi makna sumber melalui mapping; backend memeriksa seluruh nilai non-null dan menampilkan `validation.checked`, `convertible`, `invalid`, serta contoh. Nilai di luar rentang 1..2958465 menghentikan migrasi. Mode serial eksplisit menolak text, pecahan dan nilai non-finite; mode `TEXT` memakai pola strptime dan menolak angka. Default null mempertahankan parser konfigurasi lama, tetapi tidak mengizinkan migrasi berisiko tanpa deklarasi format. Workbook menyimpan pilihan ini di `02 Struktur Kolom`, kolom AD.
+
+Worker mendukung kolom nullable baru dan perubahan tipe pada tabel kosong. View yang perlu dibuat ulang mempertahankan ACL/komentar; dependency yang tidak aman, rename/drop fisik, perubahan key dan backfill wajib diblokir. DDL, view, konversi, hash, aktivasi konfigurasi, audit sukses dan status job SUCCEEDED berada dalam satu transaksi. Kegagalan sebelum commit mempertahankan schema/data serta konfigurasi aktif sebelumnya. Audit kegagalan dan alasan UI dicatat setelah rollback; retry memeriksa fingerprint review kembali.
+
+`DATABASE_RETRY_REQUIRED`: database sibuk/timeout/konflik; tunggu lalu retry. `DATABASE_PERMISSION_DENIED`: admin memeriksa role DDL, ownership dan izin SET ke role aplikasi. Catat ID job; jangan mengubah SQL atau menghapus data untuk melewati blocker. Migrasi platform saat rollout berbeda dari perubahan schema dataset melalui aplikasi.

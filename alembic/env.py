@@ -1,16 +1,26 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
-from alembic import context
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from alembic import context
 from app.core.config import get_settings
 from app.models import Base
 
 config = context.config
 fileConfig(config.config_file_name)
 target_metadata = Base.metadata
+
+
+def migration_url():
+    application = get_settings().database_url.get_secret_value()
+    override = os.getenv("ALEMBIC_DATABASE_URL")
+    if override and make_url(override).database != make_url(application).database:
+        raise ValueError("ALEMBIC_DATABASE_URL must target the configured application database")
+    return override or application
 
 
 def include_name(name, type_, parent_names):
@@ -35,7 +45,7 @@ def migrate(connection):
 
 
 async def online():
-    engine = create_async_engine(get_settings().database_url.get_secret_value(), poolclass=NullPool)
+    engine = create_async_engine(migration_url(), poolclass=NullPool)
     async with engine.connect() as connection:
         await connection.run_sync(migrate)
     await engine.dispose()
@@ -43,7 +53,7 @@ async def online():
 
 if context.is_offline_mode():
     context.configure(
-        url=get_settings().database_url.get_secret_value(),
+        url=migration_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

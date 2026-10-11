@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlalchemy.orm.exc import DetachedInstanceError
 
+from app.core import database
 from app.core.exceptions import AppError
 from app.workers import runner
 from app.workers.runner import _job_failure_details
@@ -38,6 +39,14 @@ def test_job_failure_details_keeps_domain_errors_actionable():
     code, message = _job_failure_details(AppError("SOURCE_ACCESS_DENIED", "Akses ditolak."), "PROFILE")
 
     assert (code, message) == ("SOURCE_ACCESS_DENIED", "Akses ditolak.")
+
+
+@pytest.mark.parametrize("sqlstate", ["55P03", "57014", "40001", "40P01"])
+def test_deploy_database_conflicts_have_actionable_retry_message(sqlstate):
+    code, message = _job_failure_details(WrappedDatabaseFailure(sqlstate), "DEPLOY")
+    assert code == "DATABASE_RETRY_REQUIRED"
+    assert "retry" in message and "dipertahankan" in message
+    assert _job_failure_details(DatabaseFailure(sqlstate), "PROFILE")[0] != code
 
 
 def test_unexpected_exception_does_not_expose_raw_details():
@@ -87,7 +96,9 @@ async def test_worker_records_original_failure_after_rollback_detaches_job(monke
         )
         session.begin = lambda session=session, index=index: SessionContext(session, index == 1)
         sessions.append(SessionContext(session))
-    monkeypatch.setattr(runner, "SessionFactory", Mock(side_effect=sessions))
+    factory = Mock(side_effect=sessions)
+    monkeypatch.setattr(runner, "SessionFactory", factory)
+    monkeypatch.setattr(database, "SessionFactory", factory)
     monkeypatch.setattr(runner, "_audit_stage", Mock())
     monkeypatch.setattr(runner, "add_notification", Mock())
     fail_import = AsyncMock()

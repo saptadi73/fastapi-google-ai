@@ -107,6 +107,7 @@ class ColumnMapping(StrictModel):
     numeric_precision: int | None = Field(default=None, ge=1, le=100)
     numeric_scale: int | None = Field(default=None, ge=0, le=50)
     date_format: str | None = Field(default=None, max_length=40)
+    date_input_format: Literal["TEXT", "GOOGLE_SHEETS_SERIAL"] | None = None
     number_locale: str | None = Field(default=None, pattern=r"^(ID|US)$")
     varchar_length: int | None = Field(default=None, ge=1, le=10485760)
     unit_conversion: UnitConversion | None = None
@@ -118,6 +119,10 @@ class ColumnMapping(StrictModel):
 
     @model_validator(mode="after")
     def valid_numeric_scale(self):
+        if self.date_input_format is not None and (
+            self.target_type != "date" or "parse_date_id" not in self.transformation_codes
+        ):
+            raise ValueError("date_input_format requires date with parse_date_id")
         parameter_operations = [item.operation for item in self.transform_parameters]
         parameterized = {"prefix", "suffix", "replace"}
         if any(operation not in self.transformation_codes for operation in parameter_operations):

@@ -28,7 +28,7 @@ REVIEW = "14 Review"
 TAXONOMY = "04 Taxonomy Mapping"
 COLUMN_PARAMETERS = {
     "numeric_precision": 21, "numeric_scale": 22, "varchar_length": 23,
-    "date_format": 24, "number_locale": 25, "unit_conversion": 26, "source_timezone": 27, "currency_conversion": 28, "transform_parameters": 29,
+    "date_format": 24, "number_locale": 25, "unit_conversion": 26, "source_timezone": 27, "currency_conversion": 28, "transform_parameters": 29, "date_input_format": 30,
 }
 # Only these cells are writable. Unsupported parameters and identifiers are signed.
 EDITABLE = {

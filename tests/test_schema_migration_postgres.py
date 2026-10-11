@@ -52,6 +52,7 @@ def configs():
     new = old.model_copy(deep=True)
     new.columns[0].target_type = "date"
     new.columns[0].transformation_codes = ["parse_date_id"]
+    new.columns[0].date_input_format = "GOOGLE_SHEETS_SERIAL"
     return old, new
 
 
@@ -89,8 +90,15 @@ async def test_reviewed_date_conversion_preserves_data_and_grants(migration_db, 
             lambda sync: inspect_migration(sync, target, view, {"parsed": new, "tenant_id": tenant})
         )
         assert plan["allowed"] and plan["requires_migration"]
+        assert plan["comparison"]["columns"][0]["before"]["type"] == "bigint"
+        assert plan["comparison"]["columns"][0]["after"]["type"] == "date"
+        assert plan["comparison"]["view"]["recreate"]
         if populated:
             assert plan["operations"][0]["examples"] == [{"before": 46023, "after": "2026-01-01"}]
+            assert plan["operations"][0]["validation"] == {
+                "checked": 1, "convertible": 1, "invalid": 0, "declared": True,
+                "input_format": "GOOGLE_SHEETS_SERIAL",
+            }
         applied, grants, comments, info = await conn.run_sync(
             lambda sync: apply_migration(sync, target, view, new, tenant, plan["fingerprint"])
         )
@@ -216,6 +224,57 @@ async def test_invalid_serial_and_dependent_view_block_before_changes(migration_
         assert not plan["allowed"]
         assert any("rentang serial" in b for b in plan["blockers"])
         assert any("View turunan" in b for b in plan["blockers"])
+        assert plan["operations"][0]["validation"]["invalid"] == 1
+        assert plan["operations"][0]["validation"]["convertible"] == 0
+        assert plan["comparison"]["view"]["dependencies"]
+        await tx.rollback()
+
+
+@pytest.mark.parametrize("input_format", [None, "TEXT"])
+async def test_serial_conversion_requires_explicit_format_even_for_valid_numbers(migration_db, input_format):
+    old, new = configs()
+    new.columns[0].date_input_format = input_format
+    sheet, tenant = str(uuid4()), str(uuid4())
+    async with migration_db.connect() as conn:
+        tx = await conn.begin()
+        original, view = await seed(conn, old, sheet, tenant, True)
+        target = compile_table(new, sheet)
+        plan, _ = await conn.run_sync(
+            lambda sync: inspect_migration(sync, target, view, {"parsed": new, "tenant_id": tenant})
+        )
+        assert not plan["allowed"]
+        assert any("secara eksplisit" in b for b in plan["blockers"])
+        assert not plan["operations"][0]["validation"]["declared"]
+        assert "examples" not in plan["operations"][0]
+        assert (await conn.execute(original.select())).mappings().one()["start_date"] == 46023
+        await tx.rollback()
+
+
+@pytest.mark.parametrize("change", ["NULLABILITY", "KEY"])
+async def test_preview_compares_nullability_and_keys_before_changes(migration_db, change):
+    old, _ = configs()
+    new = old.model_copy(deep=True)
+    if change == "NULLABILITY":
+        new.columns[0].nullable = True
+    else:
+        new.columns[0].is_business_key = True
+    sheet, tenant = str(uuid4()), str(uuid4())
+    async with migration_db.connect() as conn:
+        tx = await conn.begin()
+        _, view = await seed(conn, old, sheet, tenant, True)
+        plan, _ = await conn.run_sync(lambda sync: inspect_migration(
+            sync, compile_table(new, sheet), view, {"parsed": new, "tenant_id": tenant},
+        ))
+        column = plan["comparison"]["columns"][0]
+        assert column["before"]["nullable"] is False
+        assert change in column["changes"]
+        if change == "KEY":
+            assert plan["comparison"]["keys"]["changed"]
+            assert not plan["allowed"]
+            assert any("key" in b for b in plan["blockers"])
+        else:
+            assert column["after"]["nullable"] is True
+            assert plan["allowed"]
         await tx.rollback()
 
 
@@ -236,6 +295,10 @@ async def test_nullable_addition_rehashes_populated_append_without_duplicates(mi
             lambda sync: inspect_migration(sync, target, view, {"parsed": new, "tenant_id": tenant})
         )
         assert plan["allowed"]
+        note = next(c for c in plan["comparison"]["columns"] if c["column"] == "note")
+        assert note["before"] is None and note["after"]["nullable"]
+        assert note["changes"] == ["ADDED"]
+        assert not plan["comparison"]["keys"]["changed"]
         await conn.run_sync(
             lambda sync: apply_migration(sync, target, view, new, tenant, plan["fingerprint"])
         )

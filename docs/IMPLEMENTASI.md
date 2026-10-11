@@ -90,8 +90,8 @@ Lihat [status, matriks rute, dan gate rollout BE16](ACCESS_JURISDICTION_BE16.md)
    memfilter tenant tetap, dan query builder menambahkan tenant serta row scope dari akun database aplikasi.
 7. Metadata menggunakan composite FK untuk mencegah referensi tenant/source/tab silang. API tidak menyediakan
    SQL bebas. Role aplikasi harus dibatasi sebelum deployment produksi; RLS menyeluruh belum dipasang.
-8. DDL dan registry dapat menggunakan koneksi berbeda. Jika DDL commit tetapi aktivasi registry gagal,
-   object fisik yang belum aktif mungkin tertinggal. Retry memeriksa kompatibilitas object; tidak ada aktivasi otomatis.
+8. Deploy/rollback NON_MASTER memakai satu koneksi dan transaksi untuk DDL, registry, audit serta status sukses job.
+   Role login DDL berganti ke role aplikasi untuk operasi registry; kegagalan aktivasi juga membatalkan DDL.
 9. SQL fallback bebas sengaja tidak diekspos. NL2SQL menggunakan structured plan dari produk yang
    diizinkan; join hanya melalui relationship APPROVED yang disertakan dalam konteks dan diverifikasi
    backend. Pertanyaan berulang dapat dijadikan template setelah validasi dan activation.

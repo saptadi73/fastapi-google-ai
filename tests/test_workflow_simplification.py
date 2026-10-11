@@ -79,7 +79,8 @@ def configuration_context(monkeypatch):
     config = SimpleNamespace(
         id=str(uuid4()), source_id=str(uuid4()), source_sheet_id=str(uuid4()),
         created_by="maker", status="NEEDS_REVIEW", revision_no=2,
-        review_state={"submitted_revision": 2, "snapshot_hash": "snapshot"},
+        review_state={"submitted_revision": 2, "snapshot_hash": "snapshot",
+                      "schema_migration": {"fingerprint": "schema"}},
     )
     source = SimpleNamespace(id=config.source_id, access_revision=1, access_review_status="PENDING")
     session = Mock()
@@ -89,7 +90,8 @@ def configuration_context(monkeypatch):
     )
     service.repo.get = AsyncMock(return_value=config)
     service.repo.add = AsyncMock()
-    service.validate = AsyncMock(return_value={"valid": True, "snapshot_hash": "snapshot"})
+    service.validate = AsyncMock(return_value={"valid": True, "snapshot_hash": "snapshot",
+        "deployment_plan": {"migration": {"fingerprint": "schema", "requires_migration": False}}})
     service.require_classification_evidence = Mock()
     service.artifacts.create = AsyncMock()
     monkeypatch.setattr(configuration_service, "require_source_approver", AsyncMock())

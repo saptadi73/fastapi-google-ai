@@ -116,7 +116,7 @@ lalu periksa dry-run; jangan mengarang tanggal dari label yang ambigu. Panduan l
 
 Tanggal native Google Sheets dibaca sebagai angka serial, misalnya `46023` =
 `2026-01-01`. Target `date` saja tidak cukup: tambahkan `parse_date_id` pada
-**Cleansing** untuk kedua kolom; pola tanggal boleh kosong untuk serial.
+**Cleansing** dan pilih **Format nilai tanggal = Serial Google Sheets** untuk kedua kolom; pola tanggal boleh kosong untuk serial.
 Text tanggal menggunakan pola strptime sesuai sumber jika diperlukan.
 **Simpan draft**, **Dry-run ulang**, periksa kolom/baris `TYPE_OR_NULL_ERROR`,
 lengkapi checklist lalu **Ajukan review**. Jangan mengubah nullable atau menghapus
@@ -129,10 +129,7 @@ tipe view. Periksa preview schema, jumlah record lama, contoh serial menjadi tan
 dan blocker; centang konfirmasi schema sebelum Ajukan review. Tabel kosong dapat berubah
 tipe; tabel berisi data mendukung serial bigint menjadi date dengan parse_date_id dan
 kolom nullable baru (record lama null). Worker menjaga data/dependency/grant tanpa CASCADE,
-memperbarui hash, dan membatalkan seluruh DDL/konversi bila transaksi migrasi gagal.
-Jika migrasi sudah selesai tetapi aktivasi konfigurasi gagal, schema tetap berubah dan
-audit migrasi tersimpan. Retry deploy dapat melanjutkan aktivasi hanya jika schema/data
-masih cocok dengan hasil migrasi yang tercatat; perubahan lain meminta review ulang.
+memperbarui hash. DDL, view, konversi, hash, aktivasi konfigurasi, audit sukses dan status job SUCCEEDED berada dalam satu transaksi. Kegagalan sebelum commit mempertahankan schema/data serta konfigurasi aktif sebelumnya. Audit kegagalan dan alasan UI dicatat setelah rollback; retry memeriksa fingerprint review kembali.
 Rename/drop fisik, key dan perubahan berisiko lain tetap diblokir. Jika fingerprint stale,
 review ulang dengan preview terkini; versi approved lama tanpa bukti schema perlu clone/review.
 Cocokkan `configuration_id` pada payload job DEPLOY dengan versi APPROVED
@@ -255,3 +252,13 @@ nilai mentah. Riwayat kegagalan lama tidak berarti pemuatan terbaru gagal. Membu
 detail tidak menyetujui temuan, mengubah Sheet, atau menjalankan sync. Dugaan PII
 perlu verifikasi pemilik data; jangan menerima nama pribadi pada kolom non-PII tanpa
 memperbaiki klasifikasi/mapping yang sesuai.
+
+### Review perubahan schema NON_MASTER
+
+Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Reviewer menyetujui schema dan mapping pada revisi serta fingerprint schema/data yang sama. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
+
+Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal = Serial Google Sheets** (`date_input_format: "GOOGLE_SHEETS_SERIAL"`) bersama `parse_date_id`. Tipe bigint atau angka dalam rentang valid saja tidak membuktikan bahwa nilainya tanggal. Konfirmasi makna sumber melalui mapping; backend memeriksa seluruh nilai non-null dan menampilkan `validation.checked`, `convertible`, `invalid`, serta contoh. Nilai di luar rentang 1..2958465 menghentikan migrasi. Mode serial eksplisit menolak text, pecahan dan nilai non-finite; mode `TEXT` memakai pola strptime dan menolak angka. Default null mempertahankan parser konfigurasi lama, tetapi tidak mengizinkan migrasi berisiko tanpa deklarasi format. Workbook menyimpan pilihan ini di `02 Struktur Kolom`, kolom AD.
+
+Worker mendukung kolom nullable baru dan perubahan tipe pada tabel kosong. View yang perlu dibuat ulang mempertahankan ACL/komentar; dependency yang tidak aman, rename/drop fisik, perubahan key dan backfill wajib diblokir. DDL, view, konversi, hash, aktivasi konfigurasi, audit sukses dan status job SUCCEEDED berada dalam satu transaksi. Kegagalan sebelum commit mempertahankan schema/data serta konfigurasi aktif sebelumnya. Audit kegagalan dan alasan UI dicatat setelah rollback; retry memeriksa fingerprint review kembali.
+
+`DATABASE_RETRY_REQUIRED`: database sibuk/timeout/konflik; tunggu lalu retry. `DATABASE_PERMISSION_DENIED`: admin memeriksa role DDL, ownership dan izin SET ke role aplikasi. Catat ID job; jangan mengubah SQL atau menghapus data untuk melewati blocker. Migrasi platform saat rollout berbeda dari perubahan schema dataset melalui aplikasi.

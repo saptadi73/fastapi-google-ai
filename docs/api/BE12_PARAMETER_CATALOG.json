@@ -374,6 +374,17 @@
         "default": [],
         "supported": false,
         "reason": "BE-14"
+      },
+      {
+        "name": "date_input_format",
+        "type": "enum",
+        "default": null,
+        "allowed": [
+          "TEXT",
+          "GOOGLE_SHEETS_SERIAL"
+        ],
+        "supported": true,
+        "scope": "date + parse_date_id; required explicit serial declaration for populated bigint to date migration"
       }
     ],
     "operations": [

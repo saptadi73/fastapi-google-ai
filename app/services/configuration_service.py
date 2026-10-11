@@ -392,6 +392,7 @@ class ConfigurationService:
             completed_fingerprint = migration_audit.details.get("applied_fingerprint")
         _, view_name, _migration = await deploy_schema(
             parsed, sheet.id, self.user.tenant_id,
+            connection=await self.session.connection(),
             migration_fingerprint=reviewed_fingerprint,
             completed_fingerprint=completed_fingerprint,
             compatible_rollback=rollback,

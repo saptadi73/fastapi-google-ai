@@ -4,10 +4,13 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from test_integration import activate, onboard, request
 from test_integration import context as context
 
 import app.services.configuration_service as configuration_service
+import app.workers.runner as worker_runner
+from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.core.exceptions import AppError
 from app.models.audit import AuditEvent
@@ -19,17 +22,49 @@ from app.workers.runner import run_pending
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture
+async def separate_deployment_roles(context, monkeypatch):
+    settings = get_settings()
+    test_url = make_url(settings.test_database_url.get_secret_value())
+    assert test_url.database.endswith("_test")
+    suffix = uuid4().hex[:16]
+    runtime, ddl = "codex_runtime_" + suffix, "codex_ddl_" + suffix
+    password = uuid4().hex
+    async with SessionFactory() as session, session.begin():
+        await session.execute(text(f'CREATE ROLE "{runtime}" NOLOGIN'))
+        await session.execute(text(f'CREATE ROLE "{ddl}" LOGIN NOINHERIT PASSWORD \'{password}\''))
+        await session.execute(text(f'GRANT "{runtime}" TO "{ddl}" WITH INHERIT FALSE, SET TRUE'))
+        await session.execute(text(f'GRANT USAGE ON SCHEMA platform,raw,staging,quarantine,audit,trusted,semantic TO "{runtime}"'))
+        await session.execute(text(f'GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA platform,raw,staging,quarantine,audit TO "{runtime}"'))
+        await session.execute(text(f'GRANT USAGE,CREATE ON SCHEMA trusted,semantic TO "{ddl}"'))
+        await session.execute(text(f'GRANT USAGE ON SCHEMA audit TO "{ddl}"'))
+        await session.execute(text(f'GRANT INSERT ON audit.event_log TO "{ddl}"'))
+    secret = type(settings.database_url)
+    monkeypatch.setattr(settings, "database_url", secret(test_url.set(username=runtime, password=None).render_as_string(hide_password=False)))
+    monkeypatch.setattr(settings, "database_ddl_url", secret(test_url.set(username=ddl, password=password).render_as_string(hide_password=False)))
+    try:
+        yield context
+    finally:
+        async with SessionFactory() as session, session.begin():
+            # Only these UUID-named test roles and their temporary objects are removed.
+            await session.execute(text(f'DROP OWNED BY "{ddl}","{runtime}"'))
+            await session.execute(text(f'DROP ROLE "{ddl}"'))
+            await session.execute(text(f'DROP ROLE "{runtime}"'))
+
+
 @pytest.mark.parametrize("populated", [False, True])
-@pytest.mark.parametrize("drift_stage", [None, "approval", "deploy", "activation", "activation_drift"])
+@pytest.mark.parametrize("drift_stage", [None, "approval", "deploy", "activation", "activation_drift", "job_status"])
 async def test_date_schema_preview_submission_approval_worker_and_audit(
     context, config_data, populated, drift_stage, monkeypatch
 ):
     ctx = context
+    config_data["columns"][1]["date_input_format"] = "GOOGLE_SHEETS_SERIAL"
     for index, row in enumerate(ctx.values[1:]):
         row[1] = 46023 + index
     old = deepcopy(config_data)
     old["columns"][1]["target_type"] = "bigint"
     old["columns"][1]["transformation_codes"] = []
+    old["columns"][1]["date_input_format"] = None
     _, sheet, initial = await onboard(ctx, old)
     await activate(ctx, initial)
     if populated:
@@ -136,6 +171,15 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
             original_audit(session, user, event, resource_id, **details)
 
         monkeypatch.setattr(configuration_service, "audit", fail_activation)
+    if drift_stage == "job_status":
+        original_stage = worker_runner._audit_stage
+
+        def fail_success_stage(session, job, status, **details):
+            if job.kind == "DEPLOY" and status == "SUCCEEDED":
+                raise AppError("TEST_JOB_COMMIT_FAILED", "Intentional failure before job commit")
+            original_stage(session, job, status, **details)
+
+        monkeypatch.setattr(worker_runner, "_audit_stage", fail_success_stage)
     queued = (await request(ctx, "POST", path + "/deploy", who="approver", expected=202))["data"]
     await run_pending(ctx.tenant_id)
     job = (await request(ctx, "GET", "/jobs/" + queued["job_id"]))["data"]
@@ -152,7 +196,7 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
                 )
             )
         ).all()
-        assert len(events) == (0 if drift_stage == "deploy" else 1)
+        assert len(events) == (0 if drift_stage else 1)
         kind = await session.scalar(
             text(
                 "SELECT data_type FROM information_schema.columns WHERE table_schema='semantic' "
@@ -160,7 +204,20 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
             ),
             {"view": "v_" + sheet.replace("-", "")},
         )
-        assert kind == ("bigint" if drift_stage == "deploy" else "date")
+        assert kind == ("bigint" if drift_stage else "date")
+        if drift_stage:
+            from app.models.configuration import Configuration
+            from app.models.source import SourceSheet
+
+            assert (await session.get(Configuration, cloned["id"])).status == "APPROVED"
+            assert (await session.get(SourceSheet, sheet)).active_configuration_id == initial["id"]
+            failed = await session.scalar(select(AuditEvent).where(
+                AuditEvent.resource_id == cloned["id"], AuditEvent.event == "configuration.deploy.failed",
+            ))
+            assert failed and failed.details["transaction_rolled_back"]
+            if populated:
+                row = (await session.execute(original.select())).mappings().one()
+                assert row["transaction_date"] == 46023 and row["_row_hash"] == digest(business)
     if drift_stage in ("activation", "activation_drift"):
         monkeypatch.setattr(configuration_service, "audit", original_audit)
         if drift_stage == "activation_drift":
@@ -190,7 +247,7 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
                         )
                     ).all()
                 )
-                == 1
+                == (0 if drift_stage == "activation_drift" else 1)
             )
 
 
@@ -232,3 +289,13 @@ async def test_target_data_drift_without_schema_operations(context, config_data,
         await run_pending(ctx.tenant_id)
         job = (await request(ctx, "GET", "/jobs/" + queued["job_id"]))["data"]
         assert job["status"] == "FAILED" and job["error_code"] == "SCHEMA_MIGRATION_STALE"
+
+
+@pytest.mark.parametrize("populated", [False, True])
+@pytest.mark.parametrize("failure", [None, "activation", "job_status"])
+async def test_atomic_worker_with_separate_nonprivileged_roles(
+    separate_deployment_roles, config_data, populated, failure, monkeypatch
+):
+    await test_date_schema_preview_submission_approval_worker_and_audit(
+        separate_deployment_roles, config_data, populated, failure, monkeypatch
+    )

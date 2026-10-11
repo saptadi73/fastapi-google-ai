@@ -16,6 +16,8 @@ def test_import_needs_input_creates_persistent_notification():
         tenant_id=user.tenant_id,
         status="VALIDATING",
         revision_no=2,
+        source_sheet_id="33333333-3333-4333-8333-333333333333",
+        checkpoint={},
     )
 
     ImportReviewService(session, user).move(review, ImportAction.REQUEST_INPUT, worker=True)
@@ -27,6 +29,9 @@ def test_import_needs_input_creates_persistent_notification():
     assert notification.kind == "IMPORT_NEEDS_INPUT"
     assert notification.event_key.endswith(":needs-input:3")
     assert notification.details == {"status": "NEEDS_INPUT", "revision_no": 3}
+    event = next(item for item in added if isinstance(item, AuditEvent))
+    assert event.details["attention"]["source_sheet_id"] == review.source_sheet_id
+    assert "Menunggu saja" in event.details["attention"]["message"]
 
 
 async def test_acknowledge_is_idempotent_and_audited():

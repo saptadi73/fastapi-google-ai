@@ -100,8 +100,9 @@ def inspect_migration(conn, table, view_name, config):
         name = op["column"]
         if op["action"] == "SERIAL_TO_DATE":
             column = mapping[name]
-            if "parse_date_id" not in column.transformation_codes:
-                blockers.append(f"{name}: pilih parse_date_id untuk menyatakan konversi angka serial Sheets.")
+            declared = column.date_input_format == "GOOGLE_SHEETS_SERIAL" and "parse_date_id" in column.transformation_codes
+            if not declared:
+                blockers.append(f"{name}: pilih parse_date_id dan format GOOGLE_SHEETS_SERIAL secara eksplisit; bigint tidak membuktikan arti tanggal.")
             invalid = conn.scalar(
                 text(
                     f"SELECT count(*) FROM {target} WHERE {quote(name)} IS NOT NULL "
@@ -110,8 +111,14 @@ def inspect_migration(conn, table, view_name, config):
             )
             if invalid:
                 blockers.append(f"{name}: {invalid} nilai di luar rentang serial tanggal 1..2958465.")
-            op["conversion"] = "GOOGLE_SHEETS_SERIAL_1899_12_30"
-            if column.pii_classification in ("NONE", "LOW") and not invalid:
+            checked = conn.scalar(text(f"SELECT count(*) FROM {target} WHERE {quote(name)} IS NOT NULL"))
+            op["validation"] = {
+                "checked": checked, "convertible": checked - invalid, "invalid": invalid,
+                "declared": declared, "input_format": column.date_input_format,
+            }
+            if declared:
+                op["conversion"] = "GOOGLE_SHEETS_SERIAL_1899_12_30"
+            if declared and column.pii_classification in ("NONE", "LOW") and not invalid:
                 from app.services.etl_compiler_service import date_id
 
                 sample = conn.execute(
@@ -120,7 +127,7 @@ def inspect_migration(conn, table, view_name, config):
                         f"WHERE {quote(name)} IS NOT NULL ORDER BY {quote(name)} LIMIT 3"
                     )
                 ).scalars()
-                op["examples"] = [{"before": value, "after": str(date_id(value))} for value in sample]
+                op["examples"] = [{"before": value, "after": str(date_id(value, input_format=column.date_input_format))} for value in sample]
         if op["action"] == "NULLABILITY" and not op["nullable"]:
             invalid = conn.scalar(text(f"SELECT count(*) FROM {target} WHERE {quote(name)} IS NULL"))
             if invalid:
@@ -145,6 +152,8 @@ def inspect_migration(conn, table, view_name, config):
         recreate = True
     info = None
     grants = []
+    previous_targets = []
+    dependent = []
     if view_exists:
         info = dict(
             conn.execute(
@@ -159,6 +168,12 @@ def inspect_migration(conn, table, view_name, config):
             .one()
         )
         grants = _grants(conn, view)
+        dependent = conn.execute(text(
+            "SELECT DISTINCT n.nspname||'.'||c.relname dependent FROM pg_depend d "
+            "JOIN pg_rewrite r ON r.oid=d.objid JOIN pg_class c ON c.oid=r.ev_class "
+            "JOIN pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE d.refobjid=to_regclass(:view) AND c.oid<>d.refobjid ORDER BY 1"
+        ), {"view": view}).scalars().all()
         previous_targets = (
             conn.execute(
                 text(
@@ -286,6 +301,44 @@ def inspect_migration(conn, table, view_name, config):
         "blockers": blockers,
         "data_hash": data_hash,
     }
+    old_keys = sorted([list(u["column_names"]) for u in uniques])
+    new_keys = sorted([list(key) for key in expected_keys])
+    old_columns = {c["name"]: c for c in column_state}
+    new_columns = {
+        c.name: {"name": c.name, "type": str(c.type.compile(dialect=conn.dialect)).lower(), "nullable": c.nullable}
+        for c in table.c
+    }
+    differences = []
+    for name in sorted(old_columns.keys() | new_columns.keys()):
+        if name.startswith("_"):
+            continue
+        before, after = old_columns.get(name), new_columns.get(name)
+        changes = []
+        if before is None:
+            changes.append("ADDED")
+        elif after is None:
+            changes.append("REMOVED")
+        else:
+            if before["type"] != after["type"]:
+                changes.append("TYPE")
+            if before["nullable"] != after["nullable"]:
+                changes.append("NULLABILITY")
+        if any(name in key for key in old_keys) != any(name in key for key in new_keys):
+            changes.append("KEY")
+        differences.append({"column": name, "before": before, "after": after, "changes": changes})
+    comparison = {
+        "target": table.fullname,
+        "columns": differences,
+        "keys": {"before": old_keys, "after": new_keys, "changed": old_keys != new_keys},
+        "view": {
+            "name": view, "before_target": sorted(previous_targets), "after_target": table.fullname,
+            "before_columns": state["view_columns"],
+            "after_columns": [{"name": c.name, "type": str(c.type.compile(dialect=conn.dialect)).lower()}
+                              for c in [table.c._tenant_id, *(table.c[n] for n in public)]],
+            "recreate": recreate, "exists": view_exists, "dependencies": sorted(dependent),
+            "grants_preserved": True,
+        },
+    }
     return {
         "fingerprint": digest(state),
         "allowed": not blockers,
@@ -293,6 +346,7 @@ def inspect_migration(conn, table, view_name, config):
         "rows_existing": rows,
         "operations": operations,
         "blockers": blockers,
+        "comparison": comparison,
         "policy": "REVIEWED_NON_DESTRUCTIVE_EVOLUTION",
     }, state
 

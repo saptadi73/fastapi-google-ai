@@ -59,6 +59,15 @@ def test_parameterized_transform_roundtrip(workbook_context):
     assert result["configuration"]["columns"][2]["transform_parameters"] == expected["columns"][2]["transform_parameters"]
 
 
+def test_explicit_date_format_survives_workbook_roundtrip(workbook_context):
+    column = workbook_context[0].configuration_json["columns"][1]
+    column.update(target_type="date", transformation_codes=["parse_date_id"],
+                  date_input_format="GOOGLE_SHEETS_SERIAL")
+    result = parse_workbook(encode(export_workbook(*workbook_context)), *workbook_context)
+    assert not result["errors"]
+    assert result["configuration"]["columns"][1]["date_input_format"] == "GOOGLE_SHEETS_SERIAL"
+
+
 def test_in_taxonomy_rule_roundtrip_and_reject_warning_only(workbook_context):
     config = workbook_context[0].configuration_json
     config["columns"][2].update(taxonomy_id="00000000-0000-0000-0000-000000000001", taxonomy_version=1,

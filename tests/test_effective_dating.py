@@ -449,6 +449,8 @@ async def test_closure_preview_approval_apply_with_real_token(closure_service, m
     monkeypatch.setattr(module, "decode", decode)
     review.status = "READY_FOR_APPROVAL"
     review.created_by = str(uuid4())
+    review.source_id = str(uuid4())
+    monkeypatch.setattr(module, "require_source_approver", AsyncMock())
     service.locked = AsyncMock(return_value=review)
     service.move = module.ImportReviewService.move.__get__(service, module.ImportReviewService)
     preview = await service.preview(review.id, ImportReviewPreviewRequest(revision_no=1, close_open_periods=True))

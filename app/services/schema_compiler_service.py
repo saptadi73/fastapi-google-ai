@@ -179,81 +179,92 @@ async def preview_schema_migration(config, sheet_id, tenant_id):
         await engine.dispose()
 
 
-async def deploy_schema(config, sheet_id, tenant_id, *, migration_fingerprint=None, audit_user_id=None, configuration_id=None, completed_fingerprint=None, compatible_rollback=False):
+async def deploy_schema(
+    config, sheet_id, tenant_id, *, connection, migration_fingerprint=None,
+    audit_user_id=None, configuration_id=None, completed_fingerprint=None, compatible_rollback=False,
+):
     from app.services.schema_migration_service import apply_migration, inspect_migration, restore_view_access
+
     s = get_settings()
-    engine = make_engine(s.database_ddl_url.get_secret_value() or s.database_url.get_secret_value())
+    conn = connection
     table = compile_table(config, sheet_id)
     view_name = "v_" + str(sheet_id).replace("-", "")
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
-            await conn.execute(text("SET LOCAL statement_timeout = '120s'"))
-            await conn.execute(
-                text("SELECT pg_advisory_xact_lock(hashtext(:name))"), {"name": table.fullname}
+    current_role = await conn.scalar(text("SELECT current_user"))
+    ddl_url = s.database_ddl_url.get_secret_value()
+    if ddl_url:
+        ddl_role = make_url(ddl_url).username
+        if await conn.scalar(text("SELECT session_user")) != ddl_role:
+            raise AppError(
+                "DEPLOY_TRANSACTION_REQUIRED",
+                "Deploy harus memakai transaksi worker DDL yang mencakup aktivasi konfigurasi.", 409,
             )
+        await conn.execute(text(f"SET LOCAL ROLE {conn.dialect.identifier_preparer.quote(ddl_role)}"))
+    await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+    await conn.execute(text("SET LOCAL statement_timeout = '120s'"))
+    await conn.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:name))"), {"name": table.fullname}
+    )
 
-            await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:name))"),
-                               {"name": f"semantic.{view_name}"})
-            if await conn.run_sync(lambda sync: inspect(sync).has_table(table.name, schema="trusted")):
-                await conn.execute(text(f"LOCK TABLE trusted.{conn.dialect.identifier_preparer.quote(table.name)} IN ACCESS EXCLUSIVE MODE"))
-            migration, grants, comments, info = await conn.run_sync(lambda sync: apply_migration(
-                sync, table, view_name, config, tenant_id, migration_fingerprint,
-                completed_fingerprint=completed_fingerprint,
-                compatible_rollback=compatible_rollback,
-            ))
-            public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
-            if not public:
-                raise AppError("SEMANTIC_INVALID", "Setidaknya satu kolom non-sensitif diperlukan.")
+    await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:name))"),
+                       {"name": f"semantic.{view_name}"})
+    if await conn.run_sync(lambda sync: inspect(sync).has_table(table.name, schema="trusted")):
+        await conn.execute(text(f"LOCK TABLE trusted.{conn.dialect.identifier_preparer.quote(table.name)} IN ACCESS EXCLUSIVE MODE"))
+    migration, grants, comments, info = await conn.run_sync(lambda sync: apply_migration(
+        sync, table, view_name, config, tenant_id, migration_fingerprint,
+        completed_fingerprint=completed_fingerprint,
+        compatible_rollback=compatible_rollback,
+    ))
+    public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
+    if not public:
+        raise AppError("SEMANTIC_INVALID", "Setidaknya satu kolom non-sensitif diperlukan.")
 
-            quote = conn.dialect.identifier_preparer.quote
-            operator = make_url(s.database_url.get_secret_value()).username
-            if operator:
-                privileges = ", ".join(operator_table_privileges(config.load_strategy))
-                await conn.execute(
-                    text(
-                        f"GRANT {privileges} ON trusted.{quote(table.name)} "
-                        f"TO {quote(operator)}"
-                    )
-                )
-                if config.load_strategy == "FULL_REFRESH":
-                    can_delete = await conn.scalar(
-                        text("SELECT has_table_privilege(:role, :target, 'DELETE')"),
-                        {"role": operator, "target": table.fullname},
-                    )
-                    if not can_delete:
-                        raise AppError(
-                            "DATABASE_PERMISSION_DENIED",
-                            "FULL_REFRESH memerlukan privilege DELETE pada tabel trusted. "
-                            "Minta administrator memberi izin secara eksplisit sebelum deploy.",
-                            409,
-                        )
-            stmt = select(table.c._tenant_id, *(table.c[n] for n in public)).where(
-                table.c._tenant_id == tenant_id
+    quote = conn.dialect.identifier_preparer.quote
+    operator = make_url(s.database_url.get_secret_value()).username
+    if operator:
+        privileges = ", ".join(operator_table_privileges(config.load_strategy))
+        await conn.execute(
+            text(
+                f"GRANT {privileges} ON trusted.{quote(table.name)} "
+                f"TO {quote(operator)}"
             )
-            query = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-            # Identifier generated exclusively from UUID; data values quoted by SQLAlchemy.
-            await conn.execute(text(f"CREATE OR REPLACE VIEW semantic.{quote(view_name)} AS {query}"))
-            await conn.run_sync(lambda sync: restore_view_access(sync, view_name, grants, comments, info))
-            await conn.execute(text(f"SELECT * FROM semantic.{quote(view_name)} LIMIT 0"))
-            if operator:
-                await conn.execute(
-                    text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(operator)}")
+        )
+        if config.load_strategy == "FULL_REFRESH":
+            can_delete = await conn.scalar(
+                text("SELECT has_table_privilege(:role, :target, 'DELETE')"),
+                {"role": operator, "target": table.fullname},
+            )
+            if not can_delete:
+                raise AppError(
+                    "DATABASE_PERMISSION_DENIED",
+                    "FULL_REFRESH memerlukan privilege DELETE pada tabel trusted. "
+                    "Minta administrator memberi izin secara eksplisit sebelum deploy.",
+                    409,
                 )
-            if s.database_nl2sql_url.get_secret_value():
-                reader = make_url(s.database_nl2sql_url.get_secret_value()).username
-                await conn.execute(text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(reader)}"))
-            if migration["requires_migration"] and configuration_id:
-                from app.models.audit import AuditEvent
+    stmt = select(table.c._tenant_id, *(table.c[n] for n in public)).where(
+        table.c._tenant_id == tenant_id
+    )
+    query = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    # Identifier generated exclusively from UUID; data values quoted by SQLAlchemy.
+    await conn.execute(text(f"CREATE OR REPLACE VIEW semantic.{quote(view_name)} AS {query}"))
+    await conn.run_sync(lambda sync: restore_view_access(sync, view_name, grants, comments, info))
+    await conn.execute(text(f"SELECT * FROM semantic.{quote(view_name)} LIMIT 0"))
+    if operator:
+        await conn.execute(
+            text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(operator)}")
+        )
+    if s.database_nl2sql_url.get_secret_value():
+        reader = make_url(s.database_nl2sql_url.get_secret_value()).username
+        await conn.execute(text(f"GRANT SELECT ON semantic.{quote(view_name)} TO {quote(reader)}"))
+    if migration["requires_migration"] and configuration_id:
+        from app.models.audit import AuditEvent
 
-                applied, _ = await conn.run_sync(lambda sync: inspect_migration(
-                    sync, table, view_name, {"parsed": config, "tenant_id": tenant_id},
-                ))
-                await conn.execute(AuditEvent.__table__.insert().values(
-                    tenant_id=tenant_id, user_id=audit_user_id, resource_id=str(configuration_id),
-                    event="configuration.schema.migrated",
-                    details={**migration, "applied_fingerprint": applied["fingerprint"]},
-                ))
-    finally:
-        await engine.dispose()
+        applied, _ = await conn.run_sync(lambda sync: inspect_migration(
+            sync, table, view_name, {"parsed": config, "tenant_id": tenant_id},
+        ))
+        await conn.execute(AuditEvent.__table__.insert().values(
+            tenant_id=tenant_id, user_id=audit_user_id, resource_id=str(configuration_id),
+            event="configuration.schema.migrated",
+            details={**migration, "applied_fingerprint": applied["fingerprint"]},
+        ))
+    await conn.execute(text(f"SET LOCAL ROLE {conn.dialect.identifier_preparer.quote(current_role)}"))
     return table, view_name, migration

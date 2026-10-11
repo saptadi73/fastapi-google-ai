@@ -91,6 +91,8 @@ CREATE ROLE ddlpg
     CONNECTION LIMIT -1;
 
 GRANT CONNECT ON DATABASE googleai TO ddlpg;
+-- PostgreSQL >= 16: DDL login boleh SET runtime; runtime tidak diberi role DDL.
+GRANT openpg TO ddlpg WITH INHERIT FALSE, SET TRUE;
 GRANT USAGE, CREATE ON SCHEMA trusted, semantic TO ddlpg;
 GRANT SELECT ON ALL TABLES IN SCHEMA trusted TO ddlpg;
 
@@ -122,9 +124,9 @@ Role DDL ini tidak memerlukan `SUPERUSER`, `CREATEDB`, atau `CREATEROLE`. `CREAT
 
 ### Migrasi bukan deploy ETL
 
-`alembic/env.py` menggunakan **`DATABASE_URL`**, bukan `DATABASE_DDL_URL`. Role DDL di atas tidak otomatis memiliki akses migrasi platform.
+`alembic/env.py` memakai `DATABASE_URL` secara default. `ALEMBIC_DATABASE_URL` dapat menunjuk koneksi admin/migrasi ke nama database yang sama; jangan mengganti DATABASE_URL operasional saat menerapkan migrasi role karena username runtime dibaca dari sana. Role DDL tidak otomatis memiliki akses migrasi platform.
 
-Untuk production, jalankan Alembic dalam proses deployment terpisah menggunakan `DATABASE_URL` milik role migrasi yang memiliki izin schema dan ownership yang diperlukan. Setelah migrasi, proses API dan worker tetap memakai koneksi operasionalnya. Pastikan role operasional menerima akses pada tabel platform hasil migrasi. Pembuatan database awal dan pemberian hak akses dilakukan admin sebelum bootstrap.
+Untuk production, jalankan Alembic dalam proses deployment terpisah menggunakan `ALEMBIC_DATABASE_URL` milik role migrasi yang memiliki izin schema dan ownership yang diperlukan. Setelah migrasi, proses API dan worker tetap memakai koneksi operasionalnya. Pastikan role operasional menerima akses pada tabel platform hasil migrasi. Pembuatan database awal dan pemberian hak akses dilakukan admin sebelum bootstrap.
 
 ## 4. OpenAI: setup dan mengganti key
 
@@ -332,3 +334,5 @@ Selesaikan dan uji ulang kondisi yang belum berhasil sebelum menggunakan hasil r
 - [Google: membuat dan menghapus Service Account key](https://docs.cloud.google.com/iam/docs/keys-create-delete)
 - [PostgreSQL: privilege dan ownership](https://www.postgresql.org/docs/current/ddl-priv.html)
 - [PostgreSQL: default privileges](https://www.postgresql.org/docs/16/sql-alterdefaultprivileges.html)
+
+Deploy atomik dengan role terpisah memerlukan PostgreSQL >=16 dan migrasi `b8r1e4o7v0x3` oleh admin yang dapat memberikan membership. Migrasi membaca DATABASE_URL/DATABASE_DDL_URL untuk memberi runtime TO DDL dengan INHERIT FALSE, SET TRUE; runtime tidak dapat SET DDL. Worker memakai satu koneksi login DDL, SET LOCAL runtime untuk registry dan SET LOCAL DDL untuk schema, lalu commit bersama. Kedua URL harus menuju server/database yang sama. Tidak perlu SQL schema dataset manual melalui SSH.

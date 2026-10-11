@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy import func, select, text
 
 from app.core.config import get_settings
-from app.core.database import SessionFactory
+from app.core.database import SessionFactory, deployment_transaction, transaction
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.audit import AuditEvent
@@ -42,7 +42,8 @@ def _job_failure_details(exc, job_kind):
                 "DATABASE_PERMISSION_DENIED",
                 "Database menolak hak akses (PostgreSQL 42501). Untuk deploy ETL, minta administrator "
                 "memastikan role pada DATABASE_DDL_URL memiliki USAGE dan CREATE pada schema trusted "
-                "dan semantic, serta hak pada objek target. Detail teknis tersedia di log worker.",
+                "dan semantic, ownership objek target, serta izin SET ke role aplikasi melalui migrasi "
+                "b8r1e4o7v0x3. Transaksi deploy dibatalkan. Detail teknis tersedia di log worker.",
             )
         return (
             "DATABASE_PERMISSION_DENIED",
@@ -54,6 +55,12 @@ def _job_failure_details(exc, job_kind):
             "DATABASE_CONNECTION_FAILED",
             f"Koneksi database gagal (SQLSTATE {sqlstate}). Periksa ketersediaan database dan konfigurasi "
             "DATABASE_URL/DATABASE_DDL_URL. Detail teknis tersedia di log worker.",
+        )
+    if job_kind in ("DEPLOY", "ROLLBACK") and sqlstate in ("55P03", "57014", "40001", "40P01"):
+        return (
+            "DATABASE_RETRY_REQUIRED",
+            "Deploy dibatalkan karena database sibuk, batas waktu, atau konflik transaksi. "
+            "Kondisi sebelumnya dipertahankan; tunggu lalu retry. Jika berulang, berikan ID job ke tim teknis.",
         )
     return (
         "JOB_EXECUTION_FAILED",
@@ -168,7 +175,8 @@ async def run_pending(tenant_id=None):
         job_id = job.id
         job_kind = job.kind
     try:
-        async with SessionFactory() as session, session.begin():
+        execution_transaction = deployment_transaction if job_kind in ("DEPLOY", "ROLLBACK") else transaction
+        async with execution_transaction() as session:
             job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
             if job.status != "RUNNING":
                 return {"processed": 0, "job_id": job_id}
@@ -194,6 +202,14 @@ async def run_pending(tenant_id=None):
             job.status, job.finished_at = "FAILED", now()
             job.error_code, job.error_message = _job_failure_details(exc, job.kind)
             _audit_stage(session, job, "FAILED")
+            if job.kind in ("DEPLOY", "ROLLBACK"):
+                session.add(AuditEvent(
+                    tenant_id=job.tenant_id, user_id=job.requested_by,
+                    resource_id=str(job.payload.get("configuration_id")),
+                    event="configuration.deploy.failed",
+                    details={"job_id": str(job.id), "kind": job.kind, "error_code": job.error_code,
+                             "message": job.error_message, "transaction_rolled_back": True},
+                ))
             add_notification(
                 session,
                 tenant_id=job.tenant_id,

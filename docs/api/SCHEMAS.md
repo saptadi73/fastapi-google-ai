@@ -2130,6 +2130,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `numeric_precision` | Tidak | `integer / null` | — | — |
 | `numeric_scale` | Tidak | `integer / null` | — | — |
 | `date_format` | Tidak | `string / null` | — | — |
+| `date_input_format` | Tidak | `enum ["TEXT","GOOGLE_SHEETS_SERIAL"] / null` | — | — |
 | `number_locale` | Tidak | `string / null` | — | — |
 | `varchar_length` | Tidak | `integer / null` | — | — |
 | `unit_conversion` | Tidak | `UnitConversion / null` | — | — |

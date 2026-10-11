@@ -24471,6 +24471,21 @@
             ],
             "title": "Date Format"
           },
+          "date_input_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "TEXT",
+                  "GOOGLE_SHEETS_SERIAL"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Input Format"
+          },
           "number_locale": {
             "anyOf": [
               {

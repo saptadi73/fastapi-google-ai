@@ -19,7 +19,16 @@ def decimal_id(value, locale="ID"):
     return Decimal(value.replace(".", "").replace(",", ".") if locale == "ID" else value)
 
 
-def date_id(value, fmt=None):
+def date_id(value, fmt=None, input_format=None):
+    if input_format == "GOOGLE_SHEETS_SERIAL":
+        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+            raise ValueError("Google Sheets serial date requires a numeric value")
+        serial = Decimal(str(value))
+        if not serial.is_finite() or serial != serial.to_integral_value() or not 1 <= serial <= 2958465:
+            raise ValueError("Google Sheets serial date requires a whole day in 1..2958465")
+        return (date(1899, 12, 30) + timedelta(days=int(serial)))
+    if input_format == "TEXT" and not isinstance(value, str):
+        raise ValueError("Text date requires a text value")
     if isinstance(value, (int, float)):
         return (datetime(1899, 12, 30) + timedelta(days=value)).date()
     for current in ((fmt,) if fmt else ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d")):
@@ -169,7 +178,7 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                 for transform in column.transformation_codes:
                     if value is not None:
                         if transform == "parse_date_id":
-                            value = date_id(value, column.date_format)
+                            value = date_id(value, column.date_format, column.date_input_format)
                         elif transform == "parse_decimal_id":
                             value = decimal_id(value, column.number_locale or "ID")
                         elif transform in parameters:

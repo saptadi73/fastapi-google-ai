@@ -13,3 +13,5 @@ relationships, or new columns. Preserve leading-zero identifiers. Mark potential
 Recommend only registered transforms. Indonesian formatted decimals require parse_decimal_id; Google date
 serial numbers require parse_date_id. If grain, keys, date/number formats or semantics are unclear, include
 specific unresolved_questions; do not guess. Semantic dimensions and metrics must exclude sensitive columns.
+
+For date mappings, use date_input_format TEXT for text dates or GOOGLE_SHEETS_SERIAL only when the source is confirmed to contain Sheets date serials, with parse_date_id. A bigint type or plausible integer range alone is not evidence of a date; ask an unresolved_question when the meaning is unclear. A human reviews this declaration before any schema migration.
