@@ -1,0 +1,357 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF marketing / Marketing_Data",
+  "dataset_description": "satu baris per campaign channel area produk periode. ATL/BTL adalah klasifikasi contoh; sepakati dengan bisnis. Reach antar-channel dapat overlap, bukan jangkauan unik gabungan. Rasio total harus dihitung ulang dari pembilang/penyebut, bukan AVG CPL/ROAS.",
+  "grain": "satu baris per campaign channel area produk periode",
+  "target_table": "marketing_data",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "marketing_record_id",
+      "target_column": "marketing_record_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "campaign_id",
+      "target_column": "campaign_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "channel_code",
+      "target_column": "channel_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "marketing_type",
+      "target_column": "marketing_type",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "budget_idr",
+      "target_column": "budget_idr",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "spend_idr",
+      "target_column": "spend_idr",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "reach_count",
+      "target_column": "reach_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "reach_method",
+      "target_column": "reach_method",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "leads_count",
+      "target_column": "leads_count",
+      "target_type": "bigint",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "qualified_leads_count",
+      "target_column": "qualified_leads_count",
+      "target_type": "bigint",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "orders_count",
+      "target_column": "orders_count",
+      "target_type": "bigint",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "attributed_revenue_idr",
+      "target_column": "attributed_revenue_idr",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "attribution_model",
+      "target_column": "attribution_model",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "attribution_coverage_ratio",
+      "target_column": "attribution_coverage_ratio",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "cpl_idr",
+      "target_column": "cpl_idr",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "cost_per_qualified_lead_idr",
+      "target_column": "cost_per_qualified_lead_idr",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "roas_ratio",
+      "target_column": "roas_ratio",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "evidence_ref",
+      "target_column": "evidence_ref",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "reporting_status",
+      "target_column": "reporting_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "data_as_of_at",
+      "target_column": "data_as_of_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "budget_idr",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "spend_idr",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "reach_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "leads_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "qualified_leads_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "orders_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "attributed_revenue_idr",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "attribution_coverage_ratio",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "attribution_coverage_ratio",
+      "rule": "max",
+      "value": 1
+    },
+    {
+      "column": "cpl_idr",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "cost_per_qualified_lead_idr",
+      "rule": "min",
+      "value": 0
+    }
+  ],
+  "semantic": {
+    "code": "demo_marketing_marketing_data",
+    "dimensions": [
+      "marketing_record_id",
+      "campaign_id",
+      "unit_code",
+      "product_code",
+      "area_code",
+      "channel_code",
+      "marketing_type",
+      "period_start",
+      "period_end",
+      "reach_method",
+      "attribution_model",
+      "reporting_status"
+    ],
+    "metrics": [
+      {
+        "code": "m_spend_idr_sum",
+        "column": "spend_idr",
+        "aggregation": "sum",
+        "label": "Biaya marketing",
+        "description": "Belanja aktual pada periode, bukan anggaran.",
+        "unit": "IDR"
+      },
+      {
+        "code": "m_qualified_leads_count_sum",
+        "column": "qualified_leads_count",
+        "aggregation": "sum",
+        "label": "Leads berkualitas teratribusi",
+        "description": "Hanya jika deduplikasi dan attribution model konsisten; NULL ATL tidak sama dengan nol.",
+        "unit": "LEAD"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

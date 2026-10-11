@@ -1,0 +1,4 @@
+﻿unit_code,unit_label,is_active
+UNIT-CS,Layanan Pelanggan,True
+UNIT-MKT,Marketing,True
+UNIT-OPS,Operasional,True

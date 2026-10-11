@@ -1,0 +1,367 @@
+{
+  "examples": [
+    {
+      "id": "keluhan",
+      "title": "Data keluhan pelanggan",
+      "filename": "01_Keluhan_Pelanggan.xlsx",
+      "download_url": "/examples/analytics/01_Keluhan_Pelanggan.xlsx",
+      "description": "Keluhan anonim, SLA respons, status penyelesaian dan rekap produk/periode.",
+      "caution": "Keluhan berulang bukan akar penyebab pasti. Pisahkan keluhan OPEN dari RESOLVED; jangan menghitung detail dan rekap bersama.",
+      "questions": [
+        "Berapa keluhan dan pelanggaran SLA per produk bulan Januari 2026?",
+        "Bagaimana perubahan waktu respons antara Januari dan Februari?"
+      ],
+      "sheets": [
+        {
+          "name": "Master_Unit",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per unit",
+          "business_key": "unit_code"
+        },
+        {
+          "name": "Master_Produk",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per produk",
+          "business_key": "product_code"
+        },
+        {
+          "name": "Master_Area",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per area",
+          "business_key": "area_code"
+        },
+        {
+          "name": "Master_Tim",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per tim penanggung jawab",
+          "business_key": "owner_team_code"
+        },
+        {
+          "name": "Master_Indikator",
+          "rows": 8,
+          "role": "MASTER",
+          "grain": "satu baris per indikator dengan definisi dan satuan",
+          "business_key": "indicator_code"
+        },
+        {
+          "name": "Keluhan_Data",
+          "rows": 32,
+          "role": "NON_MASTER",
+          "grain": "satu baris per keluhan anonim",
+          "business_key": "complaint_id"
+        },
+        {
+          "name": "Keluhan_Rekap",
+          "rows": 4,
+          "role": "NON_MASTER",
+          "grain": "satu baris per unit produk bulan",
+          "business_key": "complaint_summary_id"
+        },
+        {
+          "name": "Action_Plan",
+          "rows": 1,
+          "role": "NON_MASTER",
+          "grain": "satu baris per tindakan yang merujuk record temuan",
+          "business_key": "action_id"
+        }
+      ],
+      "sha256": "f5a0f34e5046d20a53918a96815ff1ff2558ca92f633bb8daa1edc558828b153"
+    },
+    {
+      "id": "marketing",
+      "title": "Data sebaran marketing ATL/BTL",
+      "filename": "02_Marketing_ATL_BTL.xlsx",
+      "download_url": "/examples/analytics/02_Marketing_ATL_BTL.xlsx",
+      "description": "Campaign, channel, area, budget, spend, leads, biaya dan atribusi.",
+      "caution": "Reach lintas channel dapat overlap. ATL tidak teratribusi memakai NULL, bukan nol; CPL/ROAS gabungan bukan rata-rata rasio dan bukan bukti efek kausal.",
+      "questions": [
+        "Berapa biaya marketing menurut channel dan area periode Januari 2026?",
+        "Bandingkan qualified leads BTL pada attribution model yang sama."
+      ],
+      "sheets": [
+        {
+          "name": "Master_Unit",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per unit",
+          "business_key": "unit_code"
+        },
+        {
+          "name": "Master_Produk",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per produk",
+          "business_key": "product_code"
+        },
+        {
+          "name": "Master_Area",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per area",
+          "business_key": "area_code"
+        },
+        {
+          "name": "Master_Channel",
+          "rows": 4,
+          "role": "MASTER",
+          "grain": "satu baris per channel",
+          "business_key": "channel_code"
+        },
+        {
+          "name": "Master_Tim",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per tim penanggung jawab",
+          "business_key": "owner_team_code"
+        },
+        {
+          "name": "Master_Indikator",
+          "rows": 8,
+          "role": "MASTER",
+          "grain": "satu baris per indikator dengan definisi dan satuan",
+          "business_key": "indicator_code"
+        },
+        {
+          "name": "Marketing_Data",
+          "rows": 16,
+          "role": "NON_MASTER",
+          "grain": "satu baris per campaign channel area produk periode",
+          "business_key": "marketing_record_id"
+        },
+        {
+          "name": "Action_Plan",
+          "rows": 1,
+          "role": "NON_MASTER",
+          "grain": "satu baris per tindakan yang merujuk record temuan",
+          "business_key": "action_id"
+        }
+      ],
+      "sha256": "afe05154929669152ef28ab562a43c4199c3c7c5e19b2020697ea56fea0de410"
+    },
+    {
+      "id": "kepuasan",
+      "title": "Data kepuasan pelanggan berbasis produk",
+      "filename": "03_Kepuasan_Pelanggan_Produk.xlsx",
+      "download_url": "/examples/analytics/03_Kepuasan_Pelanggan_Produk.xlsx",
+      "description": "Survei anonim 1-5, respons valid/tidak lengkap, penyebut CSAT dan rekap produk.",
+      "caution": "CSAT memakai skor 4/5 dibagi respons valid, bukan NPS. Sampel kecil opt-in tidak memberi klaim representatif atau confidence statistik otomatis.",
+      "questions": [
+        "Berapa respons valid dan respons puas per produk pada Januari 2026?",
+        "Apakah perubahan CSAT memakai versi pertanyaan dan cakupan yang sebanding?"
+      ],
+      "sheets": [
+        {
+          "name": "Master_Unit",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per unit",
+          "business_key": "unit_code"
+        },
+        {
+          "name": "Master_Produk",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per produk",
+          "business_key": "product_code"
+        },
+        {
+          "name": "Master_Area",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per area",
+          "business_key": "area_code"
+        },
+        {
+          "name": "Master_Tim",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per tim penanggung jawab",
+          "business_key": "owner_team_code"
+        },
+        {
+          "name": "Master_Indikator",
+          "rows": 8,
+          "role": "MASTER",
+          "grain": "satu baris per indikator dengan definisi dan satuan",
+          "business_key": "indicator_code"
+        },
+        {
+          "name": "Survey_Data",
+          "rows": 48,
+          "role": "NON_MASTER",
+          "grain": "satu baris per respons anonim produk metode survei",
+          "business_key": "response_id"
+        },
+        {
+          "name": "CSAT_Rekap",
+          "rows": 4,
+          "role": "NON_MASTER",
+          "grain": "satu baris per produk area versi survei periode",
+          "business_key": "csat_summary_id"
+        },
+        {
+          "name": "Action_Plan",
+          "rows": 1,
+          "role": "NON_MASTER",
+          "grain": "satu baris per tindakan yang merujuk record temuan",
+          "business_key": "action_id"
+        }
+      ],
+      "sha256": "a525881ef7256b9c732c25546189e1def5328059044f745a6fc99d9d6c358a6d"
+    },
+    {
+      "id": "competitiveness",
+      "title": "Data competitiveness harga dan layanan",
+      "filename": "04_Competitiveness_Harga_Layanan.xlsx",
+      "download_url": "/examples/analytics/04_Competitiveness_Harga_Layanan.xlsx",
+      "description": "Harga kemasan dinormalisasi per liter, waktu observasi dan skor produk/layanan/nilai.",
+      "caution": "Produk, ukuran, promo, outlet, area dan waktu harus sebanding. Harga titik observasi berbeda dari skor survei periode; skor/bobot contoh bukan ranking pasar nyata.",
+      "questions": [
+        "Bandingkan harga per liter pada produk/outlet/area/waktu setara.",
+        "Bandingkan skor layanan per brand dengan versi survei dan bobot yang sama."
+      ],
+      "sheets": [
+        {
+          "name": "Master_Unit",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per unit",
+          "business_key": "unit_code"
+        },
+        {
+          "name": "Master_Produk",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per produk",
+          "business_key": "product_code"
+        },
+        {
+          "name": "Master_Area",
+          "rows": 2,
+          "role": "MASTER",
+          "grain": "satu baris per area",
+          "business_key": "area_code"
+        },
+        {
+          "name": "Master_Competitor",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per pelaku pasar",
+          "business_key": "competitor_code"
+        },
+        {
+          "name": "Master_Tim",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per tim penanggung jawab",
+          "business_key": "owner_team_code"
+        },
+        {
+          "name": "Master_Indikator",
+          "rows": 8,
+          "role": "MASTER",
+          "grain": "satu baris per indikator dengan definisi dan satuan",
+          "business_key": "indicator_code"
+        },
+        {
+          "name": "Harga_Observasi",
+          "rows": 6,
+          "role": "NON_MASTER",
+          "grain": "satu baris per brand produk ekuivalen outlet area waktu observasi",
+          "business_key": "price_observation_id"
+        },
+        {
+          "name": "Competitive_Survey",
+          "rows": 72,
+          "role": "NON_MASTER",
+          "grain": "satu baris per respons brand produk area versi survei",
+          "business_key": "competitive_response_id"
+        },
+        {
+          "name": "Competitive_Rekap",
+          "rows": 6,
+          "role": "NON_MASTER",
+          "grain": "satu baris per brand produk area versi survei periode",
+          "business_key": "competitive_summary_id"
+        },
+        {
+          "name": "Action_Plan",
+          "rows": 1,
+          "role": "NON_MASTER",
+          "grain": "satu baris per tindakan yang merujuk record temuan",
+          "business_key": "action_id"
+        }
+      ],
+      "sha256": "d5c39f0d44cee34b859885864a2f7efe170f3efd88e50ba4a3986ebab14f8846"
+    },
+    {
+      "id": "kpi",
+      "title": "Data plan, goal dan pencapaian KPI",
+      "filename": "05_Plan_Goal_Pencapaian_KPI.xlsx",
+      "download_url": "/examples/analytics/05_Plan_Goal_Pencapaian_KPI.xlsx",
+      "description": "Goal, indikator, target, bukti pengukuran, arah KPI, gap dan evaluasi tindakan.",
+      "caution": "HIGHER dan LOWER memakai rumus berbeda; IDR, kasus, jam dan skor tidak boleh dijumlahkan bersama. Sampel 3 pengukuran hanya demonstrasi.",
+      "questions": [
+        "Indikator mana yang belum mencapai target Januari 2026?",
+        "Apa bukti pengukuran dan rencana tindak lanjut setiap plan?"
+      ],
+      "sheets": [
+        {
+          "name": "Master_Unit",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per unit",
+          "business_key": "unit_code"
+        },
+        {
+          "name": "Master_Tim",
+          "rows": 3,
+          "role": "MASTER",
+          "grain": "satu baris per tim penanggung jawab",
+          "business_key": "owner_team_code"
+        },
+        {
+          "name": "Master_Indikator",
+          "rows": 8,
+          "role": "MASTER",
+          "grain": "satu baris per indikator dengan definisi dan satuan",
+          "business_key": "indicator_code"
+        },
+        {
+          "name": "KPI_Plan",
+          "rows": 8,
+          "role": "NON_MASTER",
+          "grain": "satu baris per unit indikator periode versi target aktif",
+          "business_key": "plan_id"
+        },
+        {
+          "name": "KPI_Measurement",
+          "rows": 24,
+          "role": "NON_MASTER",
+          "grain": "satu baris per bukti pengukuran indikator",
+          "business_key": "measurement_id"
+        },
+        {
+          "name": "KPI_Result",
+          "rows": 8,
+          "role": "NON_MASTER",
+          "grain": "satu baris per plan indikator periode",
+          "business_key": "kpi_result_id"
+        },
+        {
+          "name": "Action_Plan",
+          "rows": 1,
+          "role": "NON_MASTER",
+          "grain": "satu baris per tindakan yang merujuk record temuan",
+          "business_key": "action_id"
+        }
+      ],
+      "sha256": "b2d9f4aecd7851159ee7e5631898ab9951baba9e08c3fa43322826eb466e7972"
+    }
+  ],
+  "bundle_url": "/examples/analytics/Paket_5_Contoh_Analitik.zip"
+}

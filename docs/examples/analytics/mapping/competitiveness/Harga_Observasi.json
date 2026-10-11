@@ -1,0 +1,214 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF competitiveness / Harga_Observasi",
+  "dataset_description": "satu baris per brand produk ekuivalen outlet area waktu observasi. Harga adalah titik observasi, bukan rata-rata sebulan. COMP-A 900 ml harus dinormalisasi sebelum dibandingkan dengan 1000 ml. product_code menunjukkan kelompok referensi, bukan klaim SKU pesaing identik.",
+  "grain": "satu baris per brand produk ekuivalen outlet area waktu observasi",
+  "target_table": "harga_observasi",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "price_observation_id",
+      "target_column": "price_observation_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "competitor_code",
+      "target_column": "competitor_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "comparison_group",
+      "target_column": "comparison_group",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "package_volume_ml",
+      "target_column": "package_volume_ml",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "package_price_idr",
+      "target_column": "package_price_idr",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "normalized_price_idr_per_l",
+      "target_column": "normalized_price_idr_per_l",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "is_promo",
+      "target_column": "is_promo",
+      "target_type": "boolean",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "is_in_stock",
+      "target_column": "is_in_stock",
+      "target_type": "boolean",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "outlet_type",
+      "target_column": "outlet_type",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "observed_at",
+      "target_column": "observed_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "evidence_ref",
+      "target_column": "evidence_ref",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "data_as_of_at",
+      "target_column": "data_as_of_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "package_price_idr",
+      "rule": "min",
+      "value": 0
+    }
+  ],
+  "semantic": {
+    "code": "demo_competitiveness_harga_observasi",
+    "dimensions": [
+      "price_observation_id",
+      "competitor_code",
+      "product_code",
+      "area_code",
+      "comparison_group",
+      "outlet_type",
+      "period_start",
+      "period_end"
+    ],
+    "metrics": [
+      {
+        "code": "m_normalized_price_idr_per_l_avg",
+        "column": "normalized_price_idr_per_l",
+        "aggregation": "avg",
+        "label": "Harga observasi per liter",
+        "description": "Hanya dalam comparison_group, area, waktu, promo dan outlet yang sebanding; bukan harga transaksi tertimbang volume.",
+        "unit": "IDR_PER_L"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

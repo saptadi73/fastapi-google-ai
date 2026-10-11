@@ -1,0 +1,268 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF keluhan / Keluhan_Data",
+  "dataset_description": "satu baris per keluhan anonim. ",
+  "grain": "satu baris per keluhan anonim",
+  "target_table": "keluhan_data",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "complaint_id",
+      "target_column": "complaint_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "category_code",
+      "target_column": "category_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "priority_code",
+      "target_column": "priority_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "reported_at",
+      "target_column": "reported_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "first_response_at",
+      "target_column": "first_response_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "resolved_at",
+      "target_column": "resolved_at",
+      "target_type": "timestamptz",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "complaint_status",
+      "target_column": "complaint_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "first_response_hours",
+      "target_column": "first_response_hours",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "resolution_hours",
+      "target_column": "resolution_hours",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "response_sla_hours",
+      "target_column": "response_sla_hours",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "complaint_count",
+      "target_column": "complaint_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "response_breach_count",
+      "target_column": "response_breach_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "resolved_count",
+      "target_column": "resolved_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "data_as_of_at",
+      "target_column": "data_as_of_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "complaint_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "response_breach_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "resolved_count",
+      "rule": "min",
+      "value": 0
+    }
+  ],
+  "semantic": {
+    "code": "demo_keluhan_keluhan_data",
+    "dimensions": [
+      "complaint_id",
+      "unit_code",
+      "product_code",
+      "area_code",
+      "category_code",
+      "priority_code",
+      "complaint_status",
+      "period_start",
+      "period_end"
+    ],
+    "metrics": [
+      {
+        "code": "m_complaint_count_sum",
+        "column": "complaint_count",
+        "aggregation": "sum",
+        "label": "Jumlah keluhan",
+        "description": "Tidak menjumlahkan ulang rekap dengan detail.",
+        "unit": "CASE"
+      },
+      {
+        "code": "m_response_breach_count_sum",
+        "column": "response_breach_count",
+        "aggregation": "sum",
+        "label": "Keluhan melewati SLA respons",
+        "description": "Respons awal lebih dari 24 jam pada contoh.",
+        "unit": "CASE"
+      },
+      {
+        "code": "m_first_response_hours_avg",
+        "column": "first_response_hours",
+        "aggregation": "avg",
+        "label": "Rata-rata jam respons awal",
+        "description": "Semua contoh telah memiliki respons awal.",
+        "unit": "HOUR"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF kpi / KPI_Plan",
+  "dataset_description": "satu baris per unit indikator periode versi target aktif. goal_id bukan business key karena satu goal dapat memiliki banyak indikator/periode. Versi target direview sebelum evaluasi.",
+  "grain": "satu baris per unit indikator periode versi target aktif",
+  "target_table": "kpi_plan",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "plan_id",
+      "target_column": "plan_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "goal_id",
+      "target_column": "goal_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "goal_description",
+      "target_column": "goal_description",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "indicator_code",
+      "target_column": "indicator_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "measurement_unit",
+      "target_column": "measurement_unit",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "direction",
+      "target_column": "direction",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "target_value",
+      "target_column": "target_value",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "target_version",
+      "target_column": "target_version",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "target_set_at",
+      "target_column": "target_set_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [],
+  "semantic": {
+    "code": "demo_kpi_kpi_plan",
+    "dimensions": [
+      "plan_id",
+      "goal_id",
+      "unit_code",
+      "indicator_code",
+      "measurement_unit",
+      "direction",
+      "period_start",
+      "period_end",
+      "target_version"
+    ],
+    "metrics": [],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

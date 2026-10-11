@@ -1,0 +1,269 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF competitiveness / Action_Plan",
+  "dataset_description": "satu baris per tindakan yang merujuk record temuan. Baseline dibekukan sesuai periode bukti; hipotesis belum terverifikasi. Nilai follow-up kosong berarti belum dievaluasi, bukan nol.",
+  "grain": "satu baris per tindakan yang merujuk record temuan",
+  "target_table": "action_plan",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "action_id",
+      "target_column": "action_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "source_sheet",
+      "target_column": "source_sheet",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "source_record_id",
+      "target_column": "source_record_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "indicator_code",
+      "target_column": "indicator_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "baseline_value",
+      "target_column": "baseline_value",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "target_value",
+      "target_column": "target_value",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "measurement_unit",
+      "target_column": "measurement_unit",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "finding",
+      "target_column": "finding",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "cause_hypothesis",
+      "target_column": "cause_hypothesis",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "cause_status",
+      "target_column": "cause_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "evidence_ref",
+      "target_column": "evidence_ref",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "action_description",
+      "target_column": "action_description",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "owner_team_code",
+      "target_column": "owner_team_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "due_date",
+      "target_column": "due_date",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "action_status",
+      "target_column": "action_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "followup_start",
+      "target_column": "followup_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "followup_end",
+      "target_column": "followup_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "followup_value",
+      "target_column": "followup_value",
+      "target_type": "numeric",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "verification_status",
+      "target_column": "verification_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [],
+  "semantic": {
+    "code": "demo_competitiveness_action_plan",
+    "dimensions": [
+      "action_id",
+      "source_sheet",
+      "source_record_id",
+      "unit_code",
+      "indicator_code",
+      "period_start",
+      "period_end",
+      "measurement_unit",
+      "cause_status",
+      "owner_team_code",
+      "due_date",
+      "action_status"
+    ],
+    "metrics": [],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

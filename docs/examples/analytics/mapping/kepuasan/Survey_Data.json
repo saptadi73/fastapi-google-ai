@@ -1,0 +1,277 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF kepuasan / Survey_Data",
+  "dataset_description": "satu baris per respons anonim produk metode survei. CSAT produk berdasarkan product_score >=4; bukan NPS. Jangan mencampur versi pertanyaan atau menganggap sampel opt-in mewakili seluruh pelanggan.",
+  "grain": "satu baris per respons anonim produk metode survei",
+  "target_table": "survey_data",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "response_id",
+      "target_column": "response_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "respondent_code",
+      "target_column": "respondent_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "survey_version",
+      "target_column": "survey_version",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "surveyed_at",
+      "target_column": "surveyed_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_score",
+      "target_column": "product_score",
+      "target_type": "bigint",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "service_score",
+      "target_column": "service_score",
+      "target_type": "bigint",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "value_score",
+      "target_column": "value_score",
+      "target_type": "bigint",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "is_valid_response",
+      "target_column": "is_valid_response",
+      "target_type": "boolean",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "excluded_reason",
+      "target_column": "excluded_reason",
+      "target_type": "text",
+      "nullable": true,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "valid_response_count",
+      "target_column": "valid_response_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "satisfied_count",
+      "target_column": "satisfied_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "sampling_method",
+      "target_column": "sampling_method",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "data_as_of_at",
+      "target_column": "data_as_of_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "product_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "product_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "service_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "service_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "value_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "value_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "valid_response_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "satisfied_count",
+      "rule": "min",
+      "value": 0
+    }
+  ],
+  "semantic": {
+    "code": "demo_kepuasan_survey_data",
+    "dimensions": [
+      "response_id",
+      "respondent_code",
+      "unit_code",
+      "product_code",
+      "area_code",
+      "survey_version",
+      "excluded_reason",
+      "sampling_method",
+      "period_start",
+      "period_end"
+    ],
+    "metrics": [
+      {
+        "code": "m_valid_response_count_sum",
+        "column": "valid_response_count",
+        "aggregation": "sum",
+        "label": "Jumlah respons valid",
+        "description": "Respons tidak lengkap tidak masuk penyebut CSAT.",
+        "unit": "RESPONSE"
+      },
+      {
+        "code": "m_satisfied_count_sum",
+        "column": "satisfied_count",
+        "aggregation": "sum",
+        "label": "Respons puas",
+        "description": "Skor produk 4 atau 5 pada skala 1 sampai 5.",
+        "unit": "RESPONSE"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

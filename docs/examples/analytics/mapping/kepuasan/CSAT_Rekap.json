@@ -1,0 +1,300 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF kepuasan / CSAT_Rekap",
+  "dataset_description": "satu baris per produk area versi survei periode. Sampel kecil dan opt-in: tidak ada margin of error atau klaim representatif otomatis. Rekap memakai respons valid dan formula dari raw; invited_count harus diperbarui dari log undangan yang sah.",
+  "grain": "satu baris per produk area versi survei periode",
+  "target_table": "csat_rekap",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "csat_summary_id",
+      "target_column": "csat_summary_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "survey_version",
+      "target_column": "survey_version",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "invited_count",
+      "target_column": "invited_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "received_count",
+      "target_column": "received_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "valid_response_count",
+      "target_column": "valid_response_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "excluded_count",
+      "target_column": "excluded_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "satisfied_count",
+      "target_column": "satisfied_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "csat_ratio",
+      "target_column": "csat_ratio",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "target_csat_ratio",
+      "target_column": "target_csat_ratio",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "avg_product_score",
+      "target_column": "avg_product_score",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "response_rate",
+      "target_column": "response_rate",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "sample_status",
+      "target_column": "sample_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "reporting_status",
+      "target_column": "reporting_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "data_as_of_at",
+      "target_column": "data_as_of_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "invited_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "received_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "valid_response_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "excluded_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "satisfied_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "csat_ratio",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "csat_ratio",
+      "rule": "max",
+      "value": 1
+    },
+    {
+      "column": "avg_product_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "avg_product_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "response_rate",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "response_rate",
+      "rule": "max",
+      "value": 1
+    }
+  ],
+  "semantic": {
+    "code": "demo_kepuasan_csat_rekap",
+    "dimensions": [
+      "csat_summary_id",
+      "unit_code",
+      "product_code",
+      "area_code",
+      "period_start",
+      "period_end",
+      "survey_version",
+      "sample_status",
+      "reporting_status"
+    ],
+    "metrics": [
+      {
+        "code": "m_valid_response_count_sum",
+        "column": "valid_response_count",
+        "aggregation": "sum",
+        "label": "Respons valid rekap",
+        "description": "Jangan menjumlahkan kembali raw dan rekap.",
+        "unit": "RESPONSE"
+      },
+      {
+        "code": "m_satisfied_count_sum",
+        "column": "satisfied_count",
+        "aggregation": "sum",
+        "label": "Respons puas rekap",
+        "description": "Rasio gabungan perlu jumlah puas / jumlah valid, bukan AVG persentase.",
+        "unit": "RESPONSE"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

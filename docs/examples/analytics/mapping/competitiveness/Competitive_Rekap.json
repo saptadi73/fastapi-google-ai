@@ -1,0 +1,208 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF competitiveness / Competitive_Rekap",
+  "dataset_description": "satu baris per brand produk area versi survei periode. Baca harga titik observasi dan skor periode sebagai dua bukti berbeda. Tidak ada rank/indeks gabungan harga-layanan otomatis; bobot harus disetujui bisnis.",
+  "grain": "satu baris per brand produk area versi survei periode",
+  "target_table": "competitive_rekap",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "competitive_summary_id",
+      "target_column": "competitive_summary_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "competitor_code",
+      "target_column": "competitor_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "price_observation_id",
+      "target_column": "price_observation_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "normalized_price_idr_per_l",
+      "target_column": "normalized_price_idr_per_l",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "price_observed_at",
+      "target_column": "price_observed_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "sample_count",
+      "target_column": "sample_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "avg_service_score",
+      "target_column": "avg_service_score",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "avg_weighted_score",
+      "target_column": "avg_weighted_score",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "survey_version",
+      "target_column": "survey_version",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "sample_status",
+      "target_column": "sample_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "sample_count",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "avg_service_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "avg_service_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "avg_weighted_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "avg_weighted_score",
+      "rule": "max",
+      "value": 5
+    }
+  ],
+  "semantic": {
+    "code": "demo_competitiveness_competitive_rekap",
+    "dimensions": [
+      "competitive_summary_id",
+      "competitor_code",
+      "product_code",
+      "area_code",
+      "period_start",
+      "period_end",
+      "price_observation_id",
+      "survey_version",
+      "sample_status"
+    ],
+    "metrics": [],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

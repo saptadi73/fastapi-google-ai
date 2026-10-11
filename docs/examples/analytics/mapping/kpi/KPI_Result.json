@@ -1,0 +1,348 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF kpi / KPI_Result",
+  "dataset_description": "satu baris per plan indikator periode. Jangan SUM actual/gap/achievement lintas indikator atau AVG rasio tanpa bobot yang sah. Actual rekap perlu dihitung ulang jika pengukuran berubah; rasio arah LOWER berbeda dari HIGHER.",
+  "grain": "satu baris per plan indikator periode",
+  "target_table": "kpi_result",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "kpi_result_id",
+      "target_column": "kpi_result_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "plan_id",
+      "target_column": "plan_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "goal_id",
+      "target_column": "goal_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unit_code",
+      "target_column": "unit_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "indicator_code",
+      "target_column": "indicator_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "measurement_unit",
+      "target_column": "measurement_unit",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "direction",
+      "target_column": "direction",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "aggregation",
+      "target_column": "aggregation",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "target_value",
+      "target_column": "target_value",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "actual_value",
+      "target_column": "actual_value",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "sample_count",
+      "target_column": "sample_count",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "unfavourable_gap",
+      "target_column": "unfavourable_gap",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "achievement_ratio",
+      "target_column": "achievement_ratio",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "result_status",
+      "target_column": "result_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "reporting_status",
+      "target_column": "reporting_status",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "data_as_of_at",
+      "target_column": "data_as_of_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "sample_count",
+      "rule": "min",
+      "value": 0
+    }
+  ],
+  "semantic": {
+    "code": "demo_kpi_kpi_result",
+    "dimensions": [
+      "kpi_result_id",
+      "plan_id",
+      "goal_id",
+      "unit_code",
+      "indicator_code",
+      "period_start",
+      "period_end",
+      "measurement_unit",
+      "direction",
+      "aggregation",
+      "result_status",
+      "reporting_status"
+    ],
+    "metrics": [
+      {
+        "code": "m_revenue_target_value",
+        "column": "target_value",
+        "aggregation": "max",
+        "label": "Pendapatan tercatat target_value",
+        "unit": "IDR",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "REVENUE"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_revenue_actual_value",
+        "column": "actual_value",
+        "aggregation": "max",
+        "label": "Pendapatan tercatat actual_value",
+        "unit": "IDR",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "REVENUE"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_resolved_target_value",
+        "column": "target_value",
+        "aggregation": "max",
+        "label": "Kasus selesai target_value",
+        "unit": "CASE",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "RESOLVED"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_resolved_actual_value",
+        "column": "actual_value",
+        "aggregation": "max",
+        "label": "Kasus selesai actual_value",
+        "unit": "CASE",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "RESOLVED"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_response_hours_target_value",
+        "column": "target_value",
+        "aggregation": "max",
+        "label": "Jam respons awal target_value",
+        "unit": "HOUR",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "RESPONSE_HOURS"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_response_hours_actual_value",
+        "column": "actual_value",
+        "aggregation": "max",
+        "label": "Jam respons awal actual_value",
+        "unit": "HOUR",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "RESPONSE_HOURS"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_satisfaction_target_value",
+        "column": "target_value",
+        "aggregation": "max",
+        "label": "Skor kepuasan target_value",
+        "unit": "SCORE_1_5",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "SATISFACTION"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      },
+      {
+        "code": "m_satisfaction_actual_value",
+        "column": "actual_value",
+        "aggregation": "max",
+        "label": "Skor kepuasan actual_value",
+        "unit": "SCORE_1_5",
+        "filters": [
+          {
+            "field": "indicator_code",
+            "operator": "eq",
+            "value": "SATISFACTION"
+          }
+        ],
+        "description": "MAX hanya untuk menampilkan satu record plan/unit/indikator/periode yang dipilih. Bukan total atau rataan lintas plan/unit/periode."
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}

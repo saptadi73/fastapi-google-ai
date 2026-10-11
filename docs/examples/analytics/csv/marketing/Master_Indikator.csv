@@ -1,0 +1,9 @@
+﻿indicator_code,indicator_label,measurement_unit,direction,aggregation,definition
+REVENUE,Pendapatan tercatat,IDR,HIGHER_IS_BETTER,SUM,Jumlah pendapatan tercatat pada periode.
+RESOLVED,Kasus selesai,CASE,HIGHER_IS_BETTER,SUM,Jumlah kasus unik selesai pada periode.
+RESPONSE_HOURS,Jam respons awal,HOUR,LOWER_IS_BETTER,AVG,Rata-rata jam respons dari sampel yang dicatat.
+SATISFACTION,Skor kepuasan,SCORE_1_5,HIGHER_IS_BETTER,AVG,"Rating sampel 1 sampai 5, bukan CSAT/NPS."
+SLA_BREACH,Rasio pelanggaran SLA,RATIO,LOWER_IS_BETTER,RECOMPUTE_RATIO,Keluhan melewati SLA / keluhan cohort periode.
+COST_QUALIFIED_LEAD,Biaya per qualified lead,IDR_PER_LEAD,LOWER_IS_BETTER,RECOMPUTE_RATIO,Spend / qualified leads yang teratribusi dan terdeduplikasi.
+PRODUCT_CSAT,CSAT produk,RATIO,HIGHER_IS_BETTER,RECOMPUTE_RATIO,Skor produk 4/5 dibagi respons valid pada versi survei yang sama.
+SERVICE_SCORE,Skor layanan,SCORE_1_5,HIGHER_IS_BETTER,AVG,Rataan skor layanan dalam metode/sampel yang sebanding.

@@ -1,0 +1,279 @@
+{
+  "schema_version": "1.0",
+  "dataset_business_name": "CONTOH FIKTIF competitiveness / Competitive_Survey",
+  "dataset_description": "satu baris per respons brand produk area versi survei. ",
+  "grain": "satu baris per respons brand produk area versi survei",
+  "target_table": "competitive_survey",
+  "target_schema": "trusted",
+  "load_strategy": "UPSERT",
+  "columns": [
+    {
+      "source_column": "competitive_response_id",
+      "target_column": "competitive_response_id",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": true,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "competitor_code",
+      "target_column": "competitor_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_code",
+      "target_column": "product_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "area_code",
+      "target_column": "area_code",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "survey_version",
+      "target_column": "survey_version",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "surveyed_at",
+      "target_column": "surveyed_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "product_score",
+      "target_column": "product_score",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "service_score",
+      "target_column": "service_score",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "value_score",
+      "target_column": "value_score",
+      "target_type": "bigint",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "weight_product",
+      "target_column": "weight_product",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "weight_service",
+      "target_column": "weight_service",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "weight_value",
+      "target_column": "weight_value",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "weighted_score",
+      "target_column": "weighted_score",
+      "target_type": "numeric",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "sampling_method",
+      "target_column": "sampling_method",
+      "target_type": "text",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    },
+    {
+      "source_column": "period_start",
+      "target_column": "period_start",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "period_end",
+      "target_column": "period_end",
+      "target_type": "date",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": [
+        "parse_date_id"
+      ],
+      "date_input_format": "TEXT",
+      "date_format": "%Y-%m-%d"
+    },
+    {
+      "source_column": "collected_at",
+      "target_column": "collected_at",
+      "target_type": "timestamptz",
+      "nullable": false,
+      "is_business_key": false,
+      "pii_classification": "NONE",
+      "transformation_codes": []
+    }
+  ],
+  "data_quality_rules": [
+    {
+      "column": "product_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "product_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "service_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "service_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "value_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "value_score",
+      "rule": "max",
+      "value": 5
+    },
+    {
+      "column": "weight_product",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "weight_product",
+      "rule": "max",
+      "value": 1
+    },
+    {
+      "column": "weight_service",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "weight_service",
+      "rule": "max",
+      "value": 1
+    },
+    {
+      "column": "weight_value",
+      "rule": "min",
+      "value": 0
+    },
+    {
+      "column": "weight_value",
+      "rule": "max",
+      "value": 1
+    },
+    {
+      "column": "weighted_score",
+      "rule": "min",
+      "value": 1
+    },
+    {
+      "column": "weighted_score",
+      "rule": "max",
+      "value": 5
+    }
+  ],
+  "semantic": {
+    "code": "demo_competitiveness_competitive_survey",
+    "dimensions": [
+      "competitive_response_id",
+      "competitor_code",
+      "product_code",
+      "area_code",
+      "survey_version",
+      "sampling_method",
+      "period_start",
+      "period_end"
+    ],
+    "metrics": [
+      {
+        "code": "m_weighted_score_avg",
+        "column": "weighted_score",
+        "aggregation": "avg",
+        "label": "Skor gabungan sesuai bobot contoh",
+        "description": "Bobot 0.5/0.3/0.2 sama untuk semua brand; rating bukan bukti sebab-akibat.",
+        "unit": "SCORE_1_5"
+      }
+    ],
+    "allowed_roles": [
+      "PLATFORM_ADMIN",
+      "DATA_STEWARD",
+      "SOURCE_OWNER",
+      "TECHNICAL_APPROVER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
+  "unresolved_questions": [
+    "Data sintetis: verifikasi grain, key, target, satuan, referensi master, DQ, metrik dan akses sebelum approval."
+  ],
+  "overall_confidence": 1
+}
