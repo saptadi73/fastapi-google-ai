@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from xml.etree import ElementTree as ET
-from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+from zipfile import ZIP_STORED, ZipFile, ZipInfo
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -1329,10 +1329,11 @@ def sheet_collection(scenario):
 
 def deterministic_zip(entries):
     stream = io.BytesIO()
-    with ZipFile(stream, "w", ZIP_DEFLATED) as archive:
+    # Stored entries avoid zlib-version differences between Windows and Linux builds.
+    with ZipFile(stream, "w", ZIP_STORED) as archive:
         for name, content in sorted(entries.items()):
             info = ZipInfo(name, (2026, 1, 1, 0, 0, 0))
-            info.compress_type = ZIP_DEFLATED
+            info.compress_type = ZIP_STORED
             archive.writestr(info, content)
     return stream.getvalue()
 
