@@ -152,6 +152,18 @@ Gunakan hash dari dry-run terbaru dan nama target seluruh kolom konfigurasi. Ser
 
 ## Excel: export, preview, apply
 
+Identitas dataset dapat diisi dari **nama file Google Sheet + nama tab**. Draft
+manual mengisi saran awal; review draft lama menyediakan tombol **Gunakan nama
+file dan tab**, tanpa menimpa nama/kode tersimpan secara otomatis. Profiling baru
+menangkap nama file asli; profil lama memakai nama sumber terdaftar dengan
+keterangan fallback dan dapat diprofil ulang. Nama bisnis mempertahankan tanda
+baca yang valid (maksimal 200 karakter); karakter kontrol menjadi spasi. Kode
+produk data memakai huruf ASCII/angka/underscore, diawali huruf, maksimal 63
+karakter; karakter lain menjadi underscore. Nama tab tetap disertakan saat
+pemendekan saran kode. Saran tetap harus diperiksa; konflik kode produk antar-tab
+ditolak saat deploy, bukan mengganti kode produk aktif diam-diam. Mengambil saran
+tidak menyimpan draft, menyetujui konfigurasi, atau mengubah nama tabel tujuan.
+
 1. Simpan draft lalu `POST /configurations/{id}/export` dengan `{"format":"XLSX"}`. Download artifact menggunakan endpoint download berautentikasi.
 2. Workbook mempertahankan 14 tab template, menambah **14 Review** untuk identitas/jawaban dan tab metadata tersembunyi. Contoh data template dibersihkan. Sel kuning dapat diedit; sel referensi dan parameter yang belum didukung dilindungi. Jangan mengganti nama tab atau menambahkan kolom/tab. Penambahan/penghapusan mapping kolom dilakukan melalui form.
 3. Isi input dengan nilai literal. Formula pada input, macro, dan external links ditolak. Gunakan enum API: misalnya `numeric`, bukan `numeric(18,2)`. Pengaturan type/null/key pada tab 02 menjadi sumber referensi tab 06.

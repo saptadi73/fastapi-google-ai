@@ -58,7 +58,10 @@ async def context(monkeypatch, tmp_path, sheet_values):
     current_values = [row[:] for row in sheet_values]
 
     async def metadata(self, spreadsheet_id):
-        return {"sheets": [{"properties": {"sheetId": 1, "title": "Sales", "sheetType": "GRID"}}]}
+        return {
+            "properties": {"title": "Sales workbook"},
+            "sheets": [{"properties": {"sheetId": 1, "title": "Sales", "sheetType": "GRID"}}],
+        }
 
     async def read(self, spreadsheet_id, sheets):
         return [[r[:] for r in current_values] for _ in sheets]

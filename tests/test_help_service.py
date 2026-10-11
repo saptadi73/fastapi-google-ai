@@ -50,6 +50,16 @@ def test_master_relation_question_retrieves_binding_guidance():
     assert "contoh-isian-master-dan-analitik" in article_ids
 
 
+def test_dataset_identity_question_retrieves_source_names_and_format_limits():
+    articles = KnowledgeBase().search(
+        "nama bisnis kode produk data nama file tab tanda baca", "DATA_STEWARD", "/workspace",
+    )
+    assert articles[0].article_id == "identitas-dataset-dari-file-tab"
+    body = articles[0].body
+    assert "tidak ditimpa otomatis" in body
+    assert "63 karakter" in body and "200 karakter" in body
+
+
 @pytest.mark.parametrize(
     "question,role,route",
     [

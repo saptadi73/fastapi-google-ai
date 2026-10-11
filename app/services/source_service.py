@@ -714,6 +714,10 @@ class SourceService:
         if not sheets:
             raise AppError("SOURCE_NOT_FOUND", "Belum ada tab aktif; jalankan discovery.", 404)
         results = []
+        metadata = await self.google.metadata(source.spreadsheet_id)
+        spreadsheet_title = metadata.get("properties", {}).get("title")
+        if not isinstance(spreadsheet_title, str) or not spreadsheet_title.strip():
+            raise AppError("SOURCE_METADATA_INVALID", "Nama file Google Sheet tidak tersedia.", 422)
         batches = await self.google.read_sheets(source.spreadsheet_id, sheets)
         drift = False
         for sheet, values in zip(sheets, batches):
@@ -725,6 +729,7 @@ class SourceService:
                 sheet.range_a1,
                 get_settings().etl_sample_row_limit,
             )
+            profile["spreadsheet_title"] = spreadsheet_title
             snapshot = await self.repo.add(
                 Snapshot,
                 source_id=source.id,
