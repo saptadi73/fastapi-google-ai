@@ -1568,7 +1568,7 @@ def workbook_bytes(scenario, sheets):
 
 def csv_bytes(spec):
     buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer)
+    writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(spec.headers)
     writer.writerows(
         [value(item) if value(item) is not None else "" for item in row.values()] for row in spec.rows
@@ -1651,7 +1651,7 @@ def build_documents():
         "| --- | --- | --- | --- |",
     ]
     doc.extend(
-        f"| {e['title']} | [Unduh](/examples/analytics/{e['filename']}) | {e['description']} | {e['caution']} |"
+        f"| {e['title']} | [Unduh](https://google.kanjabung.web.id/examples/analytics/{e['filename']}) | {e['description']} | {e['caution']} |"
         for e in catalog
     )
     doc += [
