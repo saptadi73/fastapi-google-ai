@@ -179,8 +179,8 @@ async def preview_schema_migration(config, sheet_id, tenant_id):
         await engine.dispose()
 
 
-async def deploy_schema(config, sheet_id, tenant_id, *, migration_fingerprint=None, audit_user_id=None, configuration_id=None):
-    from app.services.schema_migration_service import apply_migration, restore_view_access
+async def deploy_schema(config, sheet_id, tenant_id, *, migration_fingerprint=None, audit_user_id=None, configuration_id=None, completed_fingerprint=None, compatible_rollback=False):
+    from app.services.schema_migration_service import apply_migration, inspect_migration, restore_view_access
     s = get_settings()
     engine = make_engine(s.database_ddl_url.get_secret_value() or s.database_url.get_secret_value())
     table = compile_table(config, sheet_id)
@@ -199,6 +199,8 @@ async def deploy_schema(config, sheet_id, tenant_id, *, migration_fingerprint=No
                 await conn.execute(text(f"LOCK TABLE trusted.{conn.dialect.identifier_preparer.quote(table.name)} IN ACCESS EXCLUSIVE MODE"))
             migration, grants, comments, info = await conn.run_sync(lambda sync: apply_migration(
                 sync, table, view_name, config, tenant_id, migration_fingerprint,
+                completed_fingerprint=completed_fingerprint,
+                compatible_rollback=compatible_rollback,
             ))
             public = [c.target_column for c in config.columns if c.pii_classification in ("NONE", "LOW")]
             if not public:
@@ -244,9 +246,13 @@ async def deploy_schema(config, sheet_id, tenant_id, *, migration_fingerprint=No
             if migration["requires_migration"] and configuration_id:
                 from app.models.audit import AuditEvent
 
+                applied, _ = await conn.run_sync(lambda sync: inspect_migration(
+                    sync, table, view_name, {"parsed": config, "tenant_id": tenant_id},
+                ))
                 await conn.execute(AuditEvent.__table__.insert().values(
                     tenant_id=tenant_id, user_id=audit_user_id, resource_id=str(configuration_id),
-                    event="configuration.schema.migrated", details=migration,
+                    event="configuration.schema.migrated",
+                    details={**migration, "applied_fingerprint": applied["fingerprint"]},
                 ))
     finally:
         await engine.dispose()

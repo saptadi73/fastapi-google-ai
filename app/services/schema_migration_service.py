@@ -242,14 +242,25 @@ def inspect_migration(conn, table, view_name, config):
         )
     if recreate:
         operations.append({"action": "RECREATE_VIEW", "column": view_name})
+    column_state = [
+        {
+            "name": c["name"],
+            "type": str(c["type"].compile(dialect=conn.dialect)).lower(),
+            "nullable": c["nullable"],
+        }
+        for c in columns
+    ]
     data_hash = None
-    if exists and rows and operations:
+    if exists and rows:
         hasher = hashlib.sha256()
         offset = 0
+        # A type change invalidates SELECT * prepared statements on this connection.
+        # Use a distinct statement for each inspected schema, including the post-DDL audit.
+        schema_key = digest(column_state)
         while True:
             batch = (
                 conn.execute(
-                    text(f"SELECT * FROM {target} ORDER BY _tenant_id,_row_hash LIMIT 500 OFFSET :offset"),
+                    text(f"SELECT * FROM {target} ORDER BY _tenant_id,_row_hash LIMIT 500 OFFSET :offset /* {schema_key} */"),
                     {"offset": offset},
                 )
                 .mappings()
@@ -265,14 +276,7 @@ def inspect_migration(conn, table, view_name, config):
         "target": table.fullname,
         "view": view_name,
         "rows": rows,
-        "columns": [
-            {
-                "name": c["name"],
-                "type": str(c["type"].compile(dialect=conn.dialect)).lower(),
-                "nullable": c["nullable"],
-            }
-            for c in columns
-        ],
+        "columns": column_state,
         "unique": sorted([list(u["column_names"]) for u in uniques]),
         "view_columns": [{"name": c["name"], "type": str(c["type"])} for c in view_columns],
         "view_info": info,
@@ -293,11 +297,24 @@ def inspect_migration(conn, table, view_name, config):
     }, state
 
 
-def apply_migration(conn, table, view_name, parsed, tenant_id, expected_fingerprint):
+def apply_migration(
+    conn, table, view_name, parsed, tenant_id, expected_fingerprint, *, completed_fingerprint=None,
+    compatible_rollback=False,
+):
     plan, state = inspect_migration(conn, table, view_name, {"parsed": parsed, "tenant_id": tenant_id})
     if not plan["allowed"]:
         raise AppError("SCHEMA_MIGRATION_BLOCKED", " ".join(plan["blockers"]), 409)
-    if plan["requires_migration"] and expected_fingerprint != plan["fingerprint"]:
+    # Rolling back an already deployed version may follow successful data loads.
+    # It can reuse the target only when it needs no schema/view operations.
+    reviewed = expected_fingerprint == plan["fingerprint"] or (
+        compatible_rollback and not plan["requires_migration"]
+    )
+    completed = (
+        not plan["requires_migration"]
+        and completed_fingerprint is not None
+        and completed_fingerprint == plan["fingerprint"]
+    )
+    if (expected_fingerprint or plan["requires_migration"]) and not (reviewed or completed):
         code = "SCHEMA_MIGRATION_STALE" if expected_fingerprint else "SCHEMA_REVIEW_REQUIRED"
         raise AppError(
             code,

@@ -32,3 +32,5 @@ Katalog: Buka Google Sheet/Buka sumber untuk role operasional. Versi aktif tampi
 NEEDS_INPUT = Menunggu tindakan, bukan worker berjalan. Lihat detail berikon mata pada tracking/hasil ETL/sync/audit membuka keterangan, kode, baris asli Sheet saat snapshot (termasuk header), kolom dan tautan batch. Audit menyimpan maksimal 20 lokasi tanpa nilai mentah; Muat temuan berikutnya memaginasi pertanyaan. Riwayat kegagalan lama bukan hasil terbaru. Membuka detail tidak sync/approve.
 
 Temuan AI_REVIEW, termasuk batch lama, dapat dijawab KEEP_ORIGINAL dengan alasan verifikasi yang diaudit. Dugaan PII/salah mapping perlu pemilik data; error teknis tidak bisa dilewati. CORRECT_SOURCE meminta perbaikan Sheet dan snapshot baru. Setelah semua jawaban, AI COMPLETE dan validasi selesai tanpa blocker, batch siap. Sync manual kembali dapat memuat batch NON_MASTER siap berdasarkan approval konfigurasi aktif; batch biasa/master tetap preview, approval, Apply. Jawaban saja tidak memuat record.
+
+Transaksi migrasi gagal: rollback. Aktivasi gagal setelah commit: schema/audit tetap; retry wajib cocok fingerprint hasil migrasi.

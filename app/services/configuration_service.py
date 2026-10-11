@@ -2,6 +2,7 @@ import json
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.models.audit import AuditEvent
 from app.models.base import now
 from app.models.configuration import Approval, Artifact, Configuration
 from app.models.etl import Snapshot
@@ -266,7 +267,8 @@ class ConfigurationService:
                     "REVIEW_STALE", "Snapshot berubah setelah review; validasi dan ajukan kembali.", 409
                 )
             migration = validation["deployment_plan"]["migration"]
-            if migration["requires_migration"] and (evidence.get("schema_migration") or {}).get("fingerprint") != migration["fingerprint"]:
+            schema_evidence = evidence.get("schema_migration") or {}
+            if (schema_evidence or migration["requires_migration"]) and schema_evidence.get("fingerprint") != migration["fingerprint"]:
                 code = "SCHEMA_MIGRATION_STALE" if evidence.get("schema_migration") else "SCHEMA_REVIEW_REQUIRED"
                 raise AppError(code, "Rencana schema berubah; editor perlu mengajukan review ulang dari aplikasi.", 409)
             if not validation["valid"]:
@@ -378,9 +380,21 @@ class ConfigurationService:
         )
         if collision:
             raise AppError("CONFIGURATION_CONFLICT", "Kode data product sudah digunakan tab lain.", 409)
+        reviewed_fingerprint = ((config.review_state or {}).get("schema_migration") or {}).get("fingerprint")
+        migration_audit = await self.session.scalar(
+            self.repo.query(AuditEvent).where(
+                AuditEvent.resource_id == str(config.id),
+                AuditEvent.event == "configuration.schema.migrated",
+            ).order_by(AuditEvent.created_at.desc()).limit(1)
+        )
+        completed_fingerprint = None
+        if migration_audit and migration_audit.details.get("fingerprint") == reviewed_fingerprint:
+            completed_fingerprint = migration_audit.details.get("applied_fingerprint")
         _, view_name, _migration = await deploy_schema(
             parsed, sheet.id, self.user.tenant_id,
-            migration_fingerprint=((config.review_state or {}).get("schema_migration") or {}).get("fingerprint"),
+            migration_fingerprint=reviewed_fingerprint,
+            completed_fingerprint=completed_fingerprint,
+            compatible_rollback=rollback,
             audit_user_id=self.user.id, configuration_id=config.id,
         )
         if sheet.active_configuration_id:

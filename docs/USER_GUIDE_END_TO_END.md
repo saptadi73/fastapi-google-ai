@@ -129,7 +129,10 @@ tipe view. Periksa preview schema, jumlah record lama, contoh serial menjadi tan
 dan blocker; centang konfirmasi schema sebelum Ajukan review. Tabel kosong dapat berubah
 tipe; tabel berisi data mendukung serial bigint menjadi date dengan parse_date_id dan
 kolom nullable baru (record lama null). Worker menjaga data/dependency/grant tanpa CASCADE,
-memperbarui hash, dan membatalkan seluruh DDL/konversi bila gagal.
+memperbarui hash, dan membatalkan seluruh DDL/konversi bila transaksi migrasi gagal.
+Jika migrasi sudah selesai tetapi aktivasi konfigurasi gagal, schema tetap berubah dan
+audit migrasi tersimpan. Retry deploy dapat melanjutkan aktivasi hanya jika schema/data
+masih cocok dengan hasil migrasi yang tercatat; perubahan lain meminta review ulang.
 Rename/drop fisik, key dan perubahan berisiko lain tetap diblokir. Jika fingerprint stale,
 review ulang dengan preview terkini; versi approved lama tanpa bukti schema perlu clone/review.
 Cocokkan `configuration_id` pada payload job DEPLOY dengan versi APPROVED

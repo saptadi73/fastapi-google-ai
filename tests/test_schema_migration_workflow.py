@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -19,7 +20,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.parametrize("populated", [False, True])
-@pytest.mark.parametrize("drift_stage", [None, "approval", "deploy", "activation"])
+@pytest.mark.parametrize("drift_stage", [None, "approval", "deploy", "activation", "activation_drift"])
 async def test_date_schema_preview_submission_approval_worker_and_audit(
     context, config_data, populated, drift_stage, monkeypatch
 ):
@@ -127,7 +128,7 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
                 text(f"ALTER TABLE trusted.{original.name} ALTER COLUMN branch_name SET NOT NULL")
             )
     original_audit = configuration_service.audit
-    if drift_stage == "activation":
+    if drift_stage in ("activation", "activation_drift"):
 
         def fail_activation(session, user, event, resource_id=None, **details):
             if event == "configuration.activated":
@@ -160,11 +161,23 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
             {"view": "v_" + sheet.replace("-", "")},
         )
         assert kind == ("bigint" if drift_stage == "deploy" else "date")
-    if drift_stage == "activation":
+    if drift_stage in ("activation", "activation_drift"):
         monkeypatch.setattr(configuration_service, "audit", original_audit)
+        if drift_stage == "activation_drift":
+            async with SessionFactory() as session, session.begin():
+                if populated:
+                    # Change values without changing row count or requiring new DDL.
+                    await session.execute(text(f"UPDATE trusted.{original.name} SET net_amount=net_amount+1"))
+                else:
+                    await session.execute(text(f"ALTER TABLE trusted.{original.name} ALTER COLUMN branch_name SET NOT NULL"))
         retried = (await request(ctx, "POST", path + "/deploy", who="approver", expected=202))["data"]
         await run_pending(ctx.tenant_id)
-        assert (await request(ctx, "GET", "/jobs/" + retried["job_id"]))["data"]["status"] == "SUCCEEDED"
+        retry_job = (await request(ctx, "GET", "/jobs/" + retried["job_id"]))["data"]
+        if drift_stage == "activation_drift":
+            assert retry_job["status"] == "FAILED"
+            assert retry_job["error_code"] == "SCHEMA_MIGRATION_STALE"
+        else:
+            assert retry_job["status"] == "SUCCEEDED"
         async with SessionFactory() as session:
             assert (
                 len(
@@ -179,3 +192,43 @@ async def test_date_schema_preview_submission_approval_worker_and_audit(
                 )
                 == 1
             )
+
+
+@pytest.mark.parametrize("drift_stage", ["approval", "deploy"])
+async def test_target_data_drift_without_schema_operations(context, config_data, drift_stage):
+    ctx = context
+    _, sheet, initial = await onboard(ctx, config_data)
+    await activate(ctx, initial)
+    target = compile_table(ETLConfiguration.model_validate(config_data), sheet)
+    async with SessionFactory() as session, session.begin():
+        business = {
+            "transaction_id": "001", "transaction_date": date(2026, 9, 1),
+            "branch_name": "Jakarta", "net_amount": 100,
+        }
+        await session.execute(target.insert().values(
+            **business, _tenant_id=ctx.tenant_id, _source_sheet_id=sheet,
+            _source_row=2, _etl_run_id=str(uuid4()), _row_hash=digest(business),
+        ))
+    cloned = (await request(ctx, "POST", f"/configurations/{initial['id']}/clone", expected=201))["data"]
+    path = f"/configurations/{cloned['id']}"
+    validation = (await request(ctx, "POST", path + "/validate"))["data"]
+    assert not validation["deployment_plan"]["migration"]["requires_migration"]
+    submitted = (await request(ctx, "POST", path + "/submit-review", data={
+        "revision_no": cloned["revision_no"], "snapshot_hash": validation["snapshot_hash"],
+        "reviewed_columns": [c["target_column"] for c in config_data["columns"]],
+        "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+    }))["data"]
+    if drift_stage == "deploy":
+        await request(ctx, "POST", path + "/approve", who="approver",
+                      data={"revision_no": submitted["revision_no"]})
+    async with SessionFactory() as session, session.begin():
+        await session.execute(target.update().values(net_amount=200))
+    if drift_stage == "approval":
+        result = await request(ctx, "POST", path + "/approve", who="approver", expected=409,
+                               data={"revision_no": submitted["revision_no"]})
+        assert result["errors"][0]["code"] == "SCHEMA_MIGRATION_STALE"
+    else:
+        queued = (await request(ctx, "POST", path + "/deploy", who="approver", expected=202))["data"]
+        await run_pending(ctx.tenant_id)
+        job = (await request(ctx, "GET", "/jobs/" + queued["job_id"]))["data"]
+        assert job["status"] == "FAILED" and job["error_code"] == "SCHEMA_MIGRATION_STALE"

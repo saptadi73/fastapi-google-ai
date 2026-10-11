@@ -134,9 +134,67 @@ async def test_schema_or_data_drift_rejects_old_review(migration_db):
                 lambda sync: apply_migration(sync, target, view, new, tenant, plan["fingerprint"])
             )
         assert error.value.code == "SCHEMA_MIGRATION_STALE"
+        # Rollback cannot use its compatibility exception to change the schema.
+        with pytest.raises(AppError) as error:
+            await conn.run_sync(
+                lambda sync: apply_migration(
+                    sync, target, view, new, tenant, plan["fingerprint"], compatible_rollback=True
+                )
+            )
+        assert error.value.code == "SCHEMA_MIGRATION_STALE"
         assert (await conn.run_sync(lambda sync: inspect(sync).get_columns(original.name, schema="trusted")))[
             -1
         ]["type"].__class__.__name__ == "BIGINT"
+        await tx.rollback()
+
+
+async def test_external_migration_cannot_bypass_review_by_matching_target(migration_db):
+    old, new = configs()
+    sheet, tenant = str(uuid4()), str(uuid4())
+    async with migration_db.connect() as conn:
+        tx = await conn.begin()
+        original, view = await seed(conn, old, sheet, tenant, True)
+        target = compile_table(new, sheet)
+        plan, _ = await conn.run_sync(
+            lambda sync: inspect_migration(sync, target, view, {"parsed": new, "tenant_id": tenant})
+        )
+        await conn.execute(text(f"DROP VIEW semantic.{view} RESTRICT"))
+        await conn.execute(text(
+            f"ALTER TABLE trusted.{original.name} ALTER COLUMN start_date TYPE date "
+            "USING (DATE '1899-12-30' + start_date::integer)"
+        ))
+        await conn.execute(text(
+            f"CREATE VIEW semantic.{view} AS SELECT _tenant_id,start_date FROM trusted.{original.name}"
+        ))
+        await conn.execute(text(f"GRANT SELECT ON semantic.{view} TO PUBLIC"))
+        current, _ = await conn.run_sync(
+            lambda sync: inspect_migration(sync, target, view, {"parsed": new, "tenant_id": tenant})
+        )
+        assert not current["requires_migration"]
+        with pytest.raises(AppError) as error:
+            await conn.run_sync(
+                lambda sync: apply_migration(sync, target, view, new, tenant, plan["fingerprint"])
+            )
+        assert error.value.code == "SCHEMA_MIGRATION_STALE"
+        await tx.rollback()
+
+
+async def test_data_drift_without_ddl_operations_rejects_old_review(migration_db):
+    old, _ = configs()
+    sheet, tenant = str(uuid4()), str(uuid4())
+    async with migration_db.connect() as conn:
+        tx = await conn.begin()
+        target, view = await seed(conn, old, sheet, tenant, True)
+        plan, _ = await conn.run_sync(
+            lambda sync: inspect_migration(sync, target, view, {"parsed": old, "tenant_id": tenant})
+        )
+        assert not plan["requires_migration"]
+        await conn.execute(target.update().values(start_date=46054))
+        with pytest.raises(AppError) as error:
+            await conn.run_sync(
+                lambda sync: apply_migration(sync, target, view, old, tenant, plan["fingerprint"])
+            )
+        assert error.value.code == "SCHEMA_MIGRATION_STALE"
         await tx.rollback()
 
 

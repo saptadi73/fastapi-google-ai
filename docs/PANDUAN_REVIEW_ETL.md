@@ -109,7 +109,13 @@ serta `bigint` serial Sheets menjadi `date` pada tabel berisi data bila mapping 
 record identik. View dibuat ulang hanya tanpa dependency yang menghalangi, menjaga ACL dan
 komentar, tanpa CASCADE atau menghapus record. DDL/konversi/hash/audit berada dalam satu
 transaksi; kegagalan membatalkannya. Aktivasi registry terpisah: jika gagal setelah DDL,
-schema dan audit tetap konsisten; retry deploy melanjutkan tanpa mengulang konversi.
+schema dan audit tetap konsisten. Retry deploy melanjutkan tanpa mengulang konversi hanya
+bila fingerprint schema/data masih cocok dengan hasil migrasi yang tercatat pada audit
+konfigurasi tersebut. Perubahan di luar aplikasi, termasuk target yang sudah cocok atau
+perubahan data tanpa operasi DDL, tetap memerlukan review ulang.
+Rollback versi yang pernah aktif boleh memakai tabel yang telah dimuat bila tidak
+memerlukan operasi schema/view; pemeriksaan snapshot sumber dan gate rilis tetap berlaku.
+Rollback yang mengubah schema tidak mendapat pengecualian fingerprint ini.
 
 Rename/drop kolom fisik, perubahan key, tipe lain pada tabel berisi data, kolom wajib baru
 pada tabel berisi data, dan dependency/owner/grant tidak aman tetap diblokir.
