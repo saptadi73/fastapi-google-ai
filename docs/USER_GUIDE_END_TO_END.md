@@ -41,7 +41,12 @@ Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memaka
    Batas pemantauan 10 menit
    bukan pembatalan job; Muat ulang hasil atau monitor job melanjutkan pemantauan tanpa
    enqueue baru. Sumber yang masih mempunyai job QUEUED/RUNNING menolak sync duplikat.
-4. **Katalog sebagai shortcut perbaikan.** Buka Google Sheet tepat pada tab asal atau
+4. **Katalog sebagai shortcut perbaikan.** Ikon mata pada Data product membuka
+   modal sumber/tab, tabel database, view semantic dan deskripsi. Tabel ringkas
+   menggabungkan semantic dengan versi ETL, serta pembaruan dengan waktu dimuat;
+   kolom Peluang peningkatan mendapat ruang lebih luas. Pencarian tetap mencakup
+   metadata yang dipindahkan ke modal. Membuka detail hanya membaca metadata.
+   Buka Google Sheet tepat pada tab asal atau
    Buka sumber di Workspace (role operasional saja). Versi aktif terakhir tetap tampil
    selama revisi bila akses masih valid. Sedang diperbarui menandai job/revisi/drift/data
    snapshot/batch yang belum selesai, bukan berarti versi lama sudah dinonaktifkan.
