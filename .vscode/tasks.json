@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start FastAPI (local tunnel)",
+			"type": "shell",
+			"command": ".\\venv\\Scripts\\python.exe",
+			"args": [
+				"-m",
+				"app.server"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

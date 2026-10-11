@@ -16,18 +16,25 @@ Verifikasi draft AI melalui form dan Excel sudah tersedia untuk subset parameter
 
 ## Menjalankan di Windows / PowerShell
 
-Proyek menggunakan Python **3.11** (venv lokal: **3.11.16**). Runtime lokal berada di
-`.python/cpython-3.11.16-windows-x86_64-none`, dikelola menggunakan `uv`. Simpan folder `.python`
-selama venv ini dipakai. Venv Python 3.10 sebelumnya disimpan pada `venv-py310-backup` sebagai cadangan.
-Perintah `python` global Windows dapat tetap mengarah ke 3.10; gunakan interpreter venv di bawah.
+Dependency proyek diuji menggunakan Python **3.11** (lihat `.python-version` dan `requirements.lock`).
+Perintah `python` global Windows dapat mengarah ke versi lain; gunakan interpreter venv di bawah.
 
-Untuk membuat environment pada checkout baru dengan `uv` yang sudah terpasang:
+Untuk membuat environment dengan Python Install Manager yang sudah terpasang:
+
+```powershell
+pymanager install 3.11
+py -3.11 -m venv venv
+```
+
+Alternatif dengan `uv` yang sudah terpasang:
 
 ```powershell
 uv python install 3.11 --install-dir .python --no-bin --no-registry
 $env:UV_PYTHON_INSTALL_DIR = (Resolve-Path .python).Path
 uv venv --python 3.11 --seed venv
 ```
+
+Jika menggunakan `uv`, simpan folder `.python` selama venv ini dipakai.
 
 Gunakan interpreter venv langsung; aktivasi PowerShell tidak diperlukan.
 
@@ -36,6 +43,24 @@ Gunakan interpreter venv langsung; aktivasi PowerShell tidak diperlukan.
 # Untuk mereproduksi dependency yang diuji di Windows/Python 3.11:
 # .\venv\Scripts\python.exe -m pip install -r requirements.lock
 ```
+
+### Jika instalasi gagal membangun wheel `greenlet`
+
+Dependency mengunci `greenlet==3.1.1`, yang belum mendukung Python 3.14. Jika venv dibuat
+dengan Python 3.14, gunakan Python 3.11; mengganti `.env` tidak memperbaiki error kompilasi ini.
+Cek interpreter venv, tutup proses yang menggunakannya, lalu simpan venv lama sebagai cadangan
+(jangan menimpa folder cadangan yang sudah ada):
+
+```powershell
+.\venv\Scripts\python.exe --version
+Rename-Item -Path venv -NewName venv-py314-backup
+pymanager install 3.11
+py -3.11 -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\venv\Scripts\python.exe -m pip check
+```
+
+Di VS Code, pilih interpreter `.\venv\Scripts\python.exe` melalui **Python: Select Interpreter**.
 
 File `.env` lokal sudah dibuat. Untuk instalasi baru, salin `.env.example` ke `.env`, isi koneksi PostgreSQL,
 ganti `JWT_SECRET` dengan secret acak minimal 32 karakter dan isi `BOOTSTRAP_PASSWORD` minimal 12 karakter.
