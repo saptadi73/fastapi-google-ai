@@ -1478,6 +1478,8 @@ class ImportReviewService:
                     "blocking_codes": [exc.code],
                     "ai_coverage": "NOT_STARTED",
                 }
+            if review.checkpoint.get("auto_load"):
+                checkpoint["auto_load"] = True
             review.findings, review.checkpoint = findings, checkpoint
             if not await self.is_current(review):
                 self.move(review, ImportAction.INVALIDATE, worker=True)

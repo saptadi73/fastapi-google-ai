@@ -379,3 +379,33 @@ async def test_manual_sync_rechecks_old_ai_only_batches_without_erasing_user_dec
         assert review.checkpoint["ai_chunks"] == {}
         assert review.generation == 3
         service.queue.assert_awaited_once_with(review)
+@pytest.mark.parametrize("auto_load", [True, False])
+async def test_new_batch_keeps_manual_auto_load_intent_after_validation(monkeypatch, config_data, auto_load):
+    from app.services import import_review_service
+
+    review = SimpleNamespace(
+        id="batch", job_id="job", generation=1, status="VALIDATING", revision_no=1,
+        snapshot_id="snapshot", source_sheet_id="sheet", configuration_json=config_data,
+        dependencies={"sheet": {"header_row": 1, "data_start_row": 2}},
+        checkpoint={"auto_load": True} if auto_load else {}, findings=[],
+    )
+    service = import_review_service.ImportReviewService(
+        Mock(), SimpleNamespace(id="operator", tenant_id="tenant", role="SOURCE_OWNER"),
+    )
+    service.locked = AsyncMock(return_value=review)
+    service.is_current = AsyncMock(return_value=True)
+    service.repo.get = AsyncMock(return_value=SimpleNamespace(values=[["ID", "Tanggal", "Cabang", "Total"]]))
+    service.queue = AsyncMock()
+    monkeypatch.setattr(import_review_service, "incremental_values", lambda values, sheet: (values, None, None))
+    monkeypatch.setattr(import_review_service, "taxonomy_context", AsyncMock(return_value={}))
+    monkeypatch.setattr(import_review_service, "transform_rows", Mock(return_value=([], [], [])))
+    monkeypatch.setattr(import_review_service, "review_taxonomy_rows", AsyncMock(return_value=(0, set(), [])))
+    monkeypatch.setattr(import_review_service, "audit", Mock())
+
+    await service.work(SimpleNamespace(id="job", payload={"import_review_id": "batch", "generation": 1}))
+
+    assert review.status == "AI_REVIEWING"
+    assert review.checkpoint["deterministic_complete"] is True
+    assert review.checkpoint.get("auto_load", False) is auto_load
+    service.queue.assert_awaited_once_with(review)
+
