@@ -9,6 +9,7 @@ venv-py314-backup/
 .tools/
 .uv-cache/
 .venv/
+.venv311/
 __pycache__/
 *.py[cod]
 .pytest_cache/
