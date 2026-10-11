@@ -146,6 +146,10 @@ def matches_format(value, format_name):
         return False
 
 
+def cleanse_text_input(value, target_type):
+    return value.strip() if target_type in ("text", "varchar") and isinstance(value, str) else value
+
+
 def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None, review_mode=False):
     from app.services.taxonomy_validation_service import exact_terms, normalized
 
@@ -174,6 +178,9 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
             i = positions[column.source_column]
             value = raw[i] if i < len(raw) else None
             try:
+                # Baseline cleansing precedes configured transforms and all DQ/AI checks.
+                # Preserve internal whitespace and intentional prefix/suffix output.
+                value = cleanse_text_input(value, column.target_type)
                 parameters = {item.operation: item for item in column.transform_parameters}
                 for transform in column.transformation_codes:
                     if value is not None:
@@ -187,7 +194,7 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                             value = TRANSFORMS[transform](value)
                 used_default = (value is None or value == "") and column.target_column in defaults
                 if used_default:
-                    value = defaults[column.target_column]
+                    value = cleanse_text_input(defaults[column.target_column], column.target_type)
                 value = cast_value(
                     value, column.target_type,
                     source_timezone=None if used_default else column.source_timezone,

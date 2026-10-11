@@ -82,7 +82,7 @@ def test_import_review_issue_schema_has_no_unconstrained_objects():
     schema = AIImportReviewResult.model_json_schema()
     issue = schema["$defs"]["AIImportReviewIssue"]
     assert issue["additionalProperties"] is False
-    assert set(issue["properties"]) == {"source_row", "target_column", "message"}
+    assert set(issue["properties"]) == {"source_row", "target_column", "message", "issue_kind", "related_source_row"}
     assert schema["properties"]["issues"]["items"] == {"$ref": "#/$defs/AIImportReviewIssue"}
 
 

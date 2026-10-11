@@ -22,6 +22,50 @@ from app.workers.runner import run_pending, schedule_sources
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize("genuine_issue", [False, True])
+async def test_worker_trims_text_verifies_masked_duplicates_and_counts_questions(context, config_data, monkeypatch, genuine_issue):
+    from app.core.config import get_settings
+    from app.models.import_review import ImportQuestion, ImportReviewRow
+    from app.schemas.import_review import AIImportReviewResult
+    from app.services.openai_service import OpenAIService
+
+    ctx = context
+    ctx.values[1][2] = " Jakarta "
+    config_data["columns"][2].update(pii_classification="MEDIUM", transformation_codes=[])
+    config_data["semantic"]["dimensions"].remove("branch_name")
+    body = await non_master(ctx, config_data)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)("test-only"))
+    monkeypatch.setattr(settings, "openai_model_etl_config", "test-only")
+
+    async def generate(self, user, task, prompt, schema, **kwargs):
+        import json
+        payload = json.loads(prompt)
+        assert payload["masked_fields"] == ["branch_name"]
+        assert all(row["data"]["branch_name"] == "[REDACTED]" for row in payload["rows"])
+        issues = [
+            {"source_row": 2, "target_column": "branch_name", "message": "Placeholder incomplete"},
+            {"source_row": 2, "target_column": "transaction_date", "message": "Duplicate", "issue_kind": "EXACT_DUPLICATE", "related_source_row": 3},
+        ]
+        if genuine_issue:
+            issues.append({"source_row": 2, "target_column": "transaction_id", "message": "Verify public value"})
+        return AIImportReviewResult(issues=issues, reviewed_rows=[r["source_row"] for r in payload["rows"]], coverage="COMPLETE"), {}
+
+    monkeypatch.setattr(OpenAIService, "generate", generate)
+    review = await create(ctx, body)
+    await run_pending(ctx.tenant_id)
+    await run_pending(ctx.tenant_id)
+    result = await detail(ctx, review)
+    assert result["status"] == ("NEEDS_INPUT" if genuine_issue else "READY_FOR_APPROVAL")
+    assert result["checkpoint"]["open_question_count"] == int(genuine_issue)
+    assert len(result["checkpoint"]["ai_discarded_findings"]) == 2
+    async with SessionFactory() as session:
+        row = await session.scalar(select(ImportReviewRow).where(ImportReviewRow.import_review_id == review["id"], ImportReviewRow.source_row == 2))
+        assert row.transformed_data["branch_name"] == "Jakarta"
+        questions = (await session.scalars(select(ImportQuestion).where(ImportQuestion.import_review_id == review["id"], ImportQuestion.status == "OPEN"))).all()
+        assert len(questions) == int(genuine_issue)
+
+
 async def non_master(ctx, config_data):
     _, sheet, config = await onboard(ctx, config_data)
     config = config["id"]

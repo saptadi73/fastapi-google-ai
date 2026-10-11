@@ -262,3 +262,12 @@ Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal
 Worker mendukung kolom nullable baru dan perubahan tipe pada tabel kosong. View yang perlu dibuat ulang mempertahankan ACL/komentar; dependency yang tidak aman, rename/drop fisik, perubahan key dan backfill wajib diblokir. DDL, view, konversi, hash, aktivasi konfigurasi, audit sukses dan status job SUCCEEDED berada dalam satu transaksi. Kegagalan sebelum commit mempertahankan schema/data serta konfigurasi aktif sebelumnya. Audit kegagalan dan alasan UI dicatat setelah rollback; retry memeriksa fingerprint review kembali.
 
 `DATABASE_RETRY_REQUIRED`: database sibuk/timeout/konflik; tunggu lalu retry. `DATABASE_PERMISSION_DENIED`: admin memeriksa role DDL, ownership dan izin SET ke role aplikasi. Catat ID job; jangan mengubah SQL atau menghapus data untuk melewati blocker. Migrasi platform saat rollout berbeda dari perubahan schema dataset melalui aplikasi.
+
+
+### Cleansing text otomatis dan bukti temuan AI
+
+Kolom `text` dan `varchar` selalu mendapat `trim` otomatis pada nilai sumber sebelum transformasi tambahan, validasi DQ/key, pemeriksaan AI, dan pemuatan. `"  KAN  Jabung  "` menjadi `"KAN  Jabung"`: spasi di tengah, huruf, dan nol depan tetap dipertahankan. Nilai berisi spasi saja menjadi kosong/NULL; nullable mengizinkannya, kolom wajib tetap menghasilkan TYPE_OR_NULL_ERROR. Transformasi tambahan seperti normalize_whitespace, prefix/suffix, atau koreksi ejaan perlu aturan yang direview; trim dasar tidak perlu ditambahkan satu per satu. Nilai sumber di Sheet tidak ditulis ulang.
+
+AI tidak boleh menganggap `[REDACTED]` sebagai data rusak atau menyimpulkan duplikat dari nilai yang disamarkan. Temuan duplikat memakai `issue_kind=EXACT_DUPLICATE` dan `related_source_row`; server membandingkan seluruh data asli di staging. Temuan pada nilai tersembunyi atau duplikat yang tidak terbukti dicatat sebagai temuan yang diabaikan pada checkpoint/audit tanpa membocorkan nilai. Masalah nyata pada kolom terbuka, dugaan PII, dan coverage tidak lengkap tetap menghentikan batch.
+
+Sync manual pada konfigurasi NON_MASTER aktif yang telah disetujui dapat memeriksa ulang batch NEEDS_INPUT dengan blocker AI saja dan seluruh pertanyaan masih terbuka tanpa keputusan pengguna. Worker mengulang cleansing/validasi lalu review AI, mempertahankan identitas staging dan audit pertanyaan lama. Batch dengan keputusan, blocker teknis, konflik, atau gate akses/rilis belum selesai tidak dilompati. Muat ulang halaman tidak menjalankan sync.

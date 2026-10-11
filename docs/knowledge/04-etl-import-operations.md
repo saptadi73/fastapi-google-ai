@@ -33,6 +33,6 @@ NEEDS_INPUT = Menunggu tindakan, bukan worker berjalan. Lihat detail berikon mat
 
 Temuan AI_REVIEW, termasuk batch lama, dapat dijawab KEEP_ORIGINAL dengan alasan verifikasi yang diaudit. Dugaan PII/salah mapping perlu pemilik data; error teknis tidak bisa dilewati. CORRECT_SOURCE meminta perbaikan Sheet dan snapshot baru. Setelah semua jawaban, AI COMPLETE dan validasi selesai tanpa blocker, batch siap. Sync manual kembali dapat memuat batch NON_MASTER siap berdasarkan approval konfigurasi aktif; batch biasa/master tetap preview, approval, Apply. Jawaban saja tidak memuat record.
 
-DDL, view, hash, aktivasi, audit sukses dan status job satu transaksi; gagal sebelum commit mempertahankan kondisi lama. Audit gagal/UI memberi alasan setelah rollback. Retry memeriksa fingerprint review.
+DDL, view, konversi, hash, aktivasi dan audit/status sukses satu transaksi; gagal mempertahankan kondisi lama. Alasan UI/audit dicatat setelah rollback; retry memeriksa fingerprint.
 
-DDL, view, konversi, hash, aktivasi konfigurasi, audit sukses dan status job SUCCEEDED berada dalam satu transaksi. Kegagalan sebelum commit mempertahankan schema/data serta konfigurasi aktif sebelumnya. Audit kegagalan dan alasan UI dicatat setelah rollback; retry memeriksa fingerprint review kembali.
+Text/varchar: trim otomatis sebelum DQ/AI/load; spasi tengah dan nol depan tetap. Duplikat AI diverifikasi dari data asli; lihat panduan cleansing text.

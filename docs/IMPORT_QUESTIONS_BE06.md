@@ -129,3 +129,12 @@ Rollout perlu menjalankan backend dan worker kode yang sama. Downgrade menghapus
 Lihat [API Reference](API_REFERENCE.md), [Batch BE-05](IMPORT_REVIEW_BE05.md), dan [TODO backend](TODO_BACKEND.md).
 
 Verifikasi 8 September 2026: **99 tes backend lulus**, Ruff lulus, Alembic check lulus, dan **117 operasi API** terverifikasi. Tes mencakup koreksi typed staging dengan raw tetap, allowlist kandidat, tenant/role, jawaban ganda, revision/dependency stale, source correction, proposal master draft → submit → approve → resolve, batch resume ke AI blocker, serta downgrade/upgrade migrasi. Provider nyata tidak dipanggil.
+
+
+### Cleansing text otomatis dan bukti temuan AI
+
+Kolom `text` dan `varchar` selalu mendapat `trim` otomatis pada nilai sumber sebelum transformasi tambahan, validasi DQ/key, pemeriksaan AI, dan pemuatan. `"  KAN  Jabung  "` menjadi `"KAN  Jabung"`: spasi di tengah, huruf, dan nol depan tetap dipertahankan. Nilai berisi spasi saja menjadi kosong/NULL; nullable mengizinkannya, kolom wajib tetap menghasilkan TYPE_OR_NULL_ERROR. Transformasi tambahan seperti normalize_whitespace, prefix/suffix, atau koreksi ejaan perlu aturan yang direview; trim dasar tidak perlu ditambahkan satu per satu. Nilai sumber di Sheet tidak ditulis ulang.
+
+AI tidak boleh menganggap `[REDACTED]` sebagai data rusak atau menyimpulkan duplikat dari nilai yang disamarkan. Temuan duplikat memakai `issue_kind=EXACT_DUPLICATE` dan `related_source_row`; server membandingkan seluruh data asli di staging. Temuan pada nilai tersembunyi atau duplikat yang tidak terbukti dicatat sebagai temuan yang diabaikan pada checkpoint/audit tanpa membocorkan nilai. Masalah nyata pada kolom terbuka, dugaan PII, dan coverage tidak lengkap tetap menghentikan batch.
+
+Sync manual pada konfigurasi NON_MASTER aktif yang telah disetujui dapat memeriksa ulang batch NEEDS_INPUT dengan blocker AI saja dan seluruh pertanyaan masih terbuka tanpa keputusan pengguna. Worker mengulang cleansing/validasi lalu review AI, mempertahankan identitas staging dan audit pertanyaan lama. Batch dengan keputusan, blocker teknis, konflik, atau gate akses/rilis belum selesai tidak dilompati. Muat ulang halaman tidak menjalankan sync.

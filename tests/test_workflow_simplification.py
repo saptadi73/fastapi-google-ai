@@ -376,7 +376,9 @@ async def test_manual_sync_rechecks_old_ai_only_batches_without_erasing_user_dec
     else:
         await service.enable_auto_load(review.id)
         assert question.status == "CANCELLED"
-        assert review.status == "AI_REVIEWING"
+        assert review.status == "VALIDATING"
+        assert review.checkpoint["deterministic_complete"] is False
+        assert review.checkpoint["reprocess_staging"] is True
         assert review.checkpoint["auto_load"] is True
         assert review.checkpoint["ai_chunks"] == {}
         assert review.generation == 3
@@ -410,6 +412,34 @@ async def test_new_batch_keeps_manual_auto_load_intent_after_validation(monkeypa
     assert review.checkpoint["deterministic_complete"] is True
     assert review.checkpoint.get("auto_load", False) is auto_load
     service.queue.assert_awaited_once_with(review)
+
+
+async def test_recheck_reuses_staging_identity_and_replaces_old_uncleansed_output(monkeypatch, config_data):
+    from app.services import import_review_service
+
+    row = SimpleNamespace(id="existing-row", source_row=2, raw_data={}, transformed_data={"branch_name": " Jakarta "})
+    review = SimpleNamespace(id="batch", job_id="job", generation=3, status="VALIDATING", revision_no=7,
+        snapshot_id="snapshot", source_sheet_id="sheet", configuration_json=config_data,
+        dependencies={"sheet": {"header_row": 1, "data_start_row": 2}},
+        checkpoint={"auto_load": True, "deterministic_complete": False, "reprocess_staging": True}, findings=[])
+    session = Mock()
+    session.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [row]))
+    service = import_review_service.ImportReviewService(session, SimpleNamespace(id="operator", tenant_id="tenant", role="SOURCE_OWNER"))
+    service.locked = AsyncMock(return_value=review)
+    service.is_current = AsyncMock(return_value=True)
+    service.repo.get = AsyncMock(return_value=SimpleNamespace(values=[["ID", "Tanggal", "Cabang", "Total"], ["001", "2026-01-01", " Jakarta ", 1]]))
+    service.repo.add = AsyncMock()
+    service.queue = AsyncMock()
+    monkeypatch.setattr(import_review_service, "incremental_values", lambda values, sheet: (values, None, None))
+    monkeypatch.setattr(import_review_service, "taxonomy_context", AsyncMock(return_value={}))
+    monkeypatch.setattr(import_review_service, "review_taxonomy_rows", AsyncMock(return_value=(0, set(), [])))
+    monkeypatch.setattr(import_review_service, "audit", Mock())
+    await service.work(SimpleNamespace(id="job", payload={"import_review_id": "batch", "generation": 3}))
+    assert review.status == "AI_REVIEWING"
+    assert row.id == "existing-row" and row.transformed_data["branch_name"] == "Jakarta"
+    assert row.raw_data["Cabang"] == " Jakarta "
+    assert review.checkpoint["text_cleansing_policy_version"] == "text-trim-v1"
+    service.repo.add.assert_not_awaited()
 
 
 @pytest.mark.parametrize("status", ["NEEDS_INPUT", "FAILED", "STALE_REVIEW", "READY_FOR_APPROVAL", "APPROVED", "SUCCEEDED", "AI_REVIEWING"])

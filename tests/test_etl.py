@@ -21,6 +21,40 @@ def test_transforms():
         cast_value("2026-09-01T00:00:00", "timestamptz")
 
 
+@pytest.mark.parametrize("target_type", ["text", "varchar"])
+def test_automatic_text_trim_before_transforms_and_checks(config_data, sheet_values, target_type):
+    config_data["columns"][2].update(target_type=target_type, transformation_codes=[], varchar_length=20)
+    sheet_values[1][2] = "\u00a0\t KAN  Jabung \r\n"
+    config = ETLConfiguration.model_validate(config_data)
+    good, issues, _ = transform_rows(sheet_values, SimpleNamespace(header_row=1, data_start_row=2), config)
+    assert not issues
+    assert good[0][1]["branch_name"] == "KAN  Jabung"
+    assert good[0][1]["transaction_id"] == "001"
+
+
+@pytest.mark.parametrize("nullable", [True, False])
+def test_whitespace_only_text_obeys_nullability(config_data, sheet_values, nullable):
+    config_data["columns"][2].update(nullable=nullable, transformation_codes=[])
+    sheet_values[1][2] = " \t\u00a0 "
+    good, issues, _ = transform_rows(sheet_values, SimpleNamespace(header_row=1, data_start_row=2), ETLConfiguration.model_validate(config_data))
+    if nullable:
+        assert not issues
+        assert good[0][1]["branch_name"] is None
+    else:
+        assert issues[0]["source_row"] == 2
+        assert issues[0]["errors"][0]["code"] == "TYPE_OR_NULL_ERROR"
+
+
+def test_trim_exposes_duplicate_keys_and_preserves_explicit_suffix(config_data, sheet_values):
+    config_data["columns"][0]["transformation_codes"] = []
+    sheet_values[2][0] = " 001 "
+    config_data["columns"][2].update(transformation_codes=["suffix"], transform_parameters=[{"operation": "suffix", "value": " "}])
+    sheet_values[1][2] = " Jakarta "
+    good, issues, _ = transform_rows(sheet_values, SimpleNamespace(header_row=1, data_start_row=2), ETLConfiguration.model_validate(config_data))
+    assert good[0][1]["branch_name"] == "Jakarta "
+    assert issues[0]["errors"][0]["code"] == "DUPLICATE_BUSINESS_KEY"
+
+
 def test_parameterized_text_transforms_are_allowlisted_and_ordered(config_data, sheet_values):
     config_data["columns"][2].update(
         transformation_codes=["trim", "prefix", "replace", "suffix"],
