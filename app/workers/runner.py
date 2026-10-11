@@ -166,6 +166,7 @@ async def run_pending(tenant_id=None):
         job.status, job.started_at = "RUNNING", now()
         _audit_stage(session, job, "STARTED")
         job_id = job.id
+        job_kind = job.kind
     try:
         async with SessionFactory() as session, session.begin():
             job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
@@ -186,7 +187,7 @@ async def run_pending(tenant_id=None):
         if not isinstance(exc, AppError):
             logger.exception(
                 "Unhandled background job failure",
-                extra={"job_id": str(job_id), "job_kind": job.kind},
+                extra={"job_id": str(job_id), "job_kind": job_kind},
             )
         async with SessionFactory() as session, session.begin():
             job = await session.get(Job, job_id)

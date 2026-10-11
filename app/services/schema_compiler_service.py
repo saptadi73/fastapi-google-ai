@@ -132,7 +132,7 @@ def schema_plan(config, sheet_id, tenant_id):
 def operator_table_privileges(load_strategy):
     """Return non-destructive privileges needed by the runtime load path."""
     if load_strategy == "APPEND":
-        return ("INSERT",)
+        return ("SELECT", "INSERT")
     if load_strategy == "UPSERT":
         return ("SELECT", "INSERT", "UPDATE")
     if load_strategy == "FULL_REFRESH":

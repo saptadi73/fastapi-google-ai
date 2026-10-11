@@ -1,8 +1,8 @@
 from app.services.schema_compiler_service import operator_table_privileges
 
 
-def test_append_grants_only_insert():
-    assert operator_table_privileges("APPEND") == ("INSERT",)
+def test_append_grants_read_for_import_preview_and_insert_only():
+    assert operator_table_privileges("APPEND") == ("SELECT", "INSERT")
 
 
 def test_upsert_grants_only_required_non_destructive_privileges():
