@@ -32,3 +32,11 @@ bisnis Keluhan KAN Jabung 2026 / REKAP JENIS KELUHAN dan kode
 keluhan_kan_jabung_2026_rekap_jenis_keluhan. Saran dapat diedit. Nama yang sama
 setelah normalisasi belum tentu unik; konflik kode produk antar-tab tetap
 ditolak saat deploy, bukan mengganti produk lain diam-diam.
+
+Draft manual juga menandai kandidat key dari header ID/kode/nomor yang tidak
+kosong pada sampel; periksa keunikan sebelum review. APPEND tanpa key memakai
+SKIP_IDENTICAL. Jika business/primary key dipilih, append_duplicate_policy tidak
+dikirim dan key tetap dipertahankan. Policy ini tidak berlaku untuk UPSERT atau
+FULL_REFRESH. Error append_duplicate_policy requires APPEND without
+business/primary keys adalah konflik parameter draft, bukan policy akses sumber;
+jangan menghapus key yang benar untuk melewatinya.

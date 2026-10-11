@@ -52,6 +52,19 @@ Urutan untuk kolom baru:
    identik; `SCHEMA_CHANGE_UNSAFE` bukan alasan untuk menghapus tabel atau registrasi ulang.
 7. Deploy, tunggu sukses, kemudian Sync manual untuk NON_MASTER yang memenuhi syarat; master/batch biasa tetap review import sebelum Apply.
 
+### Draft manual APPEND dan key
+
+Template manual menandai kandidat business key dari header seperti ID/kode/nomor
+yang tidak kosong pada sampel. Periksa keunikan dan arti key; kandidat bukan bukti
+bahwa semua data unik. Key pilihan pengguna tetap dipertahankan.
+
+APPEND tanpa business/primary key memakai `SKIP_IDENTICAL` secara default.
+APPEND dengan key tidak mengirim `append_duplicate_policy`, karena policy tersebut
+hanya berlaku tanpa key. UPSERT dan FULL_REFRESH juga tidak memakai policy ini.
+Pesan `append_duplicate_policy requires APPEND without business/primary keys`
+menandakan kombinasi parameter tidak valid, bukan kegagalan policy akses sumber.
+Jangan menghapus key yang benar hanya untuk melewati pesan tersebut.
+
 ### Temuan yang menghentikan pemuatan
 
 `NEEDS_INPUT` tampil **Menunggu tindakan**, bukan worker masih berjalan. Tekan **Lihat
