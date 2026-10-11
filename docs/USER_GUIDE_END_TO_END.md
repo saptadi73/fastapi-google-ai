@@ -35,8 +35,10 @@ Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memaka
    punya assignment scope sumber sendiri; assignment editor dan pembaca tetap divalidasi.
 3. **Sync manual per sumber.** Setelah deploy, pilih Sync manual di Sumber & tracking
    atau Workspace. Konfirmasi pembacaan Sheet/kuota AI, lalu pantau job dan hasil setiap tab,
-   baris valid, cakupan AI, temuan, dan link batch. Sync tidak mengubah Sheet, tidak otomatis
-   approve/apply. Selesaikan temuan, preview, approval, lalu Apply. Batas pemantauan 10 menit
+   baris valid/dimuat, cakupan AI, temuan, dan link batch. Untuk NON_MASTER dengan konfigurasi
+   ACTIVE yang sudah disetujui, sync langsung memuat jika seluruh pemeriksaan lolos.
+   Master/konflik/drift/keamanan berhenti tanpa pemuatan. Sync tidak mengubah Sheet.
+   Batas pemantauan 10 menit
    bukan pembatalan job; Muat ulang hasil atau monitor job melanjutkan pemantauan tanpa
    enqueue baru. Sumber yang masih mempunyai job QUEUED/RUNNING menolak sync duplikat.
 4. **Katalog sebagai shortcut perbaikan.** Buka Google Sheet tepat pada tab asal atau
@@ -172,3 +174,19 @@ token, API key, data pribadi, atau isi spreadsheet sensitif ke pertanyaan.
 
 Contoh nilai yang dapat dipakai saat menjelaskan form taxonomy, yurisdiksi, metadata sumber,
 dan master tersedia di [Contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md).
+### Konfirmasi nilai asli pada temuan AI
+
+**Sync manual langsung:** untuk NON_MASTER, tombol Sync manual membaca data terbaru,
+memeriksa konfigurasi ACTIVE/approval terpisah, rilis/akses sumber, validasi teknis,
+AI dan preview konflik. Jika semuanya lolos, data langsung dimuat memakai approval
+konfigurasi sebagai dasar; tidak meminta approval batch ulang. Konfirmasi tombol
+mencakup perubahan database dan biaya AI. Master, FULL_REFRESH, drift, konflik,
+atau temuan keamanan/PII berhenti. Jadwal dan batch review biasa tetap memakai
+alur preview/approval/Apply. Batch lama tanpa keputusan dapat diperiksa ulang
+bila blocker seluruhnya AI; tidak otomatis menerima temuan lama.
+
+Batch yang `NEEDS_INPUT` belum memuat data ke database. Buka batch dan baca temuan setiap baris/kolom. Untuk kategori `AI_REVIEW`, bila nilai asli sudah diverifikasi sah, pilih **Konfirmasi nilai asli sah** (`KEEP_ORIGINAL`) lalu isi alasan. Ini berlaku juga untuk pertanyaan batch lama. Semua temuan tetap wajib ditinjau; alasan dan aktor disimpan dalam keputusan/audit, tanpa mengganti nilai staging.
+
+Jangan menerima dugaan data pribadi, salah mapping, atau aturan persentase yang belum jelas tanpa verifikasi pemilik data. Error teknis wajib (tipe, nullability, referensi, dan sejenisnya) tidak dapat dilewati dengan konfirmasi. Bila perlu mengubah Sheet, pilih `CORRECT_SOURCE`, perbaiki Sheet, lalu gunakan snapshot/batch baru.
+
+Setelah semua pertanyaan selesai, cakupan AI `COMPLETE`, dan validasi teknis selesai tanpa blocker, batch masuk `READY_FOR_APPROVAL`. Lanjutkan **Preview → approval reviewer terpisah → Apply**. Konfirmasi temuan bukan approval dan tidak otomatis memuat record.

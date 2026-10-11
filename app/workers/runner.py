@@ -119,7 +119,7 @@ async def execute_job(session, job):
     if job.kind == "ETL":
         return await ETLExecutionService(session, user).run(job.source_id)
     if job.kind == "SYNC_REVIEW":
-        return await SourceService(session, user).sync_review(job.source_id)
+        return await SourceService(session, user).sync_review(job.source_id, auto_load=job.payload.get("auto_load", False))
     if job.kind == "IMPORT_REVIEW":
         return await ImportReviewService(session, user).work(job)
     raise AppError("JOB_INVALID", "Jenis job tidak dikenal.")

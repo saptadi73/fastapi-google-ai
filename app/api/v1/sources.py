@@ -341,7 +341,7 @@ async def source_tracking(
                 "configured_at": config.created_at if config else None,
                 "database_status": database_status,
                 "rows_loaded": etl_run.rows_loaded if etl_run else int((import_review.checkpoint or {}).get("rows_applied", 0)) if import_review and import_review.status == "SUCCEEDED" else 0,
-                "loaded_at": etl_run.finished_at if etl_run else None,
+                "loaded_at": etl_run.finished_at if etl_run else (import_review.checkpoint or {}).get("applied_at") if import_review and import_review.status == "SUCCEEDED" else None,
                 "master_binding_status": master_binding.status if master_binding else "NOT_STARTED",
                 "data_product_code": product.code if product else None,
                 "last_failures": sheet_failures.get(str(sheet.id), {}),

@@ -753,17 +753,24 @@ class SourceService:
         audit(self.session, self.user, "source.profiled", source.id, drift=drift)
         return {"profiles": results, "schema_drift": drift}
 
-    async def sync_review(self, source_id):
+    async def sync_review(self, source_id, *, auto_load=False):
         await self.profile(source_id)
         sheets = await self.repo.sheets(source_id)
         reviews = []
         for sheet in sheets:
             config_id = sheet.active_configuration_id if sheet.dataset_kind != "MASTER" else None
             try:
-                result = await ImportReviewService(self.session, self.user).create(
-                    ImportReviewCreate(source_sheet_id=sheet.id, configuration_id=config_id)
-                )
-                reviews.append({"sheet_name": sheet.sheet_name, **jsonable_encoder(result)})
+                if auto_load and sheet.dataset_kind == "MASTER":
+                    raise AppError("IMPORT_MASTER_REVIEW_REQUIRED", "Sync langsung hanya untuk NON_MASTER dengan konfigurasi aktif; master tetap melalui review batch.", 409)
+                service = ImportReviewService(self.session, self.user)
+                async with self.session.begin_nested():
+                    result = await service.create(
+                        ImportReviewCreate(source_sheet_id=sheet.id, configuration_id=config_id)
+                    )
+                    if auto_load:
+                        await service.enable_auto_load(result["review"]["id"])
+                review = await service.detail(result["review"]["id"])
+                reviews.append({"sheet_name": sheet.sheet_name, **jsonable_encoder(review), "review": jsonable_encoder(review), "reused": result["reused"]})
             except AppError as exc:
                 reviews.append({"source_sheet_id": sheet.id, "sheet_name": sheet.sheet_name, "status": "BLOCKED", "code": exc.code, "message": exc.message})
         return {"source_id": str(source_id), "reviews": reviews}
@@ -780,7 +787,7 @@ class SourceService:
         )
         if pending:
             raise AppError("SOURCE_JOB_RUNNING", "Masih ada proses sumber berjalan. Buka monitor job dan tunggu selesai.", 409)
-        return await enqueue(self.session, self.user, "SYNC_REVIEW", str(source.id))
+        return await enqueue(self.session, self.user, "SYNC_REVIEW", str(source.id), auto_load=True)
 
     async def update_sheet(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)

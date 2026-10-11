@@ -331,7 +331,7 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 
 | GET | `/sources/{source_id}/access-policy-options` | A | UUID source | 200 | Policy SOURCE ALLOW approved yang berlaku dan didukung runtime |
 | POST | `/sources/{source_id}/access-activate` | A | SourceAccessActivation | 200 | Aktifkan source setelah review metadata dan binding policy approved |
-| POST | `/sources/{source_id}/sync-review/start` | E | — | 202 | EnqueuedJob SYNC_REVIEW; menolak job sumber QUEUED/RUNNING |
+| POST | `/sources/{source_id}/sync-review/start` | E | — | 202 | SYNC_REVIEW auto_load: NON_MASTER lolos validasi dimuat memakai approval konfigurasi aktif; menolak job sumber QUEUED/RUNNING |
 | PATCH | `/sources/{source_id}/schedule` | E | SourceScheduleUpdate | 200 | Edit cron/timezone/concurrency dengan optimistic revision |
 | GET | `/sources/{source_id}/sheets` | S | UUID source | 200 | SourceSheet[] |
 | GET | `/source-sheets/{sheet_id}/classification` | S | Tidak ada | 200 | SheetClassification: kind, status, revision, actor/time, execution_ready, blocker |
@@ -671,7 +671,9 @@ Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIM
 - `sync-review/start` mengantrekan worker, bukan memblokir request untuk membaca Sheet.
   Poll `/jobs/{job_id}`. Hasil SUCCEEDED berisi `reviews` dengan `sheet_name`,
   `source_sheet_id`, status/ID batch, atau BLOCKED dengan `code/message`.
-  Poll batch untuk status validasi/AI; job sync selesai bukan berarti record sudah dimuat.
+  Poll batch untuk status validasi/AI/pemuatan. NON_MASTER yang lolos seluruh pemeriksaan
+  dimuat berdasarkan approval konfigurasi aktif tanpa approval batch ulang; status batch
+  SUCCEEDED berarti telah dimuat. Tab dengan blocker tidak dimuat. Jadwal tetap review.
 - Katalog inventory menambah `update_status` (`ACTIVE`/`UPDATING`), `update_reason`,
   `last_active_at`, `last_activated_at`, `last_loaded_at`, `last_profiled_at`,
   `latest_import_status`, `pending_configuration_status`. Timestamp bisa null.
@@ -1902,3 +1904,21 @@ mengisi pengguna/waktu acknowledge dan menulis audit. Pemanggilan ulang sukses t
 menggandakan audit. Resource tenant lain atau notifikasi yang ditujukan kepada pengguna
 lain menghasilkan `RESOURCE_NOT_FOUND` (404).
 Role ketiga endpoint: editor source/data, platform admin, dan technical approver.
+Untuk kategori `AI_REVIEW`, respons pertanyaan memuat `review_message` dan `KEEP_ORIGINAL`
+di `allowed_actions`, termasuk pertanyaan lama. Konfirmasi nilai asli sah memerlukan
+`reason` non-kosong dan menyimpan keputusan aktor tanpa mengubah staging. Pertanyaan
+tetap mandatory; `KEEP_ORIGINAL` tidak melewati error teknis mandatory kategori lain.
+Setelah semua pertanyaan terjawab, cakupan COMPLETE dan validasi teknis selesai tanpa
+blocker, batch dapat menjadi READY_FOR_APPROVAL, bukan APPROVED/SUCCEEDED.
+Preview, kewenangan reviewer, pemisahan approver dan Apply tetap diperiksa.
+`CORRECT_SOURCE` menyisakan SOURCE_CORRECTION_REQUIRED; perbaiki Sheet dan buat batch baru.
+
+`POST /sources/{source_id}/sync-review/start` kini mengantre SYNC_REVIEW dengan
+`auto_load=true` (hanya manual; endpoint sinkron lama dan scheduler tetap review).
+NON_MASTER memerlukan konfigurasi ACTIVE yang masih sesuai, approval reviewer
+terpisah, rilis serta akses sumber aktif. AI COMPLETE, validasi teknis, dan preview
+tanpa konflik/pertanyaan wajib dipenuhi sebelum approval internal berdasarkan
+konfigurasi dan Apply transaksional. `checkpoint.approval_mode=ACTIVE_CONFIGURATION`
+mencatat dasar approval, bukan impersonasi reviewer. Master/FULL_REFRESH serta
+drift/PII/konflik berhenti dengan blocker. Hasil job memuat setiap tab dan status;
+SUCCEEDED berarti telah dimuat. `checkpoint.applied_at` mencatat waktu pemuatan.

@@ -193,3 +193,189 @@ async def test_failed_workflow_rolls_back_request_session(monkeypatch):
         await dependency.athrow(AppError("SOURCE_ACCESS_POLICY_REQUIRED", "Policy belum approved.", 409))
     session.rollback.assert_awaited_once()
     session.commit.assert_not_awaited()
+
+
+def test_existing_ai_questions_offer_explicit_confirmation_without_mutating_storage():
+    from app.models.import_review import ImportQuestion
+    from app.services.import_review_service import ImportReviewService
+
+    question = ImportQuestion(
+        category="AI_REVIEW", mandatory=True, allowed_actions=["APPLY_CORRECTION", "CORRECT_SOURCE"],
+        candidates=[], evidence={"source": "AI", "issue": {"message": "Verify nullable value"}},
+    )
+    result = ImportReviewService.question_response(question)
+    assert result["mandatory"] is True
+    assert result["allowed_actions"] == ["APPLY_CORRECTION", "CORRECT_SOURCE", "KEEP_ORIGINAL"]
+    assert result["review_message"] == "Verify nullable value"
+    assert question.allowed_actions == ["APPLY_CORRECTION", "CORRECT_SOURCE"]
+    assert "evidence" not in result
+    question.category = "DATA_QUALITY"
+    assert "KEEP_ORIGINAL" not in ImportReviewService.question_actions(question)
+
+
+@pytest.mark.parametrize("case", ["valid", "no-reason", "technical", "partial", "open", "source-correction", "proposal", "stale"])
+async def test_ai_confirmation_is_audited_without_bypassing_remaining_gates(monkeypatch, case):
+    from app.models.import_review import ImportDecision, ImportQuestion
+    from app.schemas.import_review import ImportQuestionDecision
+    from app.services import import_review_service
+
+    question = ImportQuestion(
+        id=str(uuid4()), import_review_id=str(uuid4()), category="AI_REVIEW",
+        mandatory=True, allowed_actions=["APPLY_CORRECTION", "CORRECT_SOURCE"],
+        candidates=[], evidence={}, revision_no=1, status="OPEN", target_column="amount",
+        source_row=2, question_key="question",
+    )
+    review = SimpleNamespace(
+        id=question.import_review_id, status="NEEDS_INPUT", revision_no=6,
+        checkpoint={"deterministic_complete": True, "ai_coverage": "COMPLETE", "blocking_codes": ["AI_REVIEW_ISSUES"]},
+    )
+    if case == "technical":
+        question.category = "DATA_QUALITY"
+        question.allowed_actions.append("KEEP_ORIGINAL")
+    if case == "partial":
+        review.checkpoint["ai_coverage"] = "PARTIAL"
+    session = Mock()
+    session.scalar = AsyncMock(side_effect=[
+        question, "open" if case == "open" else None,
+        "proposal" if case == "proposal" else None,
+        "source-correction" if case == "source-correction" else None,
+    ])
+    session.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [question] if case == "open" else []))
+    service = import_review_service.ImportReviewService(
+        session, SimpleNamespace(id="editor", tenant_id="tenant", role="PLATFORM_ADMIN"),
+    )
+    service.locked = AsyncMock(return_value=review)
+    service.is_current = AsyncMock(return_value=case != "stale")
+    service.repo.add = AsyncMock(return_value=SimpleNamespace(id="decision"))
+    service.response = Mock(return_value={})
+    service.question_response = Mock(return_value={})
+    monkeypatch.setattr(import_review_service, "audit", Mock())
+    payload = ImportQuestionDecision(revision_no=1, action="KEEP_ORIGINAL", reason="" if case == "no-reason" else "Blank permitted by approved nullable mapping; verified with source owner.")
+    if case in ("no-reason", "technical"):
+        with pytest.raises(AppError) as error:
+            await service.answer_question(review.id, question.id, payload)
+        assert error.value.code == ("IMPORT_DECISION_REASON_REQUIRED" if case == "no-reason" else "IMPORT_DECISION_ACTION_INVALID")
+        service.repo.add.assert_not_awaited()
+        return
+    result = await service.answer_question(review.id, question.id, payload)
+    if case == "stale":
+        assert result["stale"] and review.status == "STALE_REVIEW"
+        service.repo.add.assert_not_awaited()
+        return
+    args = service.repo.add.await_args
+    assert args.args[0] is ImportDecision
+    assert args.kwargs["action"] == "KEEP_ORIGINAL"
+    assert args.kwargs["reason"] == payload.reason
+    assert args.kwargs["after_data"] == {}
+    assert question.status == "ANSWERED"
+    assert review.status == ("READY_FOR_APPROVAL" if case == "valid" else "NEEDS_INPUT")
+    if case in ("partial", "open"):
+        assert "AI_REVIEW_ISSUES" in review.checkpoint["blocking_codes"]
+    if case == "source-correction":
+        assert "SOURCE_CORRECTION_REQUIRED" in review.checkpoint["blocking_codes"]
+
+
+@pytest.mark.parametrize("case", ["valid", "not-enabled", "partial", "open", "conflict", "invalid-preview", "source-conflict"])
+async def test_auto_load_reuses_active_approval_only_after_all_data_checks(monkeypatch, case):
+    from app.services import import_review_service
+
+    review = SimpleNamespace(
+        id="batch", status="READY_FOR_APPROVAL", revision_no=6,
+        checkpoint={"auto_load": True, "deterministic_complete": True, "ai_coverage": "COMPLETE"},
+    )
+    if case == "not-enabled":
+        review.checkpoint["auto_load"] = False
+    if case == "partial":
+        review.checkpoint["ai_coverage"] = "PARTIAL"
+    session = Mock()
+    session.scalar = AsyncMock(return_value="open" if case == "open" else None)
+    service = import_review_service.ImportReviewService(
+        session, SimpleNamespace(id="operator", tenant_id="tenant", role="SOURCE_OWNER"),
+    )
+    service.active_load_configuration = AsyncMock(return_value=SimpleNamespace(id="config", approved_by="reviewer", revision_no=4))
+    service.preview = AsyncMock(return_value={
+        "blocking_codes": ["DUPLICATE"] if case == "conflict" else [],
+        "requires_source_confirmation": case == "source-conflict",
+        "can_approve": case != "invalid-preview", "preview_token": "signed-token",
+    })
+    service.apply = AsyncMock()
+    monkeypatch.setattr(import_review_service, "audit", Mock())
+    if case != "valid":
+        with pytest.raises(AppError):
+            await service.auto_load(review)
+        service.apply.assert_not_awaited()
+        assert review.status == "READY_FOR_APPROVAL"
+        return
+    await service.auto_load(review)
+    assert review.status == "APPROVED"
+    assert review.checkpoint["approved_by"] == "reviewer"
+    assert review.checkpoint["approval_mode"] == "ACTIVE_CONFIGURATION"
+    assert review.checkpoint["approval_basis_configuration_revision"] == 4
+    assert service.apply.await_args.args[1].preview_token == "signed-token"
+    assert service.apply.await_args.args[1].revision_no == review.revision_no
+
+
+@pytest.mark.parametrize("case", ["valid", "master", "inactive", "self-approved", "revoked", "paused", "full-refresh", "revision", "stale", "release"])
+async def test_auto_load_requires_current_active_configuration_and_valid_release(monkeypatch, case):
+    from app.services import import_review_service
+
+    sheet = SimpleNamespace(active_configuration_id="config")
+    source = SimpleNamespace(unlinked_at=None, paused=False, access_status="POLICY_APPROVED")
+    config = SimpleNamespace(id="config", status="ACTIVE", revision_no=4, approved_by="reviewer", created_by="maker", configuration_json={"load_strategy": "UPSERT"})
+    review = SimpleNamespace(id="batch", source_id="source", source_sheet_id="sheet", dependencies={"dataset_kind": "NON_MASTER", "configuration_id": "config", "configuration_revision": 4})
+    if case == "master":
+        review.dependencies["dataset_kind"] = "MASTER"
+    if case == "inactive":
+        config.status = "APPROVED"
+    if case == "self-approved":
+        config.approved_by = config.created_by
+    if case == "revoked":
+        source.access_status = "ACCESS_POLICY_REQUIRED"
+    if case == "paused":
+        source.paused = True
+    if case == "full-refresh":
+        config.configuration_json["load_strategy"] = "FULL_REFRESH"
+    if case == "revision":
+        config.revision_no += 1
+    session = Mock()
+    session.refresh = AsyncMock()
+    service = import_review_service.ImportReviewService(session, SimpleNamespace(id="operator", tenant_id="tenant", role="SOURCE_OWNER"))
+    service.repo.get = AsyncMock(side_effect=[sheet, source, config])
+    service.is_current = AsyncMock(return_value=case != "stale")
+    release = Mock(side_effect=AppError("RELEASE_APPROVAL_REQUIRED", "Pending", 409) if case == "release" else None)
+    monkeypatch.setattr(import_review_service, "require_release_ready", release)
+    if case != "valid":
+        with pytest.raises(AppError):
+            await service.active_load_configuration(review)
+    else:
+        assert await service.active_load_configuration(review) is config
+        release.assert_called_once_with(config, source)
+
+
+@pytest.mark.parametrize("case", ["valid", "decided", "technical"])
+async def test_manual_sync_rechecks_old_ai_only_batches_without_erasing_user_decisions(monkeypatch, case):
+    from app.services import import_review_service
+
+    question = SimpleNamespace(category="AI_REVIEW" if case != "technical" else "DATA_QUALITY", status="OPEN", revision_no=1, evidence={"issue": {"message": "Verify null"}})
+    review = SimpleNamespace(id="batch", source_id="source", source_sheet_id="sheet", status="NEEDS_INPUT", revision_no=6, generation=2, findings=[{"message": "Verify null"}], dependencies={"configuration_id": "config"}, checkpoint={"deterministic_complete": True, "blocking_codes": ["AI_REVIEW_ISSUES"], "ai_chunks": {"old": {}}})
+    session = Mock()
+    session.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [question]))
+    session.scalar = AsyncMock(return_value="decision" if case == "decided" else None)
+    service = import_review_service.ImportReviewService(session, SimpleNamespace(id="operator", tenant_id="tenant", role="SOURCE_OWNER"))
+    service.locked = AsyncMock(return_value=review)
+    service.active_load_configuration = AsyncMock()
+    service.queue = AsyncMock()
+    monkeypatch.setattr(import_review_service, "audit", Mock())
+    if case != "valid":
+        with pytest.raises(AppError):
+            await service.enable_auto_load(review.id)
+        assert question.status == "OPEN"
+        service.queue.assert_not_awaited()
+    else:
+        await service.enable_auto_load(review.id)
+        assert question.status == "CANCELLED"
+        assert review.status == "AI_REVIEWING"
+        assert review.checkpoint["auto_load"] is True
+        assert review.checkpoint["ai_chunks"] == {}
+        assert review.generation == 3
+        service.queue.assert_awaited_once_with(review)

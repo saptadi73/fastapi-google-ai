@@ -1,4 +1,4 @@
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import String, case, cast, func, select
 
 from app.core.exceptions import AppError
 from app.models.audit import AuditEvent
@@ -210,6 +210,33 @@ class SemanticCatalogService:
             ETLRun.configuration_id == Configuration.id,
             ETLRun.status.in_(["SUCCEEDED", "SUCCEEDED_WITH_WARNINGS"]),
         ).order_by(ETLRun.finished_at.desc()).limit(1).correlate(SourceSheet, Configuration).scalar_subquery()
+        import_loaded_at = select(func.max(AuditEvent.created_at)).join(
+            ImportReview, AuditEvent.resource_id == cast(ImportReview.id, String),
+        ).where(
+            ImportReview.tenant_id == self.user.tenant_id,
+            ImportReview.source_sheet_id == SourceSheet.id,
+            ImportReview.status == "SUCCEEDED",
+            ImportReview.dependencies["configuration_id"].astext == cast(Configuration.id, String),
+            AuditEvent.tenant_id == self.user.tenant_id,
+            AuditEvent.event == "import.applied",
+        ).correlate(SourceSheet, Configuration).scalar_subquery()
+        import_loaded_hash = select(Snapshot.content_hash).join(
+            ImportReview, (ImportReview.snapshot_id == Snapshot.id) & (ImportReview.tenant_id == Snapshot.tenant_id),
+        ).join(
+            AuditEvent, AuditEvent.resource_id == cast(ImportReview.id, String),
+        ).where(
+            ImportReview.tenant_id == self.user.tenant_id,
+            ImportReview.source_sheet_id == SourceSheet.id,
+            ImportReview.status == "SUCCEEDED",
+            ImportReview.dependencies["configuration_id"].astext == cast(Configuration.id, String),
+            AuditEvent.tenant_id == self.user.tenant_id,
+            AuditEvent.event == "import.applied",
+        ).order_by(AuditEvent.created_at.desc()).limit(1).correlate(SourceSheet, Configuration).scalar_subquery()
+        loaded_hash = case(
+            (import_loaded_at >= func.coalesce(loaded_at, import_loaded_at), import_loaded_hash),
+            else_=loaded_hash,
+        )
+        loaded_at = func.greatest(loaded_at, import_loaded_at)
         activated_at = select(func.max(AuditEvent.created_at)).where(
             AuditEvent.tenant_id == self.user.tenant_id,
             AuditEvent.resource_id == cast(Configuration.id, String),
