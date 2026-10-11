@@ -2,7 +2,7 @@
 id: master-dan-taxonomy
 title: Master data, referensi, dan taxonomy
 summary: Kapan memakai master atau taxonomy dan urutan menyiapkan definisi, versi, storage, record, serta binding.
-routes: ["/masters/*", "/taxonomies/*", "/governance", "/sources/*"]
+routes: ["/masters", "/masters/*", "/taxonomies", "/taxonomies/*", "/governance", "/sources/*"]
 audiences: ["PLATFORM_ADMIN", "SOURCE_OWNER", "DATA_STEWARD", "TECHNICAL_APPROVER"]
 source: docs/MASTER_DATA_DAN_VALIDASI_IMPORT.md
 ---
@@ -12,9 +12,10 @@ Untuk menentukan kolom yang berelasi dengan master, buka **Workspace ETL**, pili
 
 Tombol **Muat rekomendasi** membandingkan nama header sumber dengan field master menggunakan normalisasi format dan padanan istilah Indonesia/Inggris umum. Kandidat memperlihatkan master, field, tipe, business key, skor/tingkat kecocokan, dan alasan. Skor tinggi tetap hanya petunjuk berbasis nama: sistem tidak memeriksa isi kolom untuk membuktikan relasi. Cocokkan contoh nilai sumber dengan master dan pilih field unik yang tepat sebelum menggunakan kandidat. Tidak ada binding yang tersimpan otomatis; pengguna tetap meninjau dan reviewer menyetujui draft.
 
-Simpan binding sebagai draft dan minta reviewer menyetujuinya. Centang **Referensi wajib ada** jika setiap baris harus memiliki rujukan; cardinality `MANY_TO_ONE` sesuai ketika banyak transaksi dapat menunjuk produk yang sama. Sesudah binding approved dan storage master siap, buka **Storage & record master**, pilih tab pada bagian **Sumber master terikat**, lalu tekan **Buat batch review/import**. Periksa batch di halaman **Batch import**: selesaikan pertanyaan, buat preview, minta approval reviewer berbeda, lalu apply. Binding approved saja belum memuat record. Nilai yang tidak ditemukan atau cocok ke beberapa record tidak dipilih diam-diam; selesaikan sebagai pertanyaan pada review import. Resolver binding saat ini mencari satu field master, jadi untuk master dengan business key gabungan gunakan satu kode rujukan unik yang juga tersedia di sumber. Tipe dan format harus konsisten; simpan kode berawalan nol sebagai teks.
+Simpan binding kolom referensi sebagai draft dan minta reviewer menyetujuinya. Centang **Referensi wajib ada** jika setiap baris harus memiliki rujukan; cardinality `MANY_TO_ONE` sesuai ketika banyak transaksi dapat menunjuk produk yang sama. Untuk tab NON_MASTER, gunakan konfigurasi ETL aktif dan buat batch pada **Batch import** setelah referensi siap. Untuk memuat record tab MASTER, gunakan source binding master approved dan storage siap, lalu buka **Storage & record master**, pilih tab pada bagian **Sumber master terikat**, dan tekan **Buat batch review/import**. Binding kolom referensi dan source binding master adalah dua alur berbeda. Pada kedua alur, selesaikan pertanyaan, buat preview, minta approval reviewer berbeda, lalu apply. Binding approved saja belum memuat record. Nilai yang tidak ditemukan atau cocok ke beberapa record tidak dipilih diam-diam; selesaikan sebagai pertanyaan pada review import. Resolver binding saat ini mencari satu field master, jadi untuk master dengan business key gabungan gunakan satu kode rujukan unik yang juga tersedia di sumber. Tipe dan format harus konsisten; simpan kode berawalan nol sebagai teks.
+
+Untuk menambah field master, edit definisi dan minta approval versi baru. Field baru nullable didukung setelah deploy-storage ulang; record lama bernilai null. Review ulang source binding sesuai versi approved dan profile terbaru. Field wajib baru, perubahan business key, tipe/nullability, rename, atau penghapusan memerlukan migrasi khusus; jangan hapus storage untuk membuat ulang. Jika field berasal dari kolom Sheet baru, tambah kolom di Google Sheets dan profiling ulang sumber yang sama dahulu.
 
 Gunakan taxonomy untuk daftar istilah atau kategori terkendali, seperti jenis biaya, kategori aktivitas, atau status bisnis. Kelola term, alias, hierarki, versi, dan binding kolom. Versi yang telah diterbitkan tidak diubah langsung; buat draft versi berikutnya, tinjau, lalu aktifkan.
 
 Jika nilai sumber tidak cocok dengan master atau taxonomy, proses import membuat pertanyaan atau kandidat. Steward perlu memilih kandidat, mengoreksi nilai sumber, atau mengusulkan penambahan sesuai policy. Sistem tidak memilih kecocokan ambigu secara otomatis.
-

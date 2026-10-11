@@ -1,12 +1,14 @@
 ---
 id: sumber-dan-klasifikasi
 title: Mendaftarkan sumber dan mengklasifikasikan tab
-summary: Cara menghubungkan Google Sheet, melengkapi metadata bisnis, profiling, dan menentukan MASTER atau NON_MASTER.
+summary: Menghubungkan Google Sheet, memperbarui kolom sumber, profiling ulang, dan menentukan MASTER atau NON_MASTER.
 routes: ["/workspace", "/sources", "/sources/*"]
 audiences: ["PLATFORM_ADMIN", "SOURCE_OWNER", "DATA_STEWARD", "TECHNICAL_APPROVER"]
 source: docs/KLASIFIKASI_TAB_BE02.md
 ---
 Sebelum mendaftarkan sumber, bagikan spreadsheet kepada email service account backend dengan akses Viewer. Pada Workspace ETL, masukkan URL atau ID spreadsheet dan nama yang mudah dikenali. Kode teknis dan UUID dibuat sistem; pengguna hanya mengisi kode bisnis bila form memang menyediakannya.
+
+Untuk menambah kolom sumber atau mengganti header, edit Google Sheets dahulu lalu jalankan profiling ulang pada sumber/tab yang sama. Workspace ETL mengatur mapping dan transformasi, bukan menulis isi Sheet. Pastikan kolom baru berada dalam range baca; range/header tab yang sudah memiliki konfigurasi aktif tidak dapat diubah langsung. Setelah profiling, buat draft versi baru dan review ulang. Clone hanya dapat dipakai bila header mapping lama masih tersedia; jika header dihapus/diubah, buat draft baru dari profile terbaru. Penambahan kolom target pada tabel non-master yang sudah deployed memerlukan migrasi yang direview, bukan sekadar approval atau registrasi ulang.
 
 Lengkapi unit pemilik, domain bisnis, yurisdiksi, purpose, data owner, data steward, sensitivitas, dan deskripsi. Metadata ini dipakai untuk kepemilikan, pencarian, serta keputusan akses. Tekan Hubungkan & profiling sekali. API lebih dulu mendaftarkan sumber dan membuat job discovery; pembacaan Google Sheet berlangsung di worker setelahnya. Status pendaftaran, status job, dan tautan monitor tampil di dekat tombol. Jika job gagal, sumber sudah tercatat: buka monitor job, periksa penyebabnya, dan jangan mendaftarkan Sheet yang sama lagi.
 
@@ -21,4 +23,3 @@ Jika spreadsheet yang sama terdaftar lebih dari sekali, pendaftaran aktif ditamp
 Untuk menghapus registrasi setup gagal dan mengulang dari awal, admin gunakan ikon **Hapus permanen** pada tabel sumber. Preview akan menyebutkan jumlah tab, hasil profiling, dan job terminal yang dihapus. Sumber tidak dapat dihapus bila sudah memiliki konfigurasi, snapshot/ETL, data product, binding master/taxonomy, review import, kebijakan akses/AI terkait, dependensi, atau job aktif. Admin harus mengetik kode sumber, memberi alasan, dan mengonfirmasi dua kali. Data setup yang dihapus tidak dapat dipulihkan; audit penghapusan tetap tercatat. Untuk sumber yang telah menghasilkan data operasional, jangan hapus; tinjau relasinya dan ikuti proses perubahan yang berlaku.
 
 Setiap tab harus dikonfirmasi sebagai MASTER atau NON_MASTER. MASTER berisi rujukan yang relatif stabil dan dipakai dataset lain, misalnya cabang, produk, atau departemen. NON_MASTER berisi transaksi, pengukuran, atau data dinamis. Jika ragu, tinjau business key, frekuensi perubahan, pemilik resmi, dan pemakaian kolom sebagai rujukan. Perubahan klasifikasi yang sudah aktif dapat memerlukan migrasi dan review ulang.
-

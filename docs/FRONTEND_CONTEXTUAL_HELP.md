@@ -21,6 +21,15 @@ assignment kosong, kegagalan request, dan tombol **Muat ulang pilihan** secara t
 Admin lain perlu memberikan assignment melalui Administrasi → Pengguna; atribut registry
 tidak otomatis menjadi assignment.
 
+Panduan Workspace/review, sumber, master, katalog/dashboard, serta topik periode harus
+membedakan isi Sheet dari konfigurasi ETL: kolom sumber ditambah di Google Sheets,
+profiling ulang pada sumber yang sama, dan draft versi baru sebelum review/deploy.
+Approval form tidak memigrasikan schema target non-master yang sudah ada. Field master
+nullable memakai approval definisi dan deploy-storage ulang; perubahan yang tidak kompatibel
+memerlukan migrasi khusus. Label bulan/minggu tanpa tahun bukan tanggal transaksi.
+Tanggal kejadian dan batas rekap periode harus dijelaskan terpisah dengan kalender bisnis
+yang eksplisit. Detail: [perubahan sumber dan periode](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
+
 Bantuan **Persetujuan tayang** menjelaskan keputusan IT dan setiap unit terkait untuk
 revisi konfigurasi approved. Administrasi menyediakan pilihan akun/unit bernama;
 halaman approver menampilkan status, ringkasan data, dan catatan sebelum keputusan.

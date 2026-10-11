@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -49,6 +50,72 @@ def test_master_relation_question_retrieves_binding_guidance():
     assert "contoh-isian-master-dan-analitik" in article_ids
 
 
+@pytest.mark.parametrize(
+    "question,role,route",
+    [
+        ("menambah kolom date periode w1 january profiling ulang", "DATA_STEWARD", "/workspace"),
+        ("ubah header sumber schema migrasi", "SOURCE_OWNER", "/sources"),
+        ("query tanggal january w1 periode", "VIEWER", "/dashboard"),
+        ("tambah field master nullable", "DATA_STEWARD", "/masters/master-id/storage"),
+    ],
+)
+def test_source_evolution_guidance_is_retrieved_within_provider_budget(question, role, route):
+    articles = KnowledgeBase().search(question, role, route)
+    context = "\n".join(item.body[:6000] for item in articles)
+
+    assert "profiling ulang" in context
+    assert "migrasi" in context
+    if "nullable" in question:
+        assert "Field baru nullable" in context or "field nullable" in context
+    else:
+        assert "january" in context
+        assert "tahun" in context
+
+
+@pytest.mark.asyncio
+async def test_help_passes_source_date_and_migration_guidance_to_provider():
+    class AI:
+        async def generate(self, user, purpose, context, schema):
+            payload = json.loads(context)
+            content = "\n".join(item["content"] for item in payload["knowledge_articles"])
+            assert purpose == "USER_HELP"
+            assert all(len(item["content"]) <= 6000 for item in payload["knowledge_articles"])
+            assert "Workspace tidak menulis data ke Sheet" in content
+            assert "migrasi manual yang direview" in content
+            assert "jangan" in content.lower() and "menebak tanggal" in content
+            assert "periode mulai dan selesai" in content
+            article_id = payload["knowledge_articles"][0]["id"]
+            return HelpAnswer(
+                answer="Ubah sumber, profiling ulang, dan review draft; schema target perlu migrasi.",
+                citations=[HelpCitation(article_id=article_id, title="Panduan")],
+            ), {"ai_model": "test"}
+
+    service = HelpService(SimpleNamespace(role="DATA_STEWARD"), ai=AI())
+    answer, _ = await service.ask(
+        HelpQuestion(question="menambah kolom date periode w1 january profiling ulang", route="/workspace")
+    )
+    assert answer.citations
+
+
+def test_all_knowledge_articles_fit_provider_context():
+    articles = KnowledgeBase().articles("PLATFORM_ADMIN")
+    assert len({item.article_id for item in articles}) == len(articles)
+    assert all(len(item.body) <= 6000 for item in articles)
+
+
+@pytest.mark.parametrize(
+    "route,expected",
+    [
+        ("/masters", "master-dan-taxonomy"),
+        ("/taxonomies", "master-dan-taxonomy"),
+        ("/admin", "pengguna-role-dan-akses"),
+    ],
+)
+def test_help_topic_lists_include_registry_root_routes(route, expected):
+    service = HelpService(SimpleNamespace(role="PLATFORM_ADMIN"), ai=object())
+    assert expected in {item["id"] for item in service.list_articles(route=route)}
+
+
 @pytest.mark.asyncio
 async def test_help_answer_only_keeps_retrieved_citations(tmp_path):
     article(tmp_path / "guide.md", "guide", "Panduan", '"*"', '"/guide"', "daftarkan sumber lalu profiling")
@@ -82,4 +149,3 @@ async def test_help_does_not_call_ai_without_context(tmp_path):
     service = HelpService(SimpleNamespace(role="VIEWER"), KnowledgeBase(tmp_path), AI())
     answer = await service.ask(HelpQuestion(question="pertanyaan tidak dikenal"))
     assert answer.insufficient_context is True
-

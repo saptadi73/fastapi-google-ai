@@ -1,6 +1,13 @@
 # Master data, referensi, dan validasi import
 
-Status: **BE-01–BE-06 menyediakan kebijakan, klasifikasi, registry, binding, storage kanonis, batch review, serta pertanyaan/keputusan staging**. Dokumen ini mencatat kebutuhan bisnis dari diskusi 8 September 2026. Pemuatan record, resolver relasi/FK, approval proposal master, dan review AI masih tahap lanjutan. Status mengikuti [TODO Backend](TODO_BACKEND.md); implementasi aktif dijelaskan di [BE-03](REGISTRY_MASTER_BE03.md), [BE-04](STORAGE_MASTER_BE04.md), [BE-05](IMPORT_REVIEW_BE05.md), dan [BE-06](IMPORT_QUESTIONS_BE06.md).
+Status: kebijakan, klasifikasi, registry/binding, storage kanonis, batch review,
+pertanyaan/keputusan staging, preview/approval/apply master, referensi/FK, dan review AI
+terkontrol tersedia. Dokumen ini menyimpan kebutuhan bisnis dan rancangan awal dari diskusi
+8 September 2026; contoh berlabel usulan bukan kontrak API aktif. Status mengikuti
+[TODO Backend](TODO_BACKEND.md); gunakan [API Reference](API_REFERENCE.md),
+[BE-03](REGISTRY_MASTER_BE03.md), [BE-04](STORAGE_MASTER_BE04.md),
+[BE-07](MASTER_IMPORT_POLICY_BE07.md), [BE-08](MASTER_REFERENCES_BE08.md),
+dan [review AI BE-13](REVIEW_BE13.md) untuk cakupan yang sudah tersedia.
 
 Tujuannya: menetapkan identitas master yang baku sebelum taxonomy/semantic layer, memperbarui master yang sama tanpa membuat duplikat, dan menahan data ambigu sampai pengguna menjawab pertanyaan sistem.
 
@@ -19,7 +26,9 @@ Tujuannya: menetapkan identitas master yang baku sebelum taxonomy/semantic layer
 
 Pengguna sudah mengonfirmasi klasifikasi **per tab** dan **usulan penambahan kode baru yang wajib disetujui**. Kode yang cocok diperbarui menurut preview; record yang tidak muncul tetap disimpan sesuai policy awal. Detail sumber otoritatif, perubahan key, masa berlaku, apply atomik, dan kontrak versi tersedia di [Kebijakan data BE-01](KEBIJAKAN_DATA_BE01.md).
 
-Kontrak dasar sudah tersedia; registry master, binding, dan penerapan policy ke import masih mengikuti tahapan [TODO Backend](TODO_BACKEND.md). Pilihan tersebut bukan izin untuk menggabungkan atau memigrasikan data production secara otomatis.
+Registry master, binding, dan penerapan policy ke import sudah tersedia dengan batas yang
+didokumentasikan pada fase terkait. Pilihan tersebut bukan izin untuk menggabungkan atau
+memigrasikan data production secara otomatis.
 
 ## 2. Master dan non-master bukan pembagian tipe kolom
 
@@ -39,7 +48,13 @@ Master adalah identitas/acuan yang digunakan berulang. Non-master adalah kejadia
 
 Jangan menimpa histori transaksi hanya karena harga atau nama master terbaru berubah. Simpan nilai fakta pada waktu transaksi; untuk kebijakan bertanggal, simpan referensi versi atau masa berlaku. Konversi satuan juga memerlukan aturan eksplisit, bukan penggantian ejaan saja.
 
-## 3. Kesenjangan implementasi saat ini
+## 3. Kesenjangan pada rancangan awal (historis)
+
+Tabel berikut merekam kondisi awal sebelum modul master/import berikutnya dibuat.
+Klasifikasi frontend, target kanonis, apply master, pertanyaan batch, referensi/FK, dan
+review AI sekarang memiliki implementasi tersendiri; jangan memakai tabel historis ini
+sebagai panduan ketersediaan fitur. Migrasi key/schema yang tidak kompatibel, koreksi
+riwayat lengkap, dan cakupan lanjutan tetap mengikuti batas pada dokumen fase aktif.
 
 | Area | Kondisi kode sekarang | Perubahan yang diperlukan |
 |---|---|---|
@@ -87,7 +102,10 @@ Profiling boleh dilakukan untuk membantu klasifikasi. Deploy, approval final, da
 
 ### Registry master
 
-Registry metadata dan binding sudah diimplementasikan pada BE-03. Rincian di bawah tetap menjadi sasaran desain lengkap; target fisik record master dan migrasi key belum berjalan. Gunakan API Reference/BE-03 untuk nama field dan kontrak aktif, bukan menganggap seluruh field rancangan di sini sudah tersedia.
+Registry metadata dan binding tersedia pada BE-03; target fisik kanonis dan apply record
+tersedia pada BE-04/BE-07. Migrasi key yang tidak kompatibel belum tersedia. Rincian
+berlabel usulan di bawah tetap menjadi sasaran desain lengkap; gunakan API Reference dan
+dokumen fase untuk nama field serta kontrak aktif.
 
 Usulan `platform.master_definition`:
 
@@ -261,7 +279,11 @@ UUID contoh adalah placeholder. Server harus menolak pertanyaan, master, kandida
 
 ## 10. Integrasi frontend Vue
 
-Frontend berada di `C:/projek/vue-googlesheet-ai`. Login, workspace sumber (`/workspace`), dan wizard review konfigurasi (`/configurations/:id/review`) sudah tersedia dengan API nyata. Review Excel, jawaban pertanyaan konfigurasi, submit, approval, deploy, dan sync menggunakan endpoint backend. Form klasifikasi dapat dihubungkan ke API BE-02 yang kini tersedia; katalog master dan review record per batch masih menunggu API tahap berikutnya.
+Frontend berada di repository `vue-googlesheet-ai`. Login, workspace sumber (`/workspace`),
+review konfigurasi (`/etl-review/:id`), klasifikasi, katalog/storage/binding master, serta
+review record per batch tersedia melalui API nyata. Review Excel, jawaban pertanyaan,
+submit, approval, deploy, dan import memakai kontrak backend. Daftar layar berikut adalah
+tujuan alur pengguna; bukan klaim bahwa semua parameter rancangan telah diimplementasikan.
 
 Perluasan layar untuk alur master/import:
 

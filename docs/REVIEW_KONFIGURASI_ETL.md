@@ -1,6 +1,6 @@
 # Verifikasi dan persetujuan konfigurasi ETL
 
-Status: **wizard Vue, bukti review, preview before/after, dan round-trip XLSX untuk subset konfigurasi runtime sudah diimplementasikan**. Bagian master/relasi/taxonomy dan parameter lain yang ditandai belum tersedia tetap rancangan. Lihat [panduan implementasi](PANDUAN_REVIEW_ETL.md). Disusun setelah membaca seluruh 14 tab [Template_Parameter_Google_Sheet_AI_ETL.xlsx](Template_Parameter_Google_Sheet_AI_ETL.xlsx). Fitur yang belum tersedia tidak boleh dianggap sudah diimplementasikan oleh API Reference.
+Status: **wizard Vue, bukti review, preview before/after, dan round-trip XLSX untuk subset konfigurasi runtime sudah diimplementasikan**. Master, referensi, dan taxonomy tersedia melalui modul/API tersendiri; ini tidak berarti seluruh parameter workbook dapat diedit. Parameter yang ditandai belum tersedia tetap rancangan. Lihat [panduan implementasi](PANDUAN_REVIEW_ETL.md). Disusun setelah membaca seluruh 14 tab [Template_Parameter_Google_Sheet_AI_ETL.xlsx](Template_Parameter_Google_Sheet_AI_ETL.xlsx). Fitur yang belum tersedia tidak boleh dianggap sudah diimplementasikan oleh API Reference.
 
 ## 1. Rekomendasi
 
@@ -18,7 +18,12 @@ Hubungkan Sheet → klasifikasi master/non-master → profiling
 → deploy → sync data → pantau hasil
 ```
 
-BE-01 menetapkan klasifikasi per tab dan usulan kode master baru yang wajib disetujui. [BE-02](KLASIFIKASI_TAB_BE02.md) sudah menyediakan penyimpanan/API klasifikasi dan gate backend; registry/binding metadata tersedia pada [BE-03](REGISTRY_MASTER_BE03.md), storage tersedia pada [BE-04](STORAGE_MASTER_BE04.md), sedangkan runtime import master masih tahap lanjutan. Konfigurasi manual/AI, validate, approval, deploy, dan job polling untuk dataset mandiri tersedia. Form klasifikasi frontend belum ditambahkan; gunakan API/Swagger sementara.
+BE-01 menetapkan klasifikasi per tab dan usulan kode master baru yang wajib disetujui. [BE-02](KLASIFIKASI_TAB_BE02.md) menyediakan klasifikasi dan gate backend; registry/binding tersedia pada [BE-03](REGISTRY_MASTER_BE03.md), storage pada [BE-04](STORAGE_MASTER_BE04.md), dan runtime preview/approval/apply pada [BE-07](MASTER_IMPORT_POLICY_BE07.md). Workspace menyediakan klasifikasi tab. Konfigurasi manual/AI, validate, approval, deploy, dan job polling untuk dataset non-master tersedia; tab MASTER memakai binding dan batch import, bukan konfigurasi ETL biasa.
+
+Perubahan kolom sumber dilakukan di Google Sheets lalu profiling ulang pada sumber yang sama.
+Mapping baru ditambahkan melalui form draft; versi APPROVED/ACTIVE harus di-clone atau dibuat
+ulang dari profile terbaru. Perubahan schema target non-master yang sudah ada memerlukan
+migrasi yang direview. Lihat [perubahan sumber dan periode waktu](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
 
 ## 2. Wizard yang disarankan
 
@@ -51,26 +56,26 @@ Tampilkan status setiap rekomendasi: belum diperiksa, diterima, diubah pengguna,
 
 | Tab workbook | Penempatan pada UI | Ketersediaan backend saat ini |
 |---|---|---|
-| 00 Petunjuk | Bantuan, ringkasan progres, indikator kelengkapan | Perlu UI; formula workbook bukan validasi server |
-| 01 Sumber Sheet | Identitas file/tab dan pengaturan baca | Source/tab/range/header tersedia; timezone/locale/owner bisnis per dataset belum lengkap |
-| 02 Struktur Kolom | Tabel pemetaan dan arti bisnis | Mapping, tipe dasar, nullable, key, PII, confidence/reason tersedia; domain/entity/unit/currency/format detail belum lengkap |
-| 03 Aturan Cleansing | Tabel transform berurutan dengan contoh | Daftar transform terbatas dan parameter `prefix`/`suffix`/`replace` tersedia; condition/on_error/parameter bebas belum tersedia |
+| 00 Petunjuk | Bantuan, ringkasan progres, indikator kelengkapan | Panduan dan helper halaman tersedia; formula workbook bukan validasi server |
+| 01 Sumber Sheet | Identitas file/tab dan pengaturan baca | Source/tab/range/header, metadata owner/steward, jadwal timezone IANA tersedia; format/timezone nilai diatur pada mapping, bukan edit bebas seluruh tab workbook |
+| 02 Struktur Kolom | Tabel pemetaan dan arti bisnis | Mapping, nullable/key/PII, metadata bisnis, unit/currency, format tanggal/angka, panjang/precision tersedia untuk parameter runtime; kontrak lengkap tetap mengikuti schema API |
+| 03 Aturan Cleansing | Tabel transform berurutan dengan contoh | Transform allowlist, parameter `prefix`/`suffix`/`replace`, format tanggal/angka, dan normalisasi timezone tersedia; condition/on_error/parameter bebas belum tersedia |
 | 04 Taxonomy Mapping | Padanan nilai dan kategori baku | Registry, version draft/publish, binding approved, resolver, dan rule `in_taxonomy` tersedia |
 | 05 Data Quality | Form aturan dan hasil uji | Rule dasar, format/domain, threshold, `in_taxonomy`, max_age_days, default bertipe, severity/owner tersedia; severity/owner belum menjadi assignment otomatis |
 | 06 Target Database | Preview target/load dan panel teknis | Strategi load, storage master, reference binding, dependency plan, dan FK fisik tersedia; multi-target/schema evolution tetap terbuka |
 | 07 OpenAI Config | Kebijakan AI, masking, pertanyaan ambigu | Model/prompt global dan registry task/prompt/model approved tersedia; trigger/threshold per task belum tersedia |
 | 08 Operasional | Jadwal, sync, status job, audit | Cron timezone IANA, dependency, concurrency policy, watermark incremental, statistik, inbox NEEDS_INPUT/FAILED, acknowledge dan audit tersedia; retention belum tersedia |
-| 09 Kamus Parameter | Help text, validasi input, daftar enum | Perlu kamus pemetaan template ke schema API |
+| 09 Kamus Parameter | Help text, validasi input, daftar enum | Parameter catalog API dan helper tersedia; gunakan capabilities/schema untuk membedakan parameter runtime dari rancangan template |
 | 10 Data Product Catalog | Ringkasan dataset untuk laporan | Product, dimensi, metric, allowed_roles, metadata bisnis dan version tersedia |
 | 11 Metric Definitions | Editor definisi hitungan | Agregasi, filter tetap, null handling, unit, sinonim, deskripsi, dan default period tersedia; arithmetic expression/approval metric terpisah belum tersedia |
 | 12 Intent Query Mapping | Contoh pertanyaan dan rencana query | Saved query, ambiguity flow, default period, visualisasi, dan pencocokan contoh tersedia; parameter/priority/output timezone masih terbuka |
-| 13 Join Relationships | Review relasi dan kardinalitas | Registry tenant-scoped dan structured query multi-product melalui relationship APPROVED tersedia; editor workbook tab 13 dan join otomatis AI belum tersedia |
+| 13 Join Relationships | Review relasi dan kardinalitas | Registry tenant-scoped dan query/NL2SQL melalui relationship APPROVED yang diverifikasi tersedia; editor workbook tab 13 dan pembuatan/approval relasi otomatis oleh AI belum tersedia |
 
 Template tidak dapat diperlakukan sebagai payload API saat ini. Contoh perbedaan yang harus ditangani adapter:
 
 - `collapse_whitespace` perlu dipetakan ke `normalize_whitespace`.
 - `parse_date` dengan format bebas tidak identik dengan `parse_date_id`; hanya petakan jika semantiknya sesuai.
-- `varchar(200)` dan `numeric(18,2)` tidak diterima sebagai enum `target_type` saat ini; panjang/precision tidak boleh hilang diam-diam ketika diterjemahkan.
+- `varchar(200)` dan `numeric(18,2)` bukan nilai enum `target_type`; gunakan tipe dasar beserta `varchar_length` atau `numeric_precision`/`numeric_scale` yang didukung, tanpa menghilangkan parameter tersebut.
 - `analytics`/`staging` target di contoh workbook tidak sama dengan target `trusted` yang diizinkan ETLConfiguration sekarang.
 - Label PII workbook `Personal`/`Financial` tidak sama dengan klasifikasi tingkat risiko NONE/LOW/MEDIUM/HIGH; minta pemetaan kebijakan, jangan konversi otomatis tanpa definisi.
 - Workbook memuat status Ya/Aktif/Disetujui, sedangkan API memakai boolean/enum yang berbeda.
@@ -144,14 +149,14 @@ identitas, allowlist, revision, otorisasi, serta apply atomiknya didefinisikan.
 - `POST /configurations/{id}/submit-review` → ajukan review.
 - `POST /configurations/{id}/approve` atau `/reject` → revision_no dan komentar.
 - `POST /configurations/{id}/deploy` → antrekan aktivasi.
-- `POST /sources/{source_id}/sync` → antrekan pemuatan data.
+- `POST /sources/{source_id}/sync-review` → profiling dan antrekan batch review; periksa preview, approval, lalu apply. `/sync` adalah jalur legacy, bukan pengganti review batch.
 
 Path di atas relatif terhadap `/api/v1`; detail payload dan respons ada di [API Reference](API_REFERENCE.md).
 
 ### Belum tersedia
 
 - Seluruh parameter template yang ditandai belum tersedia pada tabel pemetaan.
-- Status penerimaan rekomendasi dan pertanyaan/jawaban terstruktur per field/baris.
+- Status penerimaan rekomendasi per field di seluruh tab workbook. Pertanyaan/jawaban terstruktur per baris tersedia pada batch import, bukan sebagai editor semua parameter workbook.
 
 Export XLSX sekarang mempertahankan seluruh tab template dan mengisi parameter runtime yang didukung. `workbook-preview` memvalidasi perubahan tanpa menyimpan; `workbook-apply` menyimpan draft setelah preview diterima. Konflik revision/snapshot meminta unduh atau preview ulang; tidak ada merge otomatis. Bukti review per bagian/kolom dan jawaban pertanyaan tersimpan pada `review_state`.
 
@@ -164,4 +169,4 @@ Export XLSX sekarang mempertahankan seluruh tab template dan mengisi parameter r
 5. Tambahkan export template terisi serta import-preview XLSX yang memakai schema dan validator yang sama dengan form.
 6. Uji kesetaraan form ↔ XLSX, tidak ada parameter hilang, konflik revision, tenant isolation, formula input, dan approval tidak bisa dipalsukan melalui workbook.
 
-Jalur form utama dan XLSX tambahan sudah tersedia untuk subset runtime. Urutan di atas tetap menjadi acuan perluasan parameter; registry master, taxonomy, dan relasi belum termasuk implementasi ini.
+Jalur form utama dan XLSX tambahan sudah tersedia untuk subset runtime. Urutan di atas tetap menjadi acuan perluasan parameter; registry master, taxonomy, dan relasi memakai modul tersendiri. Dukungan modul tersebut tidak membuka edit semua tab workbook atau migrasi schema otomatis.

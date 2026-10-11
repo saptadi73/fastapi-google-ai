@@ -85,7 +85,7 @@ Contoh respons yang diberi label **isi `data`** di bagian berikut adalah bagian 
 ### Tipe, ID, dan pagination
 
 - UUID dikirim sebagai string. `sheet_id` Google berupa integer, berbeda dari `SourceSheet.id`/`source_sheet_id` yang UUID internal.
-- Tanggal memakai `YYYY-MM-DD`. Timestamp metadata berupa ISO 8601 dengan zona waktu; frontend boleh mengubah tampilan ke zona pengguna. Cron memakai UTC.
+- Tanggal memakai `YYYY-MM-DD`. Timestamp metadata berupa ISO 8601 dengan zona waktu; frontend boleh mengubah tampilan ke zona pengguna. Cron memakai timezone IANA pada sumber, default UTC.
 - JSON boolean adalah `true`/`false`. Request tidak menerima `tenant_id` bebas; tenant diambil dari login/token dan database pengguna.
 - Decimal/numeric hasil query diserialisasi sebagai angka JSON. Untuk nominal yang memerlukan presisi desimal tinggi, jangan mengasumsikan aritmetika JavaScript Number selalu presisi; backend belum menyediakan kontrak uang integer minor-unit.
 - Payload menggunakan strict schema: field JSON yang tidak dikenal menghasilkan `422`. Field yang boleh dihilangkan belum tentu boleh berisi `null`; ikuti schema.
@@ -489,6 +489,12 @@ Semua field PATCH opsional. Header 1–100, awal data 2–1000 dan harus setelah
 
 PATCH tab yang sudah punya konfigurasi aktif ditolak `409 CONFIGURATION_CONFLICT`, termasuk perubahan `enabled`. PATCH tab mereset fingerprint; jalankan `/profile` kembali sebelum membuat konfigurasi.
 
+Profiling ulang memakai sumber yang sudah terdaftar, bukan registrasi ulang. Kolom sumber baru
+harus ditambahkan di Google Sheets dan berada dalam range baca sebelum profiling.
+Workspace hanya mengedit konfigurasi. Jika fingerprint berubah, buat draft baru berdasarkan
+profile terbaru; clone hanya berhasil bila mapping lama masih merujuk header yang tersedia.
+Lihat [perubahan sumber dan periode waktu](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
+
 Hasil job DISCOVER/PROFILE pada `Job.result`:
 
 ```json
@@ -612,7 +618,7 @@ Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIM
 
 ## 4. Konfigurasi ETL dan approval
 
-**Status BE-02:** klasifikasi per tab sudah aktif melalui GET/PUT `/source-sheets/{sheet_id}/classification`. Body PUT adalah `{"revision_no":1,"dataset_kind":"NON_MASTER"}` atau `MASTER`. Payload policy lengkap BE-01 belum menjadi body API; SourceCreate/ETLConfiguration tetap tidak menerima dataset_kind. Registry/binding master tersedia pada BE-03; MASTER tetap tertahan sebelum review/apply import tersedia. Kontrak respons, error, serta dampak rollout dijelaskan di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md). BE-04 menambah storage/pencarian record, BE-05 batch review, dan BE-06 pertanyaan/keputusan sehingga jumlah operasi aktif menjadi 117.
+**Klasifikasi:** tersedia melalui GET/PUT `/source-sheets/{sheet_id}/classification`. Body PUT adalah `{"revision_no":1,"dataset_kind":"NON_MASTER"}` atau `MASTER`. Payload policy lengkap BE-01 belum menjadi body API; SourceCreate/ETLConfiguration tetap tidak menerima dataset_kind. MASTER ditolak pada konfigurasi/sync ETL biasa, tetapi dapat dimuat melalui binding approved, storage siap, serta preview/approval/apply batch import. Kontrak respons, error, serta dampak rollout dijelaskan di [Klasifikasi tab BE-02](KLASIFIKASI_TAB_BE02.md) dan [kebijakan import master BE-07](MASTER_IMPORT_POLICY_BE07.md).
 
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|

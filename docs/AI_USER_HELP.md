@@ -11,6 +11,22 @@ untuk prosedur terbatas. Konten harus menjelaskan fungsi dan proses pengguna tan
 credential, atau detail kontrol keamanan. Perubahan artikel langsung digunakan pada request berikutnya
 dan tidak memerlukan migration database.
 
+Ini adalah retrieval artikel lokal pada setiap pertanyaan, bukan fine-tuning model. Hanya
+artikel terpilih yang dikirim; backend membatasi isi setiap artikel menjadi 6.000 karakter.
+Letakkan panduan penting sebelum batas tersebut dan uji pertanyaan serta konteks yang benar-benar
+diterima provider. Mengubah dokumentasi di luar `docs/knowledge` tidak otomatis memperbarui
+jawaban model. Helper halaman frontend adalah konten statis terpisah yang perlu diselaraskan.
+Perubahan lokal baru tersedia di production setelah file terkait dideploy; perubahan prompt
+mengikuti pemuatan/version policy runtime, bukan perubahan izin database.
+
+Artikel sumber, operasi ETL, master, dashboard, contoh analitik, dan pemecahan masalah
+membedakan penambahan kolom Google Sheets dari revisi konfigurasi Workspace. Asisten harus
+menjelaskan profiling ulang pada sumber yang sama, draft dari profile terbaru, serta migrasi
+schema non-master yang sudah deployed. Field master nullable memiliki alur approval dan
+deploy-storage tersendiri. Label periode text seperti `w1` atau `january` perlu tahun,
+grain, dan kalender bisnis; jangan menjanjikan konversi tanggal atau analisis overlap otomatis.
+Lihat [panduan perubahan sumber dan waktu](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
+
 Artikel akses menjelaskan pilihan beberapa unit secara eksplisit dan penunjukan approver
 per sumber untuk review metadata, konfigurasi ETL, dan batch import. Asisten harus
 menegaskan bahwa unit induk tidak otomatis membuka unit bawahan dan penunjukan approver

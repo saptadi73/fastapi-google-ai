@@ -6,8 +6,8 @@ bagian 29 dokumen baseline masih memerlukan pekerjaan hardening yang disebut di 
 
 ## Struktur dan tanggung jawab
 
-Runtime proyek minimal Python 3.11, dengan venv lokal Python 3.11.16. Requirements dan lock file
-diregenerasi dari environment Python 3.11. Tes integrasi menggunakan `googleai_test`, yang dipersiapkan
+Runtime proyek minimal Python 3.11; dependency closure diuji pada Python 3.11. Versi patch dan
+lokasi interpreter lokal bergantung instalasi, lihat [README](../README.md). Tes integrasi menggunakan `googleai_test`, yang dipersiapkan
 melalui `scripts/prepare_test_db.py`, terpisah dari database aplikasi `googleai`.
 
 | Direktori | Tanggung jawab |
@@ -35,7 +35,7 @@ melalui `scripts/prepare_test_db.py`, terpisah dari database aplikasi `googleai`
   tabel yang sudah ada ditolak dan perlu migrasi yang direview. Schema compiler tidak menjalankan SQL AI.
 - ETL deterministik: transform allowlist, DQ rules, staging, UPSERT/APPEND/FULL_REFRESH, idempotency,
   quarantine, lineage ke nomor baris/snapshot/konfigurasi. FULL_REFRESH gagal secara atomic bila ada baris invalid.
-- Job persisten, status/error, retry eksplisit, jadwal cron UTC, pause/resume. Source ID sekaligus menjadi
+- Job persisten, status/error, retry eksplisit, jadwal cron dengan timezone IANA (default UTC), pause/resume. Source ID sekaligus menjadi
   identifier schedule pada endpoint `/etl-jobs`; belum ada tabel jadwal independen per tab.
 - Katalog data product, metric/dimension dari konfigurasi approved, query filter/group/sort/pagination,
   dashboard sales/inventory, CSV export, saved query dan normalized intent.
@@ -92,8 +92,9 @@ Lihat [status, matriks rute, dan gate rollout BE16](ACCESS_JURISDICTION_BE16.md)
    SQL bebas. Role aplikasi harus dibatasi sebelum deployment produksi; RLS menyeluruh belum dipasang.
 8. DDL dan registry dapat menggunakan koneksi berbeda. Jika DDL commit tetapi aktivasi registry gagal,
    object fisik yang belum aktif mungkin tertinggal. Retry memeriksa kompatibilitas object; tidak ada aktivasi otomatis.
-9. SQL fallback bebas sengaja tidak diekspos. NL2SQL menggunakan structured plan satu data product, tanpa join.
-   Pertanyaan berulang dapat dijadikan template setelah validasi dan activation.
+9. SQL fallback bebas sengaja tidak diekspos. NL2SQL menggunakan structured plan dari produk yang
+   diizinkan; join hanya melalui relationship APPROVED yang disertakan dalam konteks dan diverifikasi
+   backend. Pertanyaan berulang dapat dijadikan template setelah validasi dan activation.
 10. Saved query menyimpan query plan dan parameter konkret. Contoh intent berlaku untuk plan yang sama;
     tanggal relatif seperti "bulan ini" sebaiknya memakai endpoint dashboard dengan parameter tanggal,
     bukan template bertanggal tetap. Klarifikasi meminta user mengirim ulang pertanyaan lengkap.
@@ -129,7 +130,19 @@ model, biaya akun, akses Service Account, atau kuota eksternal sudah diuji live.
 - [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
 
 
-## Rencana master data dan validasi import
+## Master data dan validasi import
+
+Status runtime saat ini: registry/binding dan storage master, batch review/pertanyaan,
+preview/approval/apply, referensi/FK master, dan taxonomy tersedia. Tab MASTER memakai
+binding approved dan batch import, bukan konfigurasi ETL biasa. Workspace menyediakan
+klasifikasi dan modul master/import tersendiri. Penambahan field master nullable didukung
+melalui approval dan deploy-storage ulang; perubahan schema non-master yang sudah deployed
+tetap memerlukan migrasi yang direview. Lihat [perubahan sumber](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
+
+### Riwayat implementasi BE-01 sampai BE-04
+
+Catatan fase berikut menyimpan hasil dan keterbatasan pada saat implementasi masing-masing,
+bukan daftar kekurangan runtime terkini. Untuk kontrak aktif gunakan [API Reference](API_REFERENCE.md).
 
 Kebutuhan klasifikasi master/non-master, master kanonis lintas Sheet, foreign key referensi, review AI per import, dan pertanyaan pengguna didokumentasikan di [Master data dan validasi import](MASTER_DATA_DAN_VALIDASI_IMPORT.md). Pengerjaan mengikuti [TODO Backend](TODO_BACKEND.md).
 
@@ -161,13 +174,13 @@ Endpoint yang sudah tersedia beserta payload, respons, role, error, dan mekanism
 
 Panduan fitur baru: [Wizard review konfigurasi ETL dan import Excel](PANDUAN_REVIEW_ETL.md) memuat cara menjalankan migrasi, halaman Vue `/workspace`, payload preview/apply, dan mekanisme persetujuan.
 
-## Batch review import BE-05
+## Riwayat batch review import BE-05
 
 Model dan migrasi `5ab90e816eee`, tujuh endpoint batch/temuan, snapshot dan policy tetap, idempotency, checkpoint antar-job, cancel/revalidate/resume, serta recovery worker tersedia. Kontrak frontend ada di [Batch review BE-05](IMPORT_REVIEW_BE05.md); API Reference memuat 114 operasi. Temuan deterministik tidak mengekspos raw values. Batch berhenti pada NEEDS_INPUT untuk masalah data atau AI_REVIEW_NOT_IMPLEMENTED; belum ada review AI, pertanyaan/jawaban terstruktur, approval/apply batch, atau pengalihan sync NON_MASTER lama. Migrasi BE-05 hanya diterapkan di database test pada sesi implementasi ini.
 
 Verifikasi BE-05: **95 tes lulus**, Ruff lulus, Alembic check lulus dan **114 operasi API** terverifikasi. Pengujian memakai database test serta provider mock; bukan bukti integrasi Google/OpenAI production. Tahap berikutnya BE-06.
 
-## Pertanyaan batch BE-06 dan apply BE-07
+## Riwayat pertanyaan batch BE-06 dan apply BE-07
 
 BE-06 menambah staging raw/transformed/corrected per batch, pertanyaan dan keputusan berversi, serta endpoint list/jawab/resolve proposal. Kontrak frontend ada di [Pertanyaan batch BE-06](IMPORT_QUESTIONS_BE06.md); API Reference memuat 117 operasi. Koreksi tidak menulis Google Sheet atau target trusted; proposal membuat draft registry dan hanya ditutup setelah master approved. Resolver kandidat otomatis/FK/apply belum tersedia. Migrasi `6d1305460956` hanya diterapkan pada database test di sesi ini.
 

@@ -42,7 +42,7 @@ Sheet yang sama lagi. Jika job FAILED, sumber tetap tercatat dan penyebabnya per
 diperiksa pada monitor job. Jika request pendaftaran gagal, periksa pesan form dan
 daftar sumber sebelum mencoba ulang.
 
-Saat URL Sheet diisi, workspace memeriksa pendaftaran yang sudah ada dan menampilkan peringatan. Jika milik akun sendiri, buka sumber lama; jika milik akun lain, hubungi admin. Saat tombol Hubungkan ditekan, pengecekan diulang sebelum mengirim permintaan. Guard atomik di backend tetap mencegah duplikat ketika dua permintaan datang bersamaan. Workspace juga menampilkan grup sumber duplikat aktif. Admin melihat duplikat tenant; pengguna lain hanya melihat duplikat miliknya. Admin memilih sumber utama dari dropdown, mengisi alasan, lalu menekan **Unlink** pada duplikat yang tidak diperlukan. Sumber yang di-unlink hilang dari pilihan utama dan tidak ditampilkan lagi di panel duplikat. Jika perlu digunakan kembali, daftarkan ulang Spreadsheet dan lakukan binding/metadata ulang. Sistem menolak unlink jika sumber masih punya konfigurasi, hasil ETL, data product, binding master, dependensi, atau job aktif; periksa keterkaitan tersebut sebelum mencoba lagi. Sumber dengan pemilik berbeda perlu ditinjau tujuan serta hak aksesnya sebelum memilih sumber utama.
+Saat URL Sheet diisi, workspace memeriksa pendaftaran yang sudah ada dan menampilkan peringatan. Jika milik akun sendiri, buka sumber lama; jika milik akun lain, hubungi admin. Saat tombol Hubungkan ditekan, pengecekan diulang sebelum mengirim permintaan. Guard atomik di backend tetap mencegah duplikat ketika dua permintaan datang bersamaan. Workspace juga menampilkan grup sumber duplikat aktif. Admin melihat duplikat tenant; pengguna lain hanya melihat duplikat miliknya. Admin memilih sumber utama dari dropdown, mengisi alasan, lalu menekan **Unlink** pada duplikat yang tidak diperlukan. Sumber yang di-unlink hilang dari pilihan utama dan tidak ditampilkan lagi di panel duplikat. Jika perlu digunakan kembali, tampilkan sumber unlink pada **Sumber & tracking** lalu pulihkan link dengan dua konfirmasi; jangan mendaftarkan ulang Spreadsheet untuk memulihkan sumber yang sama. Sistem menolak unlink jika sumber masih punya konfigurasi, hasil ETL, data product, binding master, dependensi, atau job aktif; periksa keterkaitan tersebut sebelum mencoba lagi. Sumber dengan pemilik berbeda perlu ditinjau tujuan serta hak aksesnya sebelum memilih sumber utama.
 
 Jika dropdown unit, domain bisnis, atau yurisdiksi kosong saat pendaftaran, pastikan
 ketiganya sudah menjadi assignment aktif **akun yang sedang login**, pada tenant yang
@@ -51,6 +51,20 @@ Minta admin lain menugaskan atribut tersebut melalui Administrasi → Pengguna, 
 tekan **Muat ulang pilihan** di Workspace. Admin tidak dapat menugaskan akunnya sendiri.
 Purpose diambil dari registry aktif, bukan assignment; jika semua pilihan kosong dan
 ada pesan gagal memuat, periksa endpoint `/access/registration-options`.
+
+## Memperbarui sumber dan periode waktu
+
+Untuk menambah kolom sumber, ubah Google Sheets dahulu, lalu profiling ulang sumber/tab yang
+sama. Workspace ETL hanya mengubah konfigurasi, bukan isi Sheet. Clone konfigurasi lama
+menjadi draft bila header lama masih sesuai; jika tidak, buat draft baru dari profile terbaru.
+Validate, review, approve, dan deploy. Perubahan kolom target non-master yang sudah deployed
+memerlukan migrasi schema yang direview; persetujuan di form bukan migrasi otomatis.
+
+Label `w1`, `w2`, `january`, atau `february` tidak cukup untuk query tanggal. Lengkapi tahun
+dan kalender minggu. Gunakan tanggal kejadian untuk transaksi, atau batas mulai/selesai
+untuk rekap periode, sambil mempertahankan label asal. Map sebagai `date` dan dimensi semantic,
+lalu periksa dry-run; jangan mengarang tanggal dari label yang ambigu. Panduan lengkap:
+[perubahan sumber, kolom, dan periode waktu](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
 
 ## Contoh pertanyaan dashboard
 
@@ -88,4 +102,3 @@ token, API key, data pribadi, atau isi spreadsheet sensitif ke pertanyaan.
 
 Contoh nilai yang dapat dipakai saat menjelaskan form taxonomy, yurisdiksi, metadata sumber,
 dan master tersedia di [Contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md).
-

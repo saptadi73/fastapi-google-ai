@@ -1,13 +1,19 @@
 # Batch review import — BE-05
 
-BE-05 menyediakan batch persisten, snapshot tetap, checkpoint worker, idempotency, temuan deterministik, cancel, revalidate, dan kontrak resume. Batch tidak menulis ke trusted/master dan tidak memanggil AI. Pertanyaan/jawaban terstruktur mengikuti BE-06, preview/apply BE-07, dan review AI BE-10.
+BE-05 memperkenalkan batch persisten, snapshot tetap, checkpoint worker, idempotency,
+temuan deterministik, cancel, revalidate, dan resume. Bagian yang menyebut
+`AI_REVIEW_NOT_IMPLEMENTED`, tidak memanggil AI, atau belum tersedia apply adalah catatan
+capability fase BE-05, bukan batas runtime terkini. Runtime sekarang memiliki
+[pertanyaan BE-06](IMPORT_QUESTIONS_BE06.md), [preview/approval/apply BE-07](MASTER_IMPORT_POLICY_BE07.md),
+[referensi BE-08](MASTER_REFERENCES_BE08.md), dan [review AI BE-13](REVIEW_BE13.md).
+Gunakan [API Reference](API_REFERENCE.md) untuk kontrak aktif dan respons readiness.
 
 ## Prasyarat dan pembuatan batch
 
 Sumber tidak dijeda, tab enabled, klasifikasi CONFIRMED, dan profiling/snapshot harus tersedia. Batch menggunakan snapshot **yang sudah tersimpan**, bukan membaca Google Sheet langsung. Jalankan profiling terlebih dahulu jika ingin mengambil perubahan terbaru di Google Sheet.
 
 - NON_MASTER: `configuration_id` wajib dan harus APPROVED atau ACTIVE untuk tab/fingerprint yang sama. Review konfigurasi tetap merupakan tahap terpisah.
-- MASTER: jangan kirim `configuration_id`. Mapping berasal dari master source binding APPROVED yang cocok dengan klasifikasi, fingerprint, hash snapshot, dan versi master approved yang aktif. Penambahan snapshot berbeda mungkin memerlukan review binding BE-03 kembali. Storage master tidak diwajibkan untuk validasi batch; pemuatan belum tersedia.
+- MASTER: jangan kirim `configuration_id`. Mapping berasal dari master source binding APPROVED yang cocok dengan klasifikasi, fingerprint, hash snapshot, dan versi master approved yang aktif. Penambahan snapshot berbeda mungkin memerlukan review binding BE-03 kembali. Pemuatan memakai preview/approval/apply BE-07 dan membutuhkan storage master siap; readiness aktual mengikuti respons backend, bukan keterbatasan fase awal BE-05.
 
 `POST /api/v1/import-reviews` — HTTP 202:
 

@@ -8,11 +8,16 @@ Urutan pekerjaan backend dan kriteria selesai setiap tahap tersedia di [TODO Bac
 
 Panduan konfigurasi production dan pergantian key tersedia di [Konfigurasi dan rotasi kredensial](docs/KONFIGURASI_DAN_ROTASI_KREDENSIAL.md).
 
-Spesifikasi alur master/non-master, referensi, dan pertanyaan AI tersedia di [Master data dan validasi import](docs/MASTER_DATA_DAN_VALIDASI_IMPORT.md). [BE-01](docs/KEBIJAKAN_DATA_BE01.md) menetapkan kebijakan dasar, dan [BE-02](docs/KLASIFIKASI_TAB_BE02.md) sudah menyediakan API klasifikasi per tab serta gate backend. [BE-03](docs/REGISTRY_MASTER_BE03.md) menyediakan registry/binding metadata master. Penyimpanan record master dan review setiap import masih tahap lanjutan. Setelah migrasi, tab lama harus dikonfirmasi sebelum sync; tab MASTER menunggu implementasi master kanonis.
+Spesifikasi alur master/non-master, referensi, dan pertanyaan AI tersedia di [Master data dan validasi import](docs/MASTER_DATA_DAN_VALIDASI_IMPORT.md). [BE-01](docs/KEBIJAKAN_DATA_BE01.md) menetapkan kebijakan dasar, [BE-02](docs/KLASIFIKASI_TAB_BE02.md) menyediakan klasifikasi per tab, dan [BE-03](docs/REGISTRY_MASTER_BE03.md) menyediakan registry/binding master. [Storage master](docs/STORAGE_MASTER_BE04.md), [review/apply batch](docs/MASTER_IMPORT_POLICY_BE07.md), dan [referensi master](docs/MASTER_REFERENCES_BE08.md) tersedia. Tab MASTER memakai binding approved dan batch import, bukan konfigurasi/sync ETL biasa. Setelah migrasi, tab lama harus dikonfirmasi sebelum import.
 
 Acuan integrasi frontend tersedia di [API Reference](docs/API_REFERENCE.md), dilengkapi payload, respons, hak akses, job polling, dan schema lengkap.
 
 Verifikasi draft AI melalui form dan Excel sudah tersedia untuk subset parameter runtime. Lihat [panduan penggunaan](docs/PANDUAN_REVIEW_ETL.md) dan [cakupan template](docs/REVIEW_KONFIGURASI_ETL.md).
+
+Untuk menambah kolom sumber atau mengganti periode text dengan tanggal, lihat
+[perubahan sumber dan periode waktu](docs/PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
+Profiling ulang memakai sumber yang sama; perubahan schema target yang sudah deployed
+memerlukan migrasi terpisah yang direview.
 
 ## Menjalankan di Windows / PowerShell
 

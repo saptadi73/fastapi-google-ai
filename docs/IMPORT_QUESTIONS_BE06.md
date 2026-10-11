@@ -1,6 +1,6 @@
 # Pertanyaan dan keputusan batch import — BE-06
 
-BE-06 menambahkan pertanyaan terstruktur dan staging per batch pada alur BE-05. Nilai dari Google Sheet tetap tersimpan pada snapshot dan **tidak pernah ditulis balik** oleh jawaban pengguna. Jawaban berupa koreksi hanya berlaku pada staging batch tersebut; import/apply ke target belum tersedia sampai BE-07.
+BE-06 menambahkan pertanyaan terstruktur dan staging per batch pada alur BE-05. Nilai dari Google Sheet tetap tersimpan pada snapshot dan **tidak pernah ditulis balik** oleh jawaban pengguna. Jawaban berupa koreksi hanya berlaku pada staging batch tersebut. Preview/approval/apply ke target kini tersedia melalui [BE-07](MASTER_IMPORT_POLICY_BE07.md); resolver/referensi dan review AI dijelaskan pada [BE-08](MASTER_REFERENCES_BE08.md) dan [BE-13](REVIEW_BE13.md). Bagian yang menyebut tahap berikutnya merekam batas pada fase awal BE-06; gunakan [API Reference](API_REFERENCE.md) untuk kontrak aktif.
 
 ## Saat pertanyaan dibuat
 
