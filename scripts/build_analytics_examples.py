@@ -1333,6 +1333,8 @@ def deterministic_zip(entries):
     with ZipFile(stream, "w", ZIP_STORED) as archive:
         for name, content in sorted(entries.items()):
             info = ZipInfo(name, (2026, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = 0o600 << 16
             info.compress_type = ZIP_STORED
             archive.writestr(info, content)
     return stream.getvalue()

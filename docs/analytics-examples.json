@@ -69,7 +69,7 @@
           "business_key": "action_id"
         }
       ],
-      "sha256": "df09623e49cb4665776e182a7268f2e5ac33f24c55521b7944967d2378c79d79"
+      "sha256": "2b84a6517831930c7e3f3a8d999a9742cbc0123272486cd96d9e9e9956f29c3f"
     },
     {
       "id": "marketing",
@@ -140,7 +140,7 @@
           "business_key": "action_id"
         }
       ],
-      "sha256": "0708a0c64cfe50ed88989e4cc8c41ca84c5a81c468aa593ac8ce106cddc015b2"
+      "sha256": "4a272f136b8a5ddcd7c75079f60d2859ac6ba0719b584459f8effe66f7af2281"
     },
     {
       "id": "kepuasan",
@@ -211,7 +211,7 @@
           "business_key": "action_id"
         }
       ],
-      "sha256": "8c05e803c617f574af77a201c608b12200bf6b76cf7754cb2a184bf172dd273b"
+      "sha256": "decfe8a345dd5b5a5e4cd1a8d20f41651ded68b5d4e6e43cdf34546cece6ddef"
     },
     {
       "id": "competitiveness",
@@ -296,7 +296,7 @@
           "business_key": "action_id"
         }
       ],
-      "sha256": "01aca165179e67e3ad28a329616316dd88627b44cf9fb69a933bd2fddbbf780e"
+      "sha256": "e4df9dcba4a0766c379bc466713e1a9ffde05767d2f2affce0877d5f6d0cac5d"
     },
     {
       "id": "kpi",
@@ -360,7 +360,7 @@
           "business_key": "action_id"
         }
       ],
-      "sha256": "a682d8dc4be912a16b35f5688b7519fe9911fa77ad1cd0a7f4bd4dfa47f07060"
+      "sha256": "8f3dd29d452e690a33e691fb6efaa2826f74500135a2dd1c28ab20ff272092a1"
     }
   ],
   "bundle_url": "/examples/analytics/Paket_5_Contoh_Analitik.zip"
