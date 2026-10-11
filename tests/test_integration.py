@@ -17,7 +17,13 @@ from app.core.exceptions import AppError
 from app.core.security import decode_token, password_hasher
 from app.main import app
 from app.models import Base
-from app.models.access import AccessAttribute, UserAssignment
+from app.models.access import (
+    AccessAttribute,
+    AccessPolicy,
+    AccessPolicyBinding,
+    AccessRequest,
+    UserAssignment,
+)
 from app.models.audit import AuditEvent
 from app.models.auth import Tenant, User
 from app.models.configuration import Artifact, Configuration
@@ -2311,6 +2317,122 @@ async def sync(ctx, source_id):
     data = await request(ctx, "POST", f"/sources/{source_id}/sync", expected=202)
     await run_pending(ctx.tenant_id)
     return (await request(ctx, "GET", "/jobs/" + data["data"]["job_id"]))["data"]
+
+
+async def test_account_registration_requests_access_and_batch_approval_is_atomic(context):
+    ctx = context
+    metadata = await source_access_metadata(ctx)
+    attribute_ids = [metadata[key] for key in ("owner_unit_id", "business_domain_id", "jurisdiction_id")]
+    created = (await request(ctx, "POST", "/users", expected=201, data={
+        "username": "onboarding_reader", "password": "test-password-123", "role": "VIEWER",
+        "initial_access": {"attribute_ids": attribute_ids, "business_reason": "Membaca laporan unit yang ditugaskan."},
+    }))["data"]
+    requests = created["access_requests"]
+    assert len(requests) == 3 and all(item["status"] == "PENDING" for item in requests)
+    for item in requests:
+        assert datetime.fromisoformat(item["valid_to"]) - datetime.fromisoformat(item["valid_from"]) == timedelta(days=366)
+    payload = {"requests": [{"id": item["id"], "revision": item["revision"]} for item in requests]}
+    maker = await request(ctx, "POST", "/access/requests/approve-batch", data=payload, expected=422)
+    assert maker["errors"][0]["code"] == "ACCESS_REQUEST_APPROVER_CONFLICT"
+    await request(ctx, "POST", "/access/requests/approve-batch", who="approver", data=payload, expected=403)
+    await request(ctx, "POST", "/users", expected=201, data={
+        "username": "access_admin", "password": "test-password-123", "role": "PLATFORM_ADMIN",
+    })
+    login = await ctx.client.post("/api/v1/auth/login", json={
+        "tenant_code": ctx.tenant_code, "username": "access_admin", "password": "test-password-123",
+    })
+    assert login.status_code == 200
+    ctx.headers["access_admin"] = {"Authorization": "Bearer " + login.json()["data"]["access_token"]}
+    stale = sorted(payload["requests"], key=lambda item: item["id"])
+    stale[-1] = {**stale[-1], "revision": stale[-1]["revision"] + 1}
+    await request(ctx, "POST", "/access/requests/approve-batch", who="access_admin", data={"requests": stale}, expected=409)
+    async with SessionFactory() as session:
+        statuses = (await session.scalars(select(AccessRequest.status).where(
+            AccessRequest.tenant_id == ctx.tenant_id, AccessRequest.subject_user_id == created["id"],
+        ))).all()
+        assert statuses == ["PENDING"] * 3
+        assert await session.scalar(select(func.count()).select_from(UserAssignment).where(
+            UserAssignment.tenant_id == ctx.tenant_id, UserAssignment.user_id == created["id"],
+        )) == 0
+    approved = (await request(ctx, "POST", "/access/requests/approve-batch", who="access_admin", data=payload))["data"]
+    assert all(item["status"] == "APPROVED" for item in approved)
+    assignments = (await request(ctx, "GET", f"/access/users/{created['id']}/assignments"))["data"]
+    assert {item["attribute_id"] for item in assignments} == set(attribute_ids)
+    await request(ctx, "POST", "/users", expected=404, data={
+        "username": "invalid_onboarding", "password": "test-password-123",
+        "initial_access": {"attribute_ids": [str(uuid4())], "business_reason": "Target akses tidak tersedia."},
+    })
+    async with SessionFactory() as session:
+        assert await session.scalar(select(User.id).where(
+            User.tenant_id == ctx.tenant_id, User.username == "invalid_onboarding",
+        )) is None
+
+
+async def test_combined_configuration_access_approval_rolls_back_and_uses_configuration_approver(context, config_data):
+    ctx = context
+    source_id, _, config = await onboard(ctx, config_data, legacy_source=False)
+    validation = (await request(ctx, "POST", f"/configurations/{config['id']}/validate"))["data"]
+    submitted = (await request(ctx, "POST", f"/configurations/{config['id']}/submit-review", data={
+        "revision_no": config["revision_no"], "snapshot_hash": validation["snapshot_hash"],
+        "reviewed_columns": [item["target_column"] for item in config_data["columns"]],
+        "reviewed_sections": ["identity", "columns", "cleansing", "quality", "load", "semantic"],
+    }))["data"]
+    path = f"/configurations/{config['id']}/approve"
+    body = {"revision_no": submitted["revision_no"], "source_access": {"revision_no": 1, "policy_id": str(uuid4())}}
+    await request(ctx, "POST", path, data=body, expected=403)
+    failed = await request(ctx, "POST", path, who="approver", data=body, expected=404)
+    assert failed["errors"][0]["code"] == "RESOURCE_NOT_FOUND"
+    async with SessionFactory() as session:
+        source = await session.get(DataSource, source_id)
+        assert source.access_review_status == "PENDING" and source.access_revision == 1
+        persisted = await session.get(Configuration, config["id"])
+        assert persisted.status == "NEEDS_REVIEW" and persisted.revision_no == submitted["revision_no"]
+        assert await session.scalar(select(func.count()).select_from(Artifact).where(
+            Artifact.configuration_version_id == config["id"],
+        )) == 0
+    async with SessionFactory() as session, session.begin():
+        source = await session.get(DataSource, source_id)
+        reviewer = await session.scalar(select(User).where(User.tenant_id == ctx.tenant_id, User.username == "approver"))
+        source.approval_assignees = {"configuration": [reviewer.id], "metadata_review": [], "import_review": []}
+        policy = AccessPolicy(
+            tenant_id=ctx.tenant_id, code="ONBOARDING_READ", label="Akses laporan", effect="ALLOW",
+            actions=["DISCOVER", "READ", "QUERY"], status="APPROVED",
+            required_attribute_ids=[source.access_metadata[key] for key in ("owner_unit_id", "business_domain_id", "jurisdiction_id")],
+            valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            created_by=source.access_metadata_editor_id, approved_by=reviewer.id,
+        )
+        session.add(policy)
+        await session.flush()
+        policy_id = policy.id
+        session.add(AccessPolicyBinding(tenant_id=ctx.tenant_id, policy_id=policy.id, resource_type="SOURCE", resource_id=source.source_code))
+    context_result = (await request(ctx, "GET", f"/configurations/{config['id']}/access-review", who="approver"))["data"]
+    assert context_result["reviewer_is_editor"] is False and context_result["policies"][0]["id"] == policy_id
+    await request(ctx, "POST", f"/sources/{source_id}/access-review", who="approver", expected=403,
+                  data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"})
+    body["source_access"]["policy_id"] = policy_id
+    await request(ctx, "POST", path, who="approver",
+                  data={**body, "source_access": {**body["source_access"], "revision_no": 2}}, expected=409)
+    approved = (await request(ctx, "POST", path, who="approver", data=body))["data"]
+    assert approved["status"] == "APPROVED"
+    async with SessionFactory() as session:
+        source = await session.get(DataSource, source_id)
+        assert source.access_review_status == "APPROVED" and source.access_status == "POLICY_APPROVED"
+        assert source.access_revision == 3 and source.access_reviewed_by == reviewer.id
+        assert source.status != "ACTIVE"
+
+
+async def test_manual_sync_is_durable_and_prevents_concurrent_source_jobs(context, config_data):
+    ctx = context
+    source_id, _, _ = await onboard(ctx, config_data)
+    queued = (await request(ctx, "POST", f"/sources/{source_id}/sync-review/start", expected=202))["data"]
+    assert queued["status"] == "QUEUED"
+    second = await request(ctx, "POST", f"/sources/{source_id}/sync-review/start", expected=409)
+    assert second["errors"][0]["code"] == "SOURCE_JOB_RUNNING"
+    await request(ctx, "POST", f"/sources/{source_id}/sync-review/start", who="viewer", expected=403)
+    async with SessionFactory() as session:
+        job = await session.get(Job, queued["job_id"])
+        assert job.kind == "SYNC_REVIEW" and job.source_id == source_id
+        assert job.status == "QUEUED"
 
 
 async def test_workbook_preview_apply_review_evidence_and_tenant_isolation(context, config_data):

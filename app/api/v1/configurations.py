@@ -36,6 +36,11 @@ edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
 
 
+@router.get("/{config_id}/access-review", dependencies=review)
+async def configuration_access_review(config_id: UUID, session: Session, user: CurrentUser):
+    return success(await ConfigurationReviewService(session, user).access_review(config_id))
+
+
 async def _guard_configuration_source(session, user, config):
     source = await session.scalar(
         ConfigurationService(session, user).repo.query(DataSource).where(DataSource.id == config.source_id)

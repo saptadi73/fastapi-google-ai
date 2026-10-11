@@ -479,7 +479,7 @@ class SourceService:
         )
         return record(source)
 
-    async def review_access_metadata(self, source_id, data):
+    async def review_access_metadata(self, source_id, data, *, workflow="metadata_review"):
         source = await self.session.scalar(
             self.repo.query(DataSource)
             .where(DataSource.id == str(source_id))
@@ -488,7 +488,7 @@ class SourceService:
         )
         if source is None:
             raise AppError("RESOURCE_NOT_FOUND", "Data tidak ditemukan.", 404)
-        await require_source_approver(self.session, self.user, source.id, "metadata_review")
+        await require_source_approver(self.session, self.user, source.id, workflow)
         if source.access_revision != data.revision_no:
             raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
         if source.access_review_status != "PENDING":
@@ -518,9 +518,9 @@ class SourceService:
         )
         return record(source)
 
-    async def metadata_review_context(self, source_id):
+    async def metadata_review_context(self, source_id, *, workflow="metadata_review"):
         source = await self.repo.get(DataSource, source_id)
-        await require_source_approver(self.session, self.user, source.id, "metadata_review")
+        await require_source_approver(self.session, self.user, source.id, workflow)
         metadata = source.access_metadata or {}
         attribute_fields = ("owner_unit_id", "business_domain_id", "jurisdiction_id", "purpose_id")
         user_fields = ("data_owner_user_id", "data_steward_user_id")
@@ -542,7 +542,7 @@ class SourceService:
             }
         return {
             "source_id": source.id,
-            "can_decide": source.approval_assignees is None or self.user.id in source.approval_assignees.get("metadata_review", []),
+            "can_decide": source.approval_assignees is None or self.user.id in source.approval_assignees.get(workflow, []),
             "source_code": source.source_code,
             "access_revision": source.access_revision,
             "access_status": source.access_status,
@@ -561,6 +561,8 @@ class SourceService:
                 ) for field in user_fields
             },
             "sensitivity": metadata.get("sensitivity"),
+            "editor_id": source.access_metadata_editor_id,
+            "reviewer_is_editor": source.access_metadata_editor_id == self.user.id,
         }
 
     async def activate_source_access(self, source_id, data):
@@ -761,10 +763,24 @@ class SourceService:
                 result = await ImportReviewService(self.session, self.user).create(
                     ImportReviewCreate(source_sheet_id=sheet.id, configuration_id=config_id)
                 )
-                reviews.append(jsonable_encoder(result))
+                reviews.append({"sheet_name": sheet.sheet_name, **jsonable_encoder(result)})
             except AppError as exc:
-                reviews.append({"source_sheet_id": sheet.id, "status": "BLOCKED", "code": exc.code})
+                reviews.append({"source_sheet_id": sheet.id, "sheet_name": sheet.sheet_name, "status": "BLOCKED", "code": exc.code, "message": exc.message})
         return {"source_id": str(source_id), "reviews": reviews}
+
+    async def queue_sync_review(self, source_id):
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        if source.unlinked_at is not None:
+            raise AppError("SOURCE_UNLINKED", "Pulihkan sumber sebelum menjalankan sync.", 409)
+        pending = await self.session.scalar(
+            self.repo.query(Job).where(
+                Job.source_id == source.id,
+                Job.status.in_(["QUEUED", "RUNNING"]),
+            ).limit(1)
+        )
+        if pending:
+            raise AppError("SOURCE_JOB_RUNNING", "Masih ada proses sumber berjalan. Buka monitor job dan tunggu selesai.", 409)
+        return await enqueue(self.session, self.user, "SYNC_REVIEW", str(source.id))
 
     async def update_sheet(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)

@@ -11,6 +11,7 @@ from app.core.database import SessionFactory
 from app.core.exceptions import AppError
 from app.models.ai_policy import AITaskPolicy
 from app.models.audit import AIUsage
+from app.schemas.configuration import ETLConfiguration
 
 PROMPT_PATHS = {
     "ETL_CONFIG": "etl_configuration_v1.md",
@@ -101,6 +102,7 @@ class OpenAIService:
         taxonomy_id=None,
     ):
         s = get_settings()
+        is_etl_draft = purpose == "ETL_CONFIG" and schema is ETLConfiguration
         if sum(value is not None for value in (data_product_code, data_source_id, taxonomy_id)) > 1:
             raise AppError("AI_TASK_SCOPE_INVALID", "Satu task AI hanya menerima satu scope dataset.", 422)
         if data_product_code is not None and purpose != "NL2SQL":
@@ -118,6 +120,8 @@ class OpenAIService:
             raise AppError("OPENAI_NOT_CONFIGURED", "Isi OPENAI_API_KEY dan OPENAI_MODEL_* pada .env.", 503)
         template = PROMPT_PATHS.get(purpose, "nl2sql_v1.md")
         prompt = (ROOT / "app/prompts" / template).read_text(encoding="utf-8")
+        if purpose == "ETL_CONFIG" and not is_etl_draft:
+            prompt += f"\nFor this request, the required output schema is {schema.__name__}, not ETLConfiguration."
         start = time.monotonic()
         policy_id = None
         policy_budget = None
@@ -310,7 +314,7 @@ class OpenAIService:
                                         if isinstance(decoded, dict) and isinstance(decoded.get(wrapper), dict):
                                             decoded = decoded[wrapper]
                                             break
-                                    parsed = _coerce_etl_draft(decoded, schema, context) if purpose == "ETL_CONFIG" else schema.model_validate(decoded)
+                                    parsed = _coerce_etl_draft(decoded, schema, context) if is_etl_draft else schema.model_validate(decoded)
                                 except Exception as exc:
                                     parse_diagnostics.append(f"{candidate_model}:json_mode={type(exc).__name__}:{' '.join(str(exc).split())[-250:]}")
                                 else:
@@ -357,7 +361,7 @@ class OpenAIService:
                                         if isinstance(decoded.get(wrapper), dict):
                                             decoded = decoded[wrapper]
                                             break
-                                    parsed = _coerce_etl_draft(decoded, schema, context) if purpose == "ETL_CONFIG" else schema.model_validate(decoded)
+                                    parsed = _coerce_etl_draft(decoded, schema, context) if is_etl_draft else schema.model_validate(decoded)
                                     response, parsed_output = json_response, parsed
                                     responses.append(json_response)
                                     break

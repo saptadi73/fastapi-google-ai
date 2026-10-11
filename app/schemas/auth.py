@@ -1,4 +1,6 @@
-from pydantic import Field, SecretStr
+from uuid import UUID
+
+from pydantic import Field, SecretStr, model_validator
 
 from app.domain.enums import Role
 from app.schemas.common import StrictModel
@@ -21,6 +23,21 @@ class UserCreate(StrictModel):
     role: Role = Role.VIEWER
     # product_code -> column_name -> permitted values. Unset means no additional row restriction.
     row_scope: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    initial_access: "InitialAccessRequest | None" = None
+
+
+class InitialAccessRequest(StrictModel):
+    attribute_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    bundle_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    business_reason: str = Field(min_length=10, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_targets(self):
+        if not self.attribute_ids and not self.bundle_ids:
+            raise ValueError("Pilih setidaknya satu atribut atau paket izin")
+        if len(self.attribute_ids) != len(set(self.attribute_ids)) or len(self.bundle_ids) != len(set(self.bundle_ids)):
+            raise ValueError("Target akses tidak boleh berulang")
+        return self
 
 
 class UserUpdate(StrictModel):

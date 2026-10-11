@@ -16,6 +16,7 @@ from app.schemas.access import (
     AccessPolicyCreate,
     AccessPolicyTransition,
     AccessPolicyUpdate,
+    AccessRequestBatchDecision,
     AccessRequestCreate,
     AccessRequestDecision,
     AccessRequestReject,
@@ -172,6 +173,11 @@ async def list_access_requests(
         offset=offset,
         limit=limit,
     )
+
+
+@router.post("/requests/approve-batch", dependencies=admin)
+async def approve_access_requests(data: AccessRequestBatchDecision, session: Session, user: CurrentUser):
+    return success(await AccessService(session, user).approve_access_requests(data))
 
 
 @router.post("/requests/{request_id}/approve", dependencies=admin)

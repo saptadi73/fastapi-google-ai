@@ -1,8 +1,8 @@
 # API Reference untuk frontend
 
-Versi backend **0.1.0** · berdasarkan implementasi yang diperiksa pada **6 Oktober 2026**.
+Versi backend **0.1.0** · diperbarui untuk workflow sederhana pada **11 Oktober 2026**.
 
-Dokumen ini menjelaskan **210 operasi HTTP yang sudah terdaftar di backend**, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
+Dokumen ini menjelaskan operasi HTTP yang sudah terdaftar di backend, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Cakupan endpoint dan snapshot diverifikasi oleh `scripts/export_api_reference.py --check`. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi
 
@@ -119,7 +119,7 @@ Role UI bukan hierarki bebas: misalnya `TECHNICAL_APPROVER` dapat approve tetapi
 | GET | `/auth/me` | Auth | — | 200 | User public |
 | POST | `/auth/logout` | Auth | — | 200 | `{message: string}` |
 | POST | `/auth/change-password` | Auth | PasswordChange | 200 | `{message: string}` |
-| POST | `/users` | A | UserCreate | 201 | User public |
+| POST | `/users` | A | UserCreate dengan initial_access opsional | 201 | User public; access_requests[] PENDING bila rekomendasi diajukan |
 | GET | `/users` | A | —; query offset/limit | 200 | User public[]; meta pagination |
 | PATCH | `/users/{user_id}` | A | UserUpdate | 200 | User public |
 | GET | `/access/registration-options` | E | — | 200 | Scope assignment aktif, PURPOSE aktif, user tenant eligible, sensitivitas |
@@ -153,6 +153,7 @@ Role UI bukan hierarki bebas: misalnya `TECHNICAL_APPROVER` dapat approve tetapi
 | POST | `/access/requests` | Auth | AccessRequestCreate | 201 | AccessRequest PENDING |
 | GET | `/access/requests/mine` | Auth | —; status/offset/limit | 200 | AccessRequest[] milik akun |
 | GET | `/access/requests` | A | —; status/offset/limit | 200 | AccessRequest[] tenant |
+| POST | `/access/requests/approve-batch` | A | AccessRequestBatchDecision | 200 | AccessRequest[] APPROVED; seluruh keputusan/grant satu transaksi |
 | POST | `/access/requests/{request_id}/approve` | A | AccessRequestDecision | 200 | Request APPROVED + grant |
 | POST | `/access/requests/{request_id}/reject` | A | AccessRequestReject | 200 | Request REJECTED |
 | POST | `/access/requests/{request_id}/cancel` | Pemohon | AccessRequestDecision | 200 | Request CANCELLED |
@@ -311,6 +312,7 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | GET | `/sources/duplicate-groups` | S | - | 200 | Grup sumber aktif dengan spreadsheet_id sama; entri yang sudah di-unlink tidak ditampilkan. Halaman Sumber & tracking menyediakan daftar utama dengan pencarian dan pagination. |
 | GET | `/sources/registration-check` | S | `spreadsheet_url` | 200 | Cek sebelum pendaftaran: `registered`, `owned_by_me`, `source_id`, `source_name`; detail sumber pemilik lain tidak dibuka. Pendaftaran tetap memakai guard atomik di server. |
 | POST | `/sources/{source_id}/unlink` | A | `{canonical_source_id: UUID, reason: string}` | 200 | Lepas pendaftaran duplikat secara reversibel; sumber utama harus aktif dan berasal dari Spreadsheet sama. 409 bila sumber mempunyai konfigurasi, hasil ETL, data product, binding master, dependensi, atau job aktif. |
+| POST | `/sources/{source_id}/restore` | A | - | 200 | Pulihkan sumber yang di-unlink setelah pemeriksaan konflik pendaftaran. |
 | GET | `/sources/{source_id}/delete-preview` | A | UUID sumber | 200 | `can_delete`, blockers, dan jumlah artefak setup yang akan dibersihkan |
 | DELETE | `/sources/{source_id}` | A | `{confirm_source_code, reason}` | 200 | Hapus permanen sumber setup yang gagal jika tidak memiliki data operasional; menulis event audit independen. 409 bila kode tidak cocok atau sumber masih dipakai. |
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
@@ -329,6 +331,7 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 
 | GET | `/sources/{source_id}/access-policy-options` | A | UUID source | 200 | Policy SOURCE ALLOW approved yang berlaku dan didukung runtime |
 | POST | `/sources/{source_id}/access-activate` | A | SourceAccessActivation | 200 | Aktifkan source setelah review metadata dan binding policy approved |
+| POST | `/sources/{source_id}/sync-review/start` | E | — | 202 | EnqueuedJob SYNC_REVIEW; menolak job sumber QUEUED/RUNNING |
 | PATCH | `/sources/{source_id}/schedule` | E | SourceScheduleUpdate | 200 | Edit cron/timezone/concurrency dengan optimistic revision |
 | GET | `/sources/{source_id}/sheets` | S | UUID source | 200 | SourceSheet[] |
 | GET | `/source-sheets/{sheet_id}/classification` | S | Tidak ada | 200 | SheetClassification: kind, status, revision, actor/time, execution_ready, blocker |
@@ -623,16 +626,17 @@ Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIM
 | Method | Path | Hak | Body / query | HTTP sukses | Data respons |
 |---|---|---|---|---|---|
 | GET | `/configurations/parameter-catalog` | S | — | 200 | parameter runtime, tipe, default, supported, capabilities |
-| GET | `/configurations/retired-tables?search=&offset=0&limit=50` | R | pencarian opsional dan pagination (limit maks. 200) | 200 | Inventaris tabel fisik `trusted` dari revisi `SUPERSEDED` yang tidak lagi dipakai konfigurasi `ACTIVE` |
+| GET | `/configurations/retired-tables` | R | `search`, `offset`, `limit` (maks. 200) | 200 | Inventaris tabel fisik `trusted` dari revisi `SUPERSEDED` yang tidak lagi dipakai konfigurasi `ACTIVE` |
 | POST | `/configurations` | E | ConfigurationCreate | 201 | Configuration |
 | GET | `/configurations/{config_id}` | S | — | 200 | Configuration |
 | PATCH | `/configurations/{config_id}` | E | ConfigurationPatch | 200 | Configuration |
 | POST | `/configurations/{config_id}/validate` | S | — | 200 | ValidationResult |
 | GET | `/configurations/{config_id}/review` | S | Tidak ada | 200 | ReviewDetail: configuration, source, sheet, profile, validation, capabilities |
+| GET | `/configurations/{config_id}/access-review` | R | — | 200 | Ringkasan metadata dan policy SOURCE APPROVED cocok; kewenangan approver konfigurasi sumber |
 | POST | `/configurations/{config_id}/workbook-preview` | E | WorkbookPreviewRequest | 200 | WorkbookPreview: can_apply, diff, errors, validation, preview_token |
 | POST | `/configurations/{config_id}/workbook-apply` | E | WorkbookApplyRequest | 200 | Configuration draft revisi baru |
 | POST | `/configurations/{config_id}/submit-review` | E | ReviewSubmission | 200 | Configuration |
-| POST | `/configurations/{config_id}/approve` | R | Decision | 200 | Configuration |
+| POST | `/configurations/{config_id}/approve` | R | Decision dengan source_access opsional | 200 | Configuration; source_access menggabungkan approval metadata/aktivasi secara atomik |
 | POST | `/configurations/{config_id}/reject` | R | Decision | 200 | Configuration |
 | POST | `/configurations/{config_id}/clone` | E | — | 201 | Configuration baru |
 | POST | `/configurations/{config_id}/activate` | R | — | 202 | EnqueuedJob; alias deploy |
@@ -645,6 +649,35 @@ Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIM
 | GET | `/configurations/{config_id}/diff` | S | `against` UUID wajib | 200 | map field → `{before, after}` |
 
 `GET /configurations/retired-tables` adalah inventaris baca-saja untuk reviewer. Respons memuat sumber, tab, nama tabel `trusted`, revisi konfigurasi lama, konfigurasi aktif pengganti, serta status `REVIEW_REQUIRED`. Hanya tabel yang masih ada di database yang ditampilkan. Endpoint ini tidak menghapus data dan belum menandai tabel aman dihapus (`delete_ready: false`); sebelum fitur cleanup tersedia, administrator perlu memeriksa kebutuhan rollback, dependensi, dan retensi data secara terpisah.
+
+### Kontrak workflow sederhana
+
+- `UserCreate.initial_access` berisi `attribute_ids: UUID[]`, `bundle_ids: UUID[]`,
+  `business_reason` (10..1000 karakter). Minimal satu target, unik, maksimal 20 per jenis.
+  Target/user harus aktif dan dalam tenant. Akun dan permintaan dibuat satu transaksi,
+  tanpa grant otomatis. Masa berlaku request 366 hari sejak pengajuan.
+- `AccessRequestBatchDecision` berisi `requests: [{id, revision}]` (1..40, ID unik)
+  dan `note` opsional. Menggunakan pemeriksaan reviewer berbeda, masa berlaku, overlap
+  dan stale revision yang sama dengan approval tunggal. Gagal satu request membatalkan
+  seluruh batch; tidak ada commit per item.
+- UI approval konfigurasi mengirim `source_access: {revision_no, policy_id}` dari
+  ringkasan terbaru. Approver konfigurasi sumber boleh memutuskan metadata PENDING dan
+  aktivasi, tetapi bukan pembuat konfigurasi/editor metadata. Policy SOURCE harus APPROVED,
+  berlaku, terikat sumber, mencakup scope unit/domain/yurisdiksi dan aksi DISCOVER/QUERY,
+  tanpa kontrol SOURCE yang tidak didukung. Semuanya satu transaksi; error metadata/policy
+  atau stale revision membatalkan approval. Tidak deploy atau apply data secara otomatis.
+  Payload tanpa `source_access` tetap didukung untuk kompatibilitas API lama; UI baru
+  memakai gabungan. Reject tidak memproses `source_access`.
+- `sync-review/start` mengantrekan worker, bukan memblokir request untuk membaca Sheet.
+  Poll `/jobs/{job_id}`. Hasil SUCCEEDED berisi `reviews` dengan `sheet_name`,
+  `source_sheet_id`, status/ID batch, atau BLOCKED dengan `code/message`.
+  Poll batch untuk status validasi/AI; job sync selesai bukan berarti record sudah dimuat.
+- Katalog inventory menambah `update_status` (`ACTIVE`/`UPDATING`), `update_reason`,
+  `last_active_at`, `last_activated_at`, `last_loaded_at`, `last_profiled_at`,
+  `latest_import_status`, `pending_configuration_status`. Timestamp bisa null.
+  `last_active_at` adalah waktu paling baru dari audit aktivasi konfigurasi/pemuatan ETL
+  sukses. Versi aktif terakhir tetap tampil jika akses valid; perubahan Sheet baru
+  terdeteksi setelah profiling/sync. Tombol Workspace mengikuti kewenangan role.
 
 ## 5. Taxonomy (BE-13)
 

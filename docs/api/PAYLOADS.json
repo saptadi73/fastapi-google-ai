@@ -59,6 +59,10 @@
     "canonical_source_id": "11111111-1111-4111-8111-111111111111",
     "reason": "Pendaftaran ganda; gunakan sumber utama"
   },
+  "SourceDelete": {
+    "confirm_source_code": "sales_cabang",
+    "reason": "Bersihkan sumber setup yang gagal dan belum dipakai"
+  },
   "SourceAccessMetadataUpdate": {
     "revision_no": 1,
     "access_metadata": {
@@ -867,6 +871,13 @@
   "AccessRequestDecision": {
     "revision": 1,
     "note": "Kebutuhan bisnis telah diverifikasi"
+  },
+  "AccessRequestBatchDecision": {
+    "requests": [
+      {"id": "11111111-1111-4111-8111-111111111111", "revision": 1},
+      {"id": "22222222-2222-4222-8222-222222222222", "revision": 1}
+    ],
+    "note": "Rekomendasi akses akun sudah diperiksa bersama"
   },
   "AccessRequestReject": {
     "revision": 1,

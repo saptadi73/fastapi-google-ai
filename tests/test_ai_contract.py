@@ -8,7 +8,102 @@ from sqlalchemy.dialects import postgresql
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.schemas.configuration import ETLConfiguration
+from app.schemas.import_review import AIImportReviewResult
 from app.services import openai_service
+
+
+@pytest.mark.parametrize("json_fallback", [False, True])
+async def test_import_review_output_is_not_coerced_to_etl_configuration(monkeypatch, json_fallback):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)("test-placeholder"))
+    monkeypatch.setattr(settings, "openai_model_etl_config", "review-model")
+    monkeypatch.setattr(settings, "openai_model_etl_fallback", "")
+    monkeypatch.setattr(settings, "ai_daily_tenant_budget_usd", 0)
+    result = AIImportReviewResult(
+        issues=[{"source_row": 2, "target_column": "name", "message": "Verify spelling"}],
+        reviewed_rows=[2], coverage="COMPLETE",
+    )
+    response = SimpleNamespace(
+        output_parsed=result, output_text=result.model_dump_json(), id="review_response",
+        usage=SimpleNamespace(input_tokens=10, output_tokens=10, input_tokens_details=None),
+    )
+    parse = AsyncMock(side_effect=RuntimeError("structured parse failed") if json_fallback else None,
+                      return_value=response)
+    create = AsyncMock(return_value=response)
+    ledger = []
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.responses = SimpleNamespace(parse=parse, create=create)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    class Ledger:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def begin(self):
+            return self
+
+        async def execute(self, *args, **kwargs):
+            pass
+
+        async def scalar(self, *args, **kwargs):
+            return 0
+
+        def add(self, item):
+            ledger.append(item)
+
+    monkeypatch.setattr(openai_service, "AsyncOpenAI", Client)
+    monkeypatch.setattr(openai_service, "SessionFactory", Ledger)
+    monkeypatch.setattr(openai_service, "_coerce_etl_draft", Mock(side_effect=AssertionError("Not a config")))
+    value, metadata = await openai_service.OpenAIService().generate(
+        SimpleNamespace(id=str(uuid4()), tenant_id=str(uuid4())),
+        "ETL_CONFIG", '{"task":"Review values","rows":[]}', AIImportReviewResult,
+        data_source_id=str(uuid4()),
+    )
+    assert value == result
+    assert value.issues[0].model_dump()["target_column"] == "name"
+    assert "required output schema is AIImportReviewResult" in parse.call_args.kwargs["input"][0]["content"]
+    assert metadata["prompt_version"] == "etl_configuration_v1.md"
+    assert ledger[0].purpose == "ETL_CONFIG"
+    assert ledger[0].status == "SUCCEEDED"
+    assert create.await_count == int(json_fallback)
+
+
+def test_import_review_issue_schema_has_no_unconstrained_objects():
+    schema = AIImportReviewResult.model_json_schema()
+    issue = schema["$defs"]["AIImportReviewIssue"]
+    assert issue["additionalProperties"] is False
+    assert set(issue["properties"]) == {"source_row", "target_column", "message"}
+    assert schema["properties"]["issues"]["items"] == {"$ref": "#/$defs/AIImportReviewIssue"}
+
+
+@pytest.mark.parametrize(
+    "reviewed_rows,coverage,expected",
+    [
+        ([2, 3], "COMPLETE", True),
+        ([3, 2], "COMPLETE", True),
+        ([2, 2], "COMPLETE", False),
+        ([2, 3, 4], "COMPLETE", False),
+        ([2, 4], "COMPLETE", False),
+        ([2], "COMPLETE", False),
+        ([2, 3], "PARTIAL", False),
+    ],
+)
+def test_import_review_requires_exact_unique_row_coverage(reviewed_rows, coverage, expected):
+    result = AIImportReviewResult(issues=[], reviewed_rows=reviewed_rows, coverage=coverage)
+    assert result.is_complete_for_rows([2, 3]) is expected
+    assert AIImportReviewResult.model_validate(
+        result.model_dump(mode="json")
+    ).is_complete_for_rows([2, 3]) is expected
 
 
 @pytest.mark.parametrize("purpose", ["ETL_CONFIG", "TAXONOMY_RECOMMEND"])

@@ -98,6 +98,7 @@ async def test_product_inventory_links_active_product_to_source_and_physical_tab
     product = SimpleNamespace(id=product_id, view_name="v_11111111222243338444555555555555", freshness_version=4)
     sheet = SimpleNamespace(
         id=sheet_id, sheet_id=98765, sheet_name="Rekap Mingguan", enabled=True, is_present=True,
+        last_fingerprint="fingerprint",
     )
     source = SimpleNamespace(
         id="source-1", name="Laporan mingguan", source_code="REPORT_WEEKLY", spreadsheet_id="spreadsheet-1",
@@ -105,9 +106,12 @@ async def test_product_inventory_links_active_product_to_source_and_physical_tab
     config = SimpleNamespace(
         id="config-1", version_no=3, revision_no=5, status="ACTIVE",
         configuration_json={"target_table": "weekly_report"},
+        based_on_fingerprint="fingerprint", review_state={},
     )
     session = Mock()
-    session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [(product, sheet, source, config)]))
+    session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [
+        (product, sheet, source, config, None, None, False, None, None, None, None, None),
+    ]))
     service = SemanticCatalogService(session, SimpleNamespace(tenant_id="tenant", role="VIEWER"))
     service.products = AsyncMock(return_value=[{
         "id": product_id, "code": "WEEKLY_REPORT", "name": "Laporan Mingguan",
@@ -121,6 +125,8 @@ async def test_product_inventory_links_active_product_to_source_and_physical_tab
     assert result[0]["spreadsheet_url"].endswith("/spreadsheet-1/edit")
     assert result[0]["sheet_name"] == "Rekap Mingguan"
     assert result[0]["configuration_version"] == 3
+    assert result[0]["update_status"] == "ACTIVE"
+    assert result[0]["last_loaded_at"] is None
 
 
 @pytest.mark.asyncio

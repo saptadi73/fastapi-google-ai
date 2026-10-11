@@ -187,3 +187,19 @@ class AccessRequestDecision(StrictModel):
 
 class AccessRequestReject(AccessRequestDecision):
     note: str = Field(min_length=3, max_length=500)
+
+
+class AccessRequestBatchItem(StrictModel):
+    id: UUID
+    revision: int = Field(ge=1)
+
+
+class AccessRequestBatchDecision(StrictModel):
+    requests: list[AccessRequestBatchItem] = Field(min_length=1, max_length=40)
+    note: str = Field(default="", max_length=500)
+
+    @model_validator(mode="after")
+    def unique_requests(self):
+        if len({item.id for item in self.requests}) != len(self.requests):
+            raise ValueError("Permintaan akses tidak boleh berulang")
+        return self

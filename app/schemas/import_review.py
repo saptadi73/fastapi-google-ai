@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -48,10 +49,23 @@ class ImportReferenceResolveRequest(StrictModel):
         return self
 
 
+class AIImportReviewIssue(StrictModel):
+    source_row: int = Field(gt=0)
+    target_column: str = Field(min_length=1, max_length=63)
+    message: str = Field(min_length=1, max_length=2000)
+
+
 class AIImportReviewResult(StrictModel):
-    issues: list[dict] = Field(default_factory=list, max_length=500)
+    issues: list[AIImportReviewIssue] = Field(default_factory=list, max_length=500)
     reviewed_rows: list[int] = Field(default_factory=list, max_length=10000)
-    coverage: str = Field(pattern=r"^(COMPLETE|PARTIAL)$")
+    coverage: Literal["COMPLETE", "PARTIAL"]
+
+    def is_complete_for_rows(self, source_rows: list[int]) -> bool:
+        return (
+            self.coverage == "COMPLETE"
+            and len(self.reviewed_rows) == len(set(self.reviewed_rows))
+            and set(self.reviewed_rows) == set(source_rows)
+        )
 
 
 class ImportQuestionDecision(StrictModel):

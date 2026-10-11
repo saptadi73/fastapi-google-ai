@@ -19,6 +19,7 @@ from app.models.semantic import DataProduct
 from app.models.source import DataSource, SourceSheet
 from app.models.taxonomy import Taxonomy
 from app.repositories.base import TenantRepository, record
+from app.schemas.access import AccessRequestDecision
 from app.services.audit_service import audit
 from app.services.notification_service import add_notification, resolve_notifications
 
@@ -332,6 +333,16 @@ class AccessService:
             actor_id=self.actor.id,
         )
         return await self._access_request_record(item)
+
+    async def approve_access_requests(self, data):
+        if self.actor.role != "PLATFORM_ADMIN":
+            raise AppError("FORBIDDEN", "Persetujuan akses memerlukan admin.", 403)
+        results = []
+        for item in sorted(data.requests, key=lambda value: str(value.id)):
+            results.append(await self.decide_access_request(
+                item.id, AccessRequestDecision(revision=item.revision, note=data.note), "approve"
+            ))
+        return results
 
     async def cancel_access_request(self, request_id, data):
         item = await self._access_request(request_id, lock=True)

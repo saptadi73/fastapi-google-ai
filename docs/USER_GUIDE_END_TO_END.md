@@ -16,6 +16,43 @@ interaktif yang sama tersedia pada menu **Panduan penggunaan** (`/guide`) di fro
 
 Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memakai separate approval.
 
+## Alur sederhana akun, approval gabungan, dan sync
+
+1. **Registrasi akun sekaligus rekomendasi akses.** Admin memilih unit, domain, yurisdiksi
+   dan paket izin yang diperlukan, serta alasan bisnis di form Registrasi. Akun dan
+   permintaan disimpan atomik; target invalid membatalkan semuanya. Masa akses 366 hari
+   sejak pengajuan. Admin lain dapat memilih seluruh rekomendasi akun tersebut dan
+   menyetujuinya sekaligus di Permintaan akses; pending belum memberi assignment/izin.
+   Policy APPROVED yang cocok digunakan kembali, bukan dibuat ulang untuk setiap akun.
+2. **Satu approval konfigurasi dan akses.** Approver konfigurasi sumber membaca ringkasan
+   metadata dan memilih policy SOURCE APPROVED yang cocok. Keputusan sekaligus menyetujui
+   metadata PENDING dan mengaktifkan akses. Maker-checker selalu berlaku untuk keputusan
+   gabungan, termasuk bila separate approval konfigurasi lama dinonaktifkan.
+   Metadata incomplete/rejected, editor tidak aktif/assignment sudah berakhir, revisi berubah,
+   policy tidak cocok/kedaluwarsa, atau gate yang diwajibkan belum lengkap menghentikan
+   transaksi: tidak ada approval sebagian. Dialog menampilkan penyebab dan helper lengkap
+   `/guide#approval-gabungan`, serta shortcut ke sumber di Workspace. Reviewer tidak perlu
+   punya assignment scope sumber sendiri; assignment editor dan pembaca tetap divalidasi.
+3. **Sync manual per sumber.** Setelah deploy, pilih Sync manual di Sumber & tracking
+   atau Workspace. Konfirmasi pembacaan Sheet/kuota AI, lalu pantau job dan hasil setiap tab,
+   baris valid, cakupan AI, temuan, dan link batch. Sync tidak mengubah Sheet, tidak otomatis
+   approve/apply. Selesaikan temuan, preview, approval, lalu Apply. Batas pemantauan 10 menit
+   bukan pembatalan job; Muat ulang hasil atau monitor job melanjutkan pemantauan tanpa
+   enqueue baru. Sumber yang masih mempunyai job QUEUED/RUNNING menolak sync duplikat.
+4. **Katalog sebagai shortcut perbaikan.** Buka Google Sheet tepat pada tab asal atau
+   Buka sumber di Workspace (role operasional saja). Versi aktif terakhir tetap tampil
+   selama revisi bila akses masih valid. Sedang diperbarui menandai job/revisi/drift/data
+   snapshot/batch yang belum selesai, bukan berarti versi lama sudah dinonaktifkan.
+   Timestamp aktif berasal dari audit aktivasi konfigurasi/pemuatan sukses; timestamp
+   masing-masing dan profil terakhir ditampilkan terpisah. Sheet tidak dipantau live:
+   perubahan diketahui setelah profiling/sync. Tidak ada pemuatan sukses berarti
+   **Belum dimuat**, walaupun struktur konfigurasi ACTIVE.
+
+Policy baru tetap dibuat dan disetujui admin berbeda. Gate IT/unit dan persetujuan batch
+tidak dihapus. Jalur review metadata dan aktivasi admin terpisah tetap tersedia untuk
+sumber yang sudah aktif tanpa revisi konfigurasi. Perubahan metadata membatalkan akses;
+katalog tidak mempertahankan akses yang sudah dicabut hanya demi menampilkan status.
+
 ## Prosedur awal sampai akhir
 
 | Tahap | Tindakan | Hasil minimum sebelum lanjut |
@@ -77,6 +114,35 @@ Sebutkan ukuran, dimensi, periode, lokasi, dan produk data bila pertanyaan masih
 menyusun structured plan dan SQL aman berdasarkan semantic catalog; pengguna tidak memasukkan SQL.
 
 ## Jika data belum muncul
+
+### Tabel aktif belum berarti data sudah dimuat
+
+Deploy konfigurasi menyiapkan struktur tabel dan produk semantic; pemuatan data adalah
+proses terpisah. Di Workspace, **Status database** dan **Baris dimuat** berasal dari
+riwayat ETL/import terakhir melalui `/sources/tracking`, bukan `COUNT(*)` tabel saat ini.
+**Belum dimuat** berarti belum ada riwayat pemuatan. Jika tracking gagal dimuat, tampilkan
+pesan error dan nilai tidak tersedia, bukan angka 0 yang seolah-olah sudah diverifikasi.
+
+Untuk pemuatan awal, pilih **Buat batch sync review**, pantau job, lalu buka batch import.
+Selesaikan pertanyaan/blocker, buat preview, approve melalui reviewer berwenang, kemudian
+**Apply batch**. Job sync review berhasil baru berarti batch disiapkan, bukan data sudah
+ditulis ke tabel. Tab NON_MASTER tanpa konfigurasi approved/active dapat terblokir;
+tab MASTER memerlukan binding approved. Jangan melewati approval atau menonaktifkan
+tab yang memang dibutuhkan hanya untuk menghilangkan blocker.
+
+Jadwal otomatis juga membuat sync review, tidak otomatis menyetujui/apply batch.
+Cron mengikuti zona waktu sumber. Contoh `0 0 * * 1` dengan zona UTC berjalan setiap
+Senin 00.00 UTC, yaitu 07.00 WIB; bukan segera setelah deploy atau setiap hari.
+Untuk mengetahui mengapa belum ada pemuatan, periksa job SYNC_REVIEW/IMPORT_REVIEW,
+jadwal dan zona waktu, status pause, kesiapan dependency, serta status worker/beat.
+
+Jika batch gagal pada review AI dengan `AI_UPSTREAM_FAILED`, jangan langsung retry berulang
+atau Apply. Administrator perlu memeriksa respons provider. HTTP 400 `invalid_json_schema`
+berarti kontrak Structured Outputs ditolak, bukan database kosong atau approval akses kurang.
+Review AI menggunakan schema `AIImportReviewResult` (issues bertipe, reviewed_rows, coverage);
+parser konfigurasi ETL tidak boleh dipakai untuk hasil review. Setelah perbaikan backend,
+gunakan **Revalidate** pada batch FAILED melalui workflow resmi agar tidak membuat batch
+duplikat. **Resume** hanya untuk NEEDS_INPUT setelah blocker diselesaikan.
 
 Untuk katalog kosong meskipun ETL ACTIVE, ikuti
 [panduan assignment, policy SOURCE, review metadata, dan aktivasi sumber](PANDUAN_AKSES_KATALOG.md).

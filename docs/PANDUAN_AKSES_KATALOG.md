@@ -6,6 +6,27 @@ API production: https://api-google.kanjabung.web.id
 Panduan ini untuk admin yang memberikan akses baca kepada pengguna. Tidak ada password,
 token, atau API key yang perlu ditulis dalam dokumentasi atau policy.
 
+## Jalur sederhana yang disarankan
+
+- Akun baru: isi rekomendasi unit/domain/yurisdiksi dan paket izin pada Registrasi.
+  Permintaan berlaku 366 hari sejak pengajuan. Admin lain memilih seluruh rekomendasi
+  akun tersebut pada Permintaan akses dan menyetujuinya sekaligus. Tidak perlu membuat
+  policy lagi bila policy organisasi APPROVED yang sesuai sudah tersedia.
+- Sumber baru/revisi konfigurasi: approver konfigurasi membaca metadata sumber dan
+  memilih policy APPROVED pada dialog approval. Satu transaksi menyetujui konfigurasi,
+  metadata dan mengaktifkan akses. Jika satu syarat gagal, seluruh approval dibatalkan.
+  Klik **Helper lengkap: mengapa approval belum bisa disetujui** untuk rincian dan
+  shortcut ke Workspace. Editor metadata/pembuat konfigurasi tidak boleh memutuskan.
+- Sesudah deploy, **Sync manual** membaca data dan menampilkan hasil per tab.
+  Preview, approval batch dan Apply tetap wajib; struktur ACTIVE belum berarti ada data.
+- Katalog menyediakan **Buka Google Sheet**, **Buka sumber di Workspace** bagi role
+  operasional, status pembaruan, dan timestamp aktif/pemuatan terakhir.
+
+Langkah review metadata/aktivasi admin terpisah di bawah tetap didukung untuk sumber
+yang sudah aktif tanpa revisi konfigurasi. Ini bukan lagi langkah tambahan wajib sesudah
+approval gabungan berhasil. Lihat [panduan pengguna](USER_GUIDE_END_TO_END.md) untuk
+alur baru serta helper `/guide#approval-gabungan` dan `/guide#sync-manual` pada frontend.
+
 ## Mengapa sumber ACTIVE belum muncul?
 
 **ACTIVE adalah status ETL, bukan status akses.** Katalog memerlukan semua syarat berikut:

@@ -381,9 +381,15 @@ class WorkbookApplyRequest(ConfigurationPatch):
     preview_token: str = Field(min_length=1, max_length=8192)
 
 
+class ConfigurationAccessApproval(StrictModel):
+    revision_no: int = Field(ge=1)
+    policy_id: UUID
+
+
 class Decision(StrictModel):
     revision_no: int = Field(ge=1)
     comment: str = Field(default="", max_length=2000)
+    source_access: ConfigurationAccessApproval | None = None
 
 
 class ExportRequest(StrictModel):

@@ -1,7 +1,10 @@
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, select
 
 from app.core.exceptions import AppError
+from app.models.audit import AuditEvent
 from app.models.configuration import Configuration
+from app.models.etl import ETLRun, Job, Snapshot
+from app.models.import_review import ImportReview
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
@@ -13,6 +16,22 @@ from app.services.query_execution_service import QueryExecutionService
 
 def normalize_intent(question):
     return " ".join(question.casefold().strip().rstrip("?!.").split())
+
+
+def inventory_update_state(sheet, config, pending_config, import_status, running, snapshot_hash, loaded_hash):
+    if running:
+        return "UPDATING", "Proses sumber sedang berjalan"
+    if not sheet.is_present or not sheet.enabled:
+        return "UPDATING", "Tab sumber hilang atau tidak diikutkan"
+    if pending_config:
+        return "UPDATING", f"Revisi konfigurasi: {pending_config}"
+    if sheet.last_fingerprint != config.based_on_fingerprint:
+        return "UPDATING", "Struktur berubah; konfigurasi perlu ditinjau ulang"
+    if import_status and import_status not in ("SUCCEEDED", "CANCELLED"):
+        return "UPDATING", f"Batch pemuatan: {import_status}"
+    if snapshot_hash and snapshot_hash != (loaded_hash or (config.review_state or {}).get("snapshot_hash")):
+        return "UPDATING", "Perubahan data terdeteksi; jalankan sync manual"
+    return "ACTIVE", "Versi aktif tersedia"
 
 
 class SemanticCatalogService:
@@ -158,8 +177,47 @@ class SemanticCatalogService:
         product_ids = [item["id"] for item in accessible]
         if not product_ids:
             return []
+        pending = Configuration.__table__.alias("pending_config")
+        pending_status = select(pending.c.status).where(
+            pending.c.tenant_id == self.user.tenant_id,
+            pending.c.source_sheet_id == SourceSheet.id,
+            pending.c.version_no > Configuration.version_no,
+            pending.c.status.in_(["AI_DRAFT", "NEEDS_REVIEW", "APPROVED"]),
+        ).order_by(pending.c.version_no.desc()).limit(1).correlate(SourceSheet, Configuration).scalar_subquery()
+        import_status = select(ImportReview.status).where(
+            ImportReview.tenant_id == self.user.tenant_id,
+            ImportReview.source_sheet_id == SourceSheet.id,
+        ).order_by(ImportReview.created_at.desc()).limit(1).correlate(SourceSheet).scalar_subquery()
+        running = select(Job.id).where(
+            Job.tenant_id == self.user.tenant_id, Job.source_id == DataSource.id,
+            Job.status.in_(["QUEUED", "RUNNING"]),
+        ).correlate(DataSource).exists()
+        latest_snapshot = select(Snapshot.content_hash).where(
+            Snapshot.tenant_id == self.user.tenant_id, Snapshot.source_sheet_id == SourceSheet.id,
+        ).order_by(Snapshot.created_at.desc()).limit(1).correlate(SourceSheet).scalar_subquery()
+        profiled_at = select(func.max(Snapshot.created_at)).where(
+            Snapshot.tenant_id == self.user.tenant_id, Snapshot.source_sheet_id == SourceSheet.id,
+        ).correlate(SourceSheet).scalar_subquery()
+        loaded_at = select(func.max(ETLRun.finished_at)).where(
+            ETLRun.tenant_id == self.user.tenant_id, ETLRun.source_sheet_id == SourceSheet.id,
+            ETLRun.configuration_id == Configuration.id,
+            ETLRun.status.in_(["SUCCEEDED", "SUCCEEDED_WITH_WARNINGS"]),
+        ).correlate(SourceSheet, Configuration).scalar_subquery()
+        loaded_hash = select(Snapshot.content_hash).join(
+            ETLRun, (ETLRun.snapshot_id == Snapshot.id) & (ETLRun.tenant_id == Snapshot.tenant_id),
+        ).where(
+            ETLRun.tenant_id == self.user.tenant_id, ETLRun.source_sheet_id == SourceSheet.id,
+            ETLRun.configuration_id == Configuration.id,
+            ETLRun.status.in_(["SUCCEEDED", "SUCCEEDED_WITH_WARNINGS"]),
+        ).order_by(ETLRun.finished_at.desc()).limit(1).correlate(SourceSheet, Configuration).scalar_subquery()
+        activated_at = select(func.max(AuditEvent.created_at)).where(
+            AuditEvent.tenant_id == self.user.tenant_id,
+            AuditEvent.resource_id == cast(Configuration.id, String),
+            AuditEvent.event.in_(["configuration.activated", "configuration.rollback"]),
+        ).correlate(Configuration).scalar_subquery()
         rows = (await self.session.execute(
-            select(DataProduct, SourceSheet, DataSource, Configuration)
+            select(DataProduct, SourceSheet, DataSource, Configuration, pending_status, import_status,
+                   running, latest_snapshot, loaded_hash, activated_at, loaded_at, profiled_at)
             .join(
                 SourceSheet,
                 (SourceSheet.id == DataProduct.source_sheet_id)
@@ -185,12 +243,16 @@ class SemanticCatalogService:
         )).all()
         products_by_id = {item["id"]: item for item in accessible}
         inventory = []
-        for product, sheet, source, config in rows:
+        for product, sheet, source, config, pending_config, latest_import, is_running, snapshot_hash, last_hash, last_activation, last_load, last_profile in rows:
             product_data = products_by_id.get(str(product.id))
             if product_data is None:
                 continue
             sheet_uuid = str(sheet.id).replace("-", "")
             target_table = config.configuration_json["target_table"]
+            update_status, update_reason = inventory_update_state(
+                sheet, config, pending_config, latest_import, is_running, snapshot_hash, last_hash,
+            )
+            active_dates = [date for date in (last_activation, last_load) if date is not None]
             inventory.append({
                 **product_data,
                 "source_id": source.id,
@@ -211,6 +273,14 @@ class SemanticCatalogService:
                 "configuration_revision": config.revision_no,
                 "configuration_status": config.status,
                 "freshness_version": product.freshness_version,
+                "update_status": update_status,
+                "update_reason": update_reason,
+                "last_active_at": max(active_dates) if active_dates else None,
+                "last_activated_at": last_activation,
+                "last_loaded_at": last_load,
+                "last_profiled_at": last_profile,
+                "latest_import_status": latest_import,
+                "pending_configuration_status": pending_config,
             })
         return inventory
 

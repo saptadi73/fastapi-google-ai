@@ -1,4 +1,5 @@
 import hashlib
+from datetime import timedelta
 
 from sqlalchemy import select
 
@@ -7,6 +8,8 @@ from app.core.security import DUMMY_HASH, decode_token, issue_token, password_ha
 from app.models.auth import RefreshToken, Tenant, User
 from app.models.base import now
 from app.repositories.base import TenantRepository, record
+from app.schemas.access import AccessRequestCreate
+from app.services.access_service import AccessService
 from app.services.audit_service import audit
 
 
@@ -79,7 +82,24 @@ class AuthService:
             row_scope=data.row_scope,
         )
         audit(self.session, actor, "user.created", user.id)
-        return public_user(user)
+        result = public_user(user)
+        if data.initial_access is not None:
+            start = now()
+            access = AccessService(self.session, actor)
+            requests = []
+            for kind, field, ids in (
+                ("ATTRIBUTE", "attribute_id", data.initial_access.attribute_ids),
+                ("PERMISSION_BUNDLE", "bundle_id", data.initial_access.bundle_ids),
+            ):
+                for target_id in ids:
+                    requests.append(await access.create_access_request(AccessRequestCreate(
+                        request_type=kind, subject_user_id=user.id,
+                        valid_from=start, valid_to=start + timedelta(days=366),
+                        business_reason=data.initial_access.business_reason,
+                        **{field: target_id},
+                    )))
+            result["access_requests"] = requests
+        return result
 
     async def update_user(self, actor, user_id, data):
         user = await TenantRepository(self.session, actor.tenant_id).get(User, user_id, lock=True)

@@ -2,7 +2,7 @@
 id: konfigurasi-import-dan-operasi
 title: Konfigurasi ETL, batch import, dan operasi
 summary: Mengubah kolom dan periode tanggal, profiling ulang, review konfigurasi, migrasi schema, serta batch import.
-routes: ["/workspace", "/etl-review/*", "/import-reviews", "/release-approvals", "/imports/*", "/jobs", "/quality"]
+routes: ["/workspace", "/etl-review/*", "/configurations/*", "/import-reviews", "/release-approvals", "/imports/*", "/jobs", "/quality", "/data-catalog"]
 audiences: ["PLATFORM_ADMIN", "SOURCE_OWNER", "DATA_STEWARD", "TECHNICAL_APPROVER"]
 source: docs/PANDUAN_REVIEW_ETL.md
 ---
@@ -17,5 +17,9 @@ Master memakai definisi dan binding, bukan konfigurasi ETL biasa. Penambahan fie
 Submit konfigurasi untuk review. Pada workflow separate approval, pembuat tidak boleh menjadi approver. Setelah approved, periksa status **Persetujuan tayang** pada halaman review konfigurasi. Bila admin telah mengaktifkan aturan rilis pada sumber, pemeriksa IT dan satu approver dari setiap unit terkait harus menyetujui revisi serta snapshot review yang sama sebelum deploy. Pemeriksa IT melengkapi checklist skema/mapping, kualitas data, dan keamanan/akses. Setelah semua kelompok setuju, editor dapat deploy dan activate. Sumber lama tanpa aturan rilis tetap memakai review konfigurasi biasa. Perubahan revisi, snapshot, atau aturan rilis membatalkan keputusan lama; penolakan perlu ditangani lewat versi konfigurasi baru atau revisi aturan yang diaudit. Rollback ke versi lama juga diperiksa terhadap aturan rilis saat ini. Perubahan pada profil sumber, taxonomy, master, atau binding dapat membuat konfigurasi lama stale dan perlu direview ulang.
 
 Saat import, buat batch dari snapshot terbaru, selesaikan pertanyaan wajib, lalu lakukan revalidate. Periksa preview karena preview menjelaskan insert, update, konflik, dan penutupan periode yang akan terjadi. Reviewer batch menyetujui preview yang sama sebelum apply; persetujuan tayang konfigurasi tidak menggantikan review batch dan saat ini tidak diulang untuk setiap batch. Pantau hasil pada Jobs dan Quality. Perbaiki penyebab kegagalan atau data karantina, kemudian reprocess melalui aksi yang disediakan; hindari mengulang permintaan tanpa memahami statusnya.
+
+Sync manual tersedia per sumber di Sumber & tracking dan Workspace. Konfirmasi pembacaan/biaya AI; worker menampilkan job, hasil setiap tab, baris valid, cakupan AI, temuan dan tautan batch. Deploy hanya menyiapkan struktur: data baru dimuat setelah preview, approval dan Apply. Enqueue ditolak jika proses sumber masih berjalan; Muat ulang hasil tidak membuat batch baru. FAILED diperbaiki lalu Revalidate; Resume hanya untuk NEEDS_INPUT tanpa blocker. Helper /guide#sync-manual menjelaskan setiap status.
+
+Katalog menyediakan tombol Buka Google Sheet dan Buka sumber di Workspace bagi role operasional. Versi aktif terakhir tetap tampil selama revisi jika masih lolos akses; Sedang diperbarui menandai job/revisi/drift/snapshot/batch belum selesai. Terakhir aktif berasal dari audit aktivasi atau pemuatan sukses, dengan timestamp keduanya ditampilkan terpisah. Perubahan Sheet diketahui setelah profil/sync, bukan live push.
 
 Halaman **Batch import** menampilkan daftar sumber dengan pencarian dan pagination, termasuk status discovery, profiling, konfigurasi atau binding master, approval IT, serta database. Pilih sumber dari daftar tersebut, lalu pilih tab yang sudah diklasifikasikan. Halaman **Persetujuan tayang** hanya menampilkan konfigurasi yang ditugaskan kepada akun approver; gunakan pencarian sumber, produk, status, revisi, atau kelompok, lalu pilih baris untuk memeriksa detail dan memberi keputusan. Daftar memakai komponen reusable `PagedDataTable` agar sumber dan konfigurasi mudah dicari tanpa dropdown panjang.

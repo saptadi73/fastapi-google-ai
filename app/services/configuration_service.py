@@ -10,6 +10,7 @@ from app.models.source import DataSource, SourceSheet
 from app.repositories.configuration_repository import ConfigurationRepository
 from app.repositories.source_repository import SourceRepository
 from app.schemas.configuration import REVIEW_SECTIONS, ETLConfiguration
+from app.schemas.source import SourceAccessActivation, SourceMetadataReview
 from app.services.artifact_service import ArtifactService
 from app.services.audit_service import audit
 from app.services.classification_service import (
@@ -244,7 +245,7 @@ class ConfigurationService:
                 409,
             )
         if decision == "APPROVED":
-            if get_settings().require_separate_approver and config.created_by == self.user.id:
+            if (get_settings().require_separate_approver or data.source_access is not None) and config.created_by == self.user.id:
                 raise AppError(
                     "SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun approver lain.", 403
                 )
@@ -262,6 +263,36 @@ class ConfigurationService:
                 raise AppError(
                     "CONFIGURATION_INVALID", "Selesaikan pertanyaan dan error dry-run sebelum approval."
                 )
+            if data.source_access is not None:
+                from app.services.source_service import SourceService
+
+                source = await self.session.scalar(
+                    self.repo.query(DataSource).where(DataSource.id == config.source_id)
+                    .with_for_update().execution_options(populate_existing=True)
+                )
+                if source is None:
+                    raise AppError("RESOURCE_NOT_FOUND", "Sumber konfigurasi tidak ditemukan.", 404)
+                await require_source_approver(self.session, self.user, source.id, "configuration")
+                access = SourceService(self.session, self.user)
+                if source.access_revision != data.source_access.revision_no:
+                    raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sebelum approval gabungan.", 409)
+                if source.access_review_status == "PENDING":
+                    await access.review_access_metadata(
+                        source.id,
+                        SourceMetadataReview(revision_no=source.access_revision, decision="APPROVE", reason="METADATA_VERIFIED"),
+                        workflow="configuration",
+                    )
+                await access.activate_source_access(
+                    source.id,
+                    SourceAccessActivation(revision_no=source.access_revision, policy_id=data.source_access.policy_id),
+                )
+                config.review_state = {
+                    **evidence,
+                    "source_access_approval": {
+                        "revision_no": source.access_revision, "policy_id": str(data.source_access.policy_id),
+                        "approved_by": self.user.id,
+                    },
+                }
             config.approved_by, config.approved_at = self.user.id, now()
             await self.artifacts.create(config)
         config.status = decision

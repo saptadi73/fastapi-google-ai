@@ -189,6 +189,10 @@ Body: —.
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
 | `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
 
+### POST /api/v1/access/requests/approve-batch
+
+Body: [AccessRequestBatchDecision](#accessrequestbatchdecision).
+
 ### POST /api/v1/access/requests/{request_id}/approve
 
 Body: [AccessRequestDecision](#accessrequestdecision).
@@ -329,7 +333,30 @@ Body: —.
 | Parameter | Lokasi | Wajib | Tipe / batas |
 |---|---|---|---|
 | `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
-| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":100} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
+| `search` | query | Tidak | `string` {"default":""} |
+| `include_unlinked` | query | Tidak | `boolean` {"default":false} |
+
+### GET /api/v1/sources/tracking
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":25} |
+| `search` | query | Tidak | `string` {"default":""} |
+| `include_unlinked` | query | Tidak | `boolean` {"default":false} |
+
+### GET /api/v1/sources/{source_id}/history
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+| `offset` | query | Tidak | `integer` {"maximum":10000,"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":100,"minimum":1,"default":50} |
 
 ### GET /api/v1/sources/duplicate-groups
 
@@ -355,20 +382,29 @@ Body: [SourceUnlink](#sourceunlink).
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/sources/{source_id}/restore
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/sources/{source_id}/delete-preview
 
-Admin-only preview of permanent deletion eligibility and disposable setup artifacts.
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
 
 ### DELETE /api/v1/sources/{source_id}
 
-Body: [SourceDelete](#sourcedelete). Admin-only; server rechecks all blockers transactionally.
+Body: [SourceDelete](#sourcedelete).
 
-### SourceDelete
-
-| Field | Wajib | Tipe / batas |
-|---|---|---|
-| `confirm_source_code` | Ya | `string`, 1–63 karakter; harus sama persis dengan kode sumber |
-| `reason` | Ya | `string`, 3–500 karakter |
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
 
 ### GET /api/v1/sources/{source_id}
 
@@ -498,6 +534,14 @@ Body: —.
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/sources/{source_id}/sync-review/start
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/sources/{source_id}/master-migration-preview
 
 Body: —.
@@ -543,6 +587,14 @@ Body: —.
 Body: —.
 
 ### GET /api/v1/master-definitions/{master_id}/storage-plan
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `master_id` | path | Ya | `string (uuid)` {} |
+
+### GET /api/v1/master-definitions/{master_id}/source-bindings
 
 Body: —.
 
@@ -1004,6 +1056,14 @@ Body: —.
 | `source_id` | path | Ya | `string (uuid)` {} |
 | `run_id` | path | Ya | `string (uuid)` {} |
 
+### GET /api/v1/configurations/{config_id}/access-review
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `config_id` | path | Ya | `string (uuid)` {} |
+
 ### GET /api/v1/configurations/parameter-catalog
 
 Body: —.
@@ -1035,6 +1095,16 @@ Body: [WorkbookApplyRequest](#workbookapplyrequest).
 ### POST /api/v1/configurations
 
 Body: [ConfigurationCreate](#configurationcreate).
+
+### GET /api/v1/configurations/retired-tables
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `search` | query | Tidak | `string` {"default":""} |
+| `offset` | query | Tidak | `integer` {"minimum":0,"default":0} |
+| `limit` | query | Tidak | `integer` {"maximum":200,"minimum":1,"default":50} |
 
 ### GET /api/v1/configurations/{config_id}
 
@@ -1348,6 +1418,10 @@ Body: —.
 | `source_id` | path | Ya | `string (uuid)` {} |
 
 ### GET /api/v1/semantic/data-products
+
+Body: —.
+
+### GET /api/v1/semantic/data-product-inventory
 
 Body: —.
 
@@ -1932,6 +2006,38 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### AccessRequestBatchDecision
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `requests` | Ya | `array<AccessRequestBatchItem>` | — | {"maxItems":40,"minItems":1} |
+| `note` | Tidak | `string` | "" | {"maxLength":500} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "requests": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "revision": 1
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "revision": 1
+    }
+  ],
+  "note": "Rekomendasi akses akun sudah diperiksa bersama"
+}
+```
+
+### AccessRequestBatchItem
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `id` | Ya | `string (uuid)` | — | — |
+| `revision` | Ya | `integer` | — | {"minimum":1.0} |
+
 ### AccessRequestCreate
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2032,6 +2138,13 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `taxonomy_id` | Tidak | `string (uuid) / null` | — | — |
 | `taxonomy_version` | Tidak | `integer / null` | — | — |
 | `taxonomy_required` | Tidak | `boolean` | false | — |
+
+### ConfigurationAccessApproval
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `policy_id` | Ya | `string (uuid)` | — | — |
 
 ### ConfigurationCreate
 
@@ -2308,6 +2421,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `comment` | Tidak | `string` | "" | {"maxLength":2000} |
+| `source_access` | Tidak | `ConfigurationAccessApproval / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -2573,6 +2687,14 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 ### ImportStatus
 
 `enum ["CLASSIFICATION_REQUIRED","MAPPING_REQUIRED","VALIDATING","AI_REVIEWING","NEEDS_INPUT","READY_FOR_APPROVAL","APPROVED","APPLYING","SUCCEEDED","FAILED","CANCELLED","STALE_REVIEW"]`
+
+### InitialAccessRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `attribute_ids` | Tidak | `array<string (uuid)>` | [] | {"maxItems":20} |
+| `bundle_ids` | Tidak | `array<string (uuid)>` | [] | {"maxItems":20} |
+| `business_reason` | Ya | `string` | — | {"maxLength":1000,"minLength":10} |
 
 ### JoinRelationshipAction
 
@@ -3492,6 +3614,22 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### SourceDelete
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `confirm_source_code` | Ya | `string` | — | {"maxLength":63,"minLength":1} |
+| `reason` | Ya | `string` | — | {"maxLength":500,"minLength":3} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "confirm_source_code": "sales_cabang",
+  "reason": "Bersihkan sumber setup yang gagal dan belum dipakai"
+}
+```
+
 ### SourceMetadataReview
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -3841,6 +3979,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `full_name` | Tidak | `string` | "" | {"maxLength":200} |
 | `role` | Tidak | `Role` | "VIEWER" | — |
 | `row_scope` | Tidak | `map<string, map<string, array<string>>>` | {} | — |
+| `initial_access` | Tidak | `InitialAccessRequest / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -4229,6 +4368,7 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `header_row` | `INTEGER` | Tidak |
 | `data_start_row` | `INTEGER` | Tidak |
 | `enabled` | `BOOLEAN` | Tidak |
+| `is_present` | `BOOLEAN` | Tidak |
 | `last_fingerprint` | `VARCHAR(64)` | Ya |
 | `dataset_kind` | `VARCHAR(20)` | Ya |
 | `classification_status` | `VARCHAR(32)` | Tidak |

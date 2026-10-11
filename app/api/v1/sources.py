@@ -653,6 +653,11 @@ async def sync_review(source_id: UUID, session: Session, user: CurrentUser):
     return success(await SourceService(session, user).sync_review(source_id))
 
 
+@router.post("/sources/{source_id}/sync-review/start", status_code=202, dependencies=edit)
+async def start_sync_review(source_id: UUID, session: Session, user: CurrentUser):
+    return success(await SourceService(session, user).queue_sync_review(source_id))
+
+
 @router.get("/sources/{source_id}/master-migration-preview")
 async def master_migration_preview(source_id: UUID, session: Session, user: CurrentUser):
     repo = SourceRepository(session, user.tenant_id)

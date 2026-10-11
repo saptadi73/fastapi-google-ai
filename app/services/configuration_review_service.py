@@ -13,6 +13,7 @@ from app.schemas.configuration import REVIEW_SECTIONS, ConfigurationPatch
 from app.services.classification_service import classification_record
 from app.services.configuration_service import ConfigurationService
 from app.services.profiling_service import digest
+from app.services.source_service import SourceService
 from app.services.workbook_service import decode, identities, parse_workbook, token
 
 CAPABILITIES = {
@@ -40,6 +41,12 @@ CAPABILITIES = {
 
 
 class ConfigurationReviewService(ConfigurationService):
+    async def access_review(self, config_id):
+        config = await self.repo.get(Configuration, config_id)
+        access = SourceService(self.session, self.user)
+        context = await access.metadata_review_context(config.source_id, workflow="configuration")
+        return {**context, "policies": await access.source_policy_options(config.source_id)}
+
     async def context(self, config_id, *, lock=False):
         config = await self.repo.get(Configuration, config_id, lock=lock)
         source = await self.repo.get(DataSource, config.source_id)
