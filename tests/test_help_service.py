@@ -103,6 +103,34 @@ def test_all_knowledge_articles_fit_provider_context():
     assert all(len(item.body) <= 6000 for item in articles)
 
 
+@pytest.mark.parametrize(
+    ("question", "route", "required"),
+    [
+        (
+            "approval metadata sumber gabungan policy",
+            "/configurations/config-id/review",
+            ["metadata PENDING", "approval gabungan", "tanpa approval sebagian"],
+        ),
+        (
+            "sync manual langsung NON_MASTER tanpa approval batch",
+            "/workspace",
+            ["tanpa approval batch", "FULL_REFRESH", "POLICY_APPROVED"],
+        ),
+        (
+            "Menunggu tindakan error baris kolom audit trail modal",
+            "/sources",
+            ["Menunggu tindakan", "berikon mata", "baris asli", "tanpa nilai mentah"],
+        ),
+    ],
+)
+def test_latest_workflows_are_retrieved_without_provider_truncation(question, route, required):
+    articles = KnowledgeBase().search(question, "DATA_STEWARD", route)
+    context = "\n".join(item.body[:6000] for item in articles)
+    for text in required:
+        assert text in context
+    assert all(len(item.body) <= 6000 for item in articles)
+
+
 def test_catalog_access_guidance_explains_separate_source_gate():
     articles = KnowledgeBase().search(
         "katalog kosong sumber ACTIVE policy assignment", "SOURCE_OWNER", "/workspace"

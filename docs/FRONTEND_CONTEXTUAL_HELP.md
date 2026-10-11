@@ -91,3 +91,19 @@ petunjuk khusus beserta contoh path ke `tests/unit/pageHelp.test.ts`.
 ## Halaman Sumber & tracking
 
 Route `/sources` memiliki bantuan khusus untuk pencarian dan pagination sumber, pembacaan status discovery/profiling/configuration atau binding master/pemuatan, penanggung jawab Data Owner/Data Steward, serta navigasi Buka sumber. Panduan mengarahkan pengguna ke daftar ini jika sumber tidak ada di dropdown Workspace. Kegagalan tahap tidak menghapus sumber. Admin memerlukan alasan dan dua konfirmasi untuk unlink; pemulihan juga memerlukan dua konfirmasi. Status progres bukan bukti hak akses, dan binding master approved belum membuktikan record telah dimuat.
+
+## Alur sederhana dan detail temuan
+
+Helper Workspace/review menerangkan approval gabungan konfigurasi, metadata sumber PENDING,
+dan aktivasi policy SOURCE APPROVED tanpa approval sebagian. Reviewer tidak boleh menjadi
+pembuat konfigurasi/editor metadata. Gate IT/unit dan kontrol akses pembaca tetap berlaku.
+
+Helper Sumber/Workspace/import membedakan Sync manual langsung NON_MASTER ACTIVE dari master,
+FULL_REFRESH, jadwal dan batch review biasa. Jalur langsung tidak meminta approval batch
+tambahan jika validasi teknis, AI dan preview konflik lolos; jalur biasa tetap approval/Apply.
+Setelah jawaban temuan selesai, sync manual kembali dapat memuat batch siap sesuai prasyarat.
+
+`NEEDS_INPUT` berarti Menunggu tindakan, bukan proses aktif. **Lihat detail** berikon mata
+membuka modal keterangan, kode, baris asli Sheet pada snapshot (termasuk header), kolom,
+pagination temuan dan tautan batch. Audit menyimpan ringkasan lokasi tanpa nilai mentah.
+Membuka detail tidak menjalankan sync/approval. Kegagalan lama bukan status pemuatan terbaru.

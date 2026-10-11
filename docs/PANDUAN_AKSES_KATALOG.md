@@ -18,9 +18,15 @@ token, atau API key yang perlu ditulis dalam dokumentasi atau policy.
   Klik **Helper lengkap: mengapa approval belum bisa disetujui** untuk rincian dan
   shortcut ke Workspace. Editor metadata/pembuat konfigurasi tidak boleh memutuskan.
 - Sesudah deploy, **Sync manual** membaca data dan menampilkan hasil per tab.
-  Preview, approval batch dan Apply tetap wajib; struktur ACTIVE belum berarti ada data.
+  NON_MASTER dengan konfigurasi ACTIVE yang disetujui reviewer berbeda, akses aktif,
+  dan rilis siap langsung dimuat jika validasi teknis/AI/preview konflik lolos;
+  tidak meminta approval batch tambahan. Master, FULL_REFRESH, dan batch biasa tidak
+  memakai jalur langsung. Struktur ACTIVE belum berarti ada data.
 - Katalog menyediakan **Buka Google Sheet**, **Buka sumber di Workspace** bagi role
   operasional, status pembaruan, dan timestamp aktif/pemuatan terakhir.
+- **Menunggu tindakan** berarti proses berhenti, bukan worker berjalan. Tekan **Lihat detail**
+  berikon mata untuk keterangan, kode, baris asli Sheet dan kolom temuan; audit trail
+  menyediakan riwayat dan alasan keputusan. Detail tidak memberi approval atau izin akses.
 
 Langkah review metadata/aktivasi admin terpisah di bawah tetap didukung untuk sumber
 yang sudah aktif tanpa revisi konfigurasi. Ini bukan lagi langkah tambahan wajib sesudah
@@ -45,6 +51,14 @@ TECHNICAL_APPROVER sudah mempunyai DISCOVER/READ/QUERY; jangan memberi ADMIN han
 untuk membuka katalog.
 
 ## Diagnosis kasus 11 Oktober 2026
+
+Bagian diagnosis dan langkah 2–6 di bawah adalah catatan investigasi awal serta
+jalur admin terpisah untuk sumber lama, bukan urutan wajib setelah approval
+gabungan konfigurasi berhasil. Gunakan alur sederhana di awal panduan untuk revisi
+baru. Pemeriksaan lanjutan telah mengaktifkan akses quanti_1 dan memverifikasi
+37 baris fisik (BSP 12, ANGKUTAN 12, PERTANIAN 13). LKMS/PT. JAR masih menunggu
+verifikasi dugaan PII; visibilitas katalog akun admin belum dinyatakan selesai.
+Status IN_REVIEW dan publikasi lokal dalam catatan lama bukan status release kini.
 
 Pemeriksaan read-only production menemukan:
 

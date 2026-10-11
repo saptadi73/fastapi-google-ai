@@ -50,8 +50,9 @@ Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memaka
    perubahan diketahui setelah profiling/sync. Tidak ada pemuatan sukses berarti
    **Belum dimuat**, walaupun struktur konfigurasi ACTIVE.
 
-Policy baru tetap dibuat dan disetujui admin berbeda. Gate IT/unit dan persetujuan batch
-tidak dihapus. Jalur review metadata dan aktivasi admin terpisah tetap tersedia untuk
+Policy baru tetap dibuat dan disetujui admin berbeda. Gate IT/unit tetap berlaku;
+approval batch tetap diperlukan untuk master, jadwal otomatis, dan batch review biasa,
+bukan sync manual NON_MASTER yang lolos seluruh pemeriksaan. Jalur review metadata dan aktivasi admin terpisah tetap tersedia untuk
 sumber yang sudah aktif tanpa revisi konfigurasi. Perubahan metadata membatalkan akses;
 katalog tidak mempertahankan akses yang sudah dicabut hanya demi menampilkan status.
 
@@ -65,8 +66,8 @@ katalog tidak mempertahankan akses yang sudah dicabut hanya demi menampilkan sta
 | 4. Master | Definisikan field, business key, label, policy, storage, dan binding | Definisi/storage/binding approved dan record rujukan siap |
 | 5. Taxonomy | Buat term, alias, hierarki, versi, serta binding kolom | Taxonomy dan binding approved |
 | 6. Konfigurasi ETL | Map kolom, transformasi, DQ, strategi load, business key, semantic product, dimensi, dan metrik | Konfigurasi valid tanpa blocker |
-| 7. Review/deploy | Submit dan approve konfigurasi; jika aturan rilis aktif, IT dan setiap unit terkait menyetujui revisi yang sama di Persetujuan tayang; lalu deploy, activate, dan selesaikan policy sumber | Konfigurasi `ACTIVE` dan produk lolos kontrol akses |
-| 8. Batch import | Stage data, jawab pertanyaan, resolve referensi, preview, approve, lalu apply | Batch `SUCCEEDED` sesuai preview |
+| 7. Review/deploy | Approver menyetujui konfigurasi sekaligus metadata dan policy sumber; selesaikan gate IT/unit yang diwajibkan, lalu deploy | Konfigurasi `ACTIVE`, metadata `APPROVED`, akses `POLICY_APPROVED` |
+| 8. Pemuatan data | Untuk NON_MASTER aktif, jalankan Sync manual; data valid langsung dimuat. Master/jadwal/batch biasa tetap stage, jawab pertanyaan, preview, approve, apply | Batch per tab `SUCCEEDED` dan baris dimuat terisi |
 | 9. Operasional | Pantau job, schedule/dependency/watermark, karantina, resolusi, dan reprocess | Job terbaru sukses dan tidak ada blocker kualitas |
 | 10. Analitik | Tanyakan data dengan bahasa alami atau gunakan query builder; pilih tabel/chart | Hasil tampil dan dapat ditelusuri ke produk serta sumber approved |
 
@@ -125,12 +126,18 @@ riwayat ETL/import terakhir melalui `/sources/tracking`, bukan `COUNT(*)` tabel 
 **Belum dimuat** berarti belum ada riwayat pemuatan. Jika tracking gagal dimuat, tampilkan
 pesan error dan nilai tidak tersedia, bukan angka 0 yang seolah-olah sudah diverifikasi.
 
-Untuk pemuatan awal, pilih **Buat batch sync review**, pantau job, lalu buka batch import.
-Selesaikan pertanyaan/blocker, buat preview, approve melalui reviewer berwenang, kemudian
-**Apply batch**. Job sync review berhasil baru berarti batch disiapkan, bukan data sudah
-ditulis ke tabel. Tab NON_MASTER tanpa konfigurasi approved/active dapat terblokir;
-tab MASTER memerlukan binding approved. Jangan melewati approval atau menonaktifkan
-tab yang memang dibutuhkan hanya untuk menghilangkan blocker.
+Untuk pemuatan awal NON_MASTER, pilih **Sync manual** di Sumber & tracking atau
+**Sync manual data** di tabel hasil ETL Workspace, lalu **Jalankan sync sekarang**.
+Konfigurasi harus ACTIVE dengan approval reviewer berbeda, akses sumber POLICY_APPROVED,
+dan gate rilis lengkap. Validasi teknis, AI dan preview konflik berjalan sebelum pemuatan
+otomatis; data yang lolos tidak meminta approval batch tambahan. FULL_REFRESH dan master
+tidak memakai jalur langsung. Master, jadwal, endpoint sync-review lama dan batch biasa
+tetap memerlukan review pertanyaan, preview, approval serta Apply.
+
+Job induk SYNC_REVIEW SUCCEEDED tidak membuktikan setiap tab sudah dimuat.
+Periksa status batch per tab, **Baris dimuat**, dan waktu pemuatan. Tab dengan blocker
+berhenti sementara tab lain yang valid dapat berhasil. Jangan menonaktifkan tab yang
+dibutuhkan hanya untuk menghilangkan blocker.
 
 Jadwal otomatis juga membuat sync review, tidak otomatis menyetujui/apply batch.
 Cron mengikuti zona waktu sumber. Contoh `0 0 * * 1` dengan zona UTC berjalan setiap
@@ -153,8 +160,8 @@ Approval konfigurasi/IT tidak menggantikan aktivasi akses POLICY_APPROVED.
 1. Pastikan job discovery/sync/import terakhir berhasil.
 2. Pastikan tab sudah diklasifikasikan dan konfigurasi berstatus approved, deployed, serta active.
    Jika gate siap tayang aktif, periksa apakah IT dan semua unit terkait sudah menyetujui revisi yang sama.
-3. Periksa batch import: seluruh pertanyaan wajib harus selesai dan preview yang sama harus approved
-   sebelum apply.
+3. Periksa batch per tab dan Baris dimuat, bukan hanya job induk. Pada sync manual langsung,
+   approval konfigurasi aktif menjadi dasar; pada master/batch biasa, preview tetap harus approved sebelum Apply.
 4. Periksa master/taxonomy binding dan dependency freshness.
 5. Periksa masalah karantina dan aturan kualitas yang menahan batch.
 6. Periksa metadata sumber, policy `SOURCE`, assignment pengguna, row scope, serta kolom sensitif.
@@ -189,4 +196,29 @@ Batch yang `NEEDS_INPUT` belum memuat data ke database. Buka batch dan baca temu
 
 Jangan menerima dugaan data pribadi, salah mapping, atau aturan persentase yang belum jelas tanpa verifikasi pemilik data. Error teknis wajib (tipe, nullability, referensi, dan sejenisnya) tidak dapat dilewati dengan konfirmasi. Bila perlu mengubah Sheet, pilih `CORRECT_SOURCE`, perbaiki Sheet, lalu gunakan snapshot/batch baru.
 
-Setelah semua pertanyaan selesai, cakupan AI `COMPLETE`, dan validasi teknis selesai tanpa blocker, batch masuk `READY_FOR_APPROVAL`. Lanjutkan **Preview → approval reviewer terpisah → Apply**. Konfirmasi temuan bukan approval dan tidak otomatis memuat record.
+Setelah semua pertanyaan selesai, cakupan AI `COMPLETE`, dan validasi teknis selesai tanpa
+blocker, batch masuk `READY_FOR_APPROVAL`. Untuk batch sync manual NON_MASTER dengan
+konfigurasi/akses yang masih berlaku, jalankan **Sync manual** kembali agar batch siap
+tersebut dipreview dan dimuat berdasarkan approval konfigurasi aktif. Jika masih ada
+konflik atau prasyarat berubah, sistem tetap berhenti. Master/batch biasa memakai
+**Preview → approval reviewer terpisah → Apply**. Menjawab pertanyaan saja tidak memuat record.
+
+### Membaca status dan lokasi temuan
+
+- **Sedang berjalan / validasi / diperiksa AI / memuat:** worker masih memproses.
+- **Menunggu tindakan (`NEEDS_INPUT`):** berhenti pada temuan; menunggu saja tidak menyelesaikannya.
+- **Belum lengkap (`IN_PROGRESS`):** ringkasan belum seluruhnya selesai, bukan bukti worker aktif.
+- **Gagal (`FAILED`):** perbaiki penyebab teknis lalu Revalidate melalui batch resmi.
+- **Berhasil (`SUCCEEDED`):** batch pemuatan selesai; periksa jumlah baris dan timestamp.
+
+Tekan **Lihat detail** berikon mata pada tracking, tabel hasil ETL, hasil sync atau audit
+trail. Modal menampilkan keterangan, kode penghambat, nomor baris dan kolom temuan,
+serta **Buka batch untuk tindak lanjut**. Nomor baris adalah baris asli Google Sheet
+pada snapshot, termasuk header; penyisipan baris setelah snapshot dapat menggeser lokasi.
+Daftar pertanyaan dipaginasi dengan **Muat temuan berikutnya**.
+
+Audit mencatat aktor, waktu, keputusan/alasan dan ringkasan maksimal 20 lokasi tanpa
+nilai mentah. Riwayat kegagalan lama tidak berarti pemuatan terbaru gagal. Membuka
+detail tidak menyetujui temuan, mengubah Sheet, atau menjalankan sync. Dugaan PII
+perlu verifikasi pemilik data; jangan menerima nama pribadi pada kolom non-PII tanpa
+memperbaiki klasifikasi/mapping yang sesuai.

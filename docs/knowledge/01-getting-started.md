@@ -14,8 +14,8 @@ Gunakan urutan berikut agar data dapat dipakai dengan aman:
 4. Jika data memakai rujukan baku, siapkan definisi, storage, record, dan binding master.
 5. Jika data memakai kategori baku, siapkan taxonomy, versi, term, alias, dan binding taxonomy.
 6. Buat konfigurasi ETL: mapping kolom, transformasi, kualitas, strategi load, business key, produk semantik, dimensi, dan metrik.
-7. Ajukan konfigurasi dan minta reviewer berbeda menyetujui. Jika aturan persetujuan tayang aktif, tunggu pemeriksaan IT dan persetujuan dari setiap unit terkait pada revisi yang sama. Setelah status siap tayang, deploy dan aktifkan. Aturan ini ditetapkan admin per sumber; sumber lama tanpa aturan tetap mengikuti alur review konfigurasi biasa.
-8. Stage data, jawab pertanyaan import, periksa preview, approve, lalu apply batch.
+7. Ajukan konfigurasi. Approver sumber yang bukan pembuat/editor metadata membaca ringkasan dan memilih policy SOURCE APPROVED: satu approval menyetujui konfigurasi, metadata PENDING, dan aktivasi akses. Jika satu syarat gagal, tidak ada approval sebagian. Selesaikan gate IT/unit yang diwajibkan pada revisi sama, lalu deploy sampai ACTIVE.
+8. Jalankan Sync manual NON_MASTER aktif: validasi teknis, AI dan preview konflik lolos berarti langsung dimuat tanpa approval batch tambahan. Master, FULL_REFRESH, jadwal dan batch biasa tidak memakai jalur langsung; batch biasa tetap preview, approve, Apply.
 9. Pantau job, kualitas, schedule, dependency, watermark, dan data karantina.
 10. Setelah produk data aktif dan dapat diakses, pengguna dapat bertanya dengan bahasa alami dan memilih tabel atau chart.
 
@@ -23,3 +23,4 @@ Master dan taxonomy hanya diperlukan bila dataset membutuhkan rujukan atau kateg
 
 Gunakan menu **Sumber & tracking** sebagai daftar utama untuk mencari sumber dengan pencarian dan pagination, melihat status tiap tahap, serta mengetahui Data Owner dan Data Steward yang bertanggung jawab. Pilih **Buka sumber** untuk melanjutkan proses di Workspace ETL. Dropdown Workspace hanya untuk memilih konteks kerja dan tidak memuat seluruh daftar sumber.
 
+Menunggu tindakan (NEEDS_INPUT) berarti pemuatan berhenti pada temuan, bukan masih berjalan. Lihat detail berikon mata membuka modal kode, keterangan, baris asli Sheet dan kolom. Audit trail menyimpan riwayat dan lokasi tanpa nilai mentah. Periksa hasil per tab dan Baris dimuat, bukan hanya job sync induk.

@@ -1,8 +1,8 @@
 ---
 id: pengguna-role-dan-akses
 title: Pengguna, role, dan kontrol akses
-summary: Tanggung jawab role, atribut organisasi, kebijakan akses, dan access request.
-routes: ["/admin", "/admin/*", "/register", "/users/*", "/access-requests", "/release-approvals", "/account", "/configurations/*"]
+summary: Approval metadata sumber gabungan, policy SOURCE, assignment akun, dan rekomendasi akses.
+routes: ["/admin", "/admin/*", "/register", "/users/*", "/access-requests", "/release-approvals", "/account", "/configurations/*", "/workspace"]
 audiences: ["*"]
 source: docs/ACCESS_JURISDICTION_BE16.md
 ---
@@ -17,6 +17,8 @@ Jika Katalog data kosong walaupun sumber ETL ACTIVE, status ETL bukan status aks
 Alur sederhana: Registrasi akun sekaligus mengajukan unit/domain/yurisdiksi serta paket izin yang dipilih untuk 366 hari sejak pengajuan. Admin lain memilih semua rekomendasi akun itu di Permintaan akses dan menyetujuinya dalam satu transaksi. Policy organisasi APPROVED digunakan kembali, tidak dibuat ulang per akun; permintaan PENDING belum memberikan akses. Policy DATA_PRODUCT saja tidak menggantikan policy SOURCE.
 
 Pada review konfigurasi, approver membaca ringkasan metadata, memilih policy SOURCE APPROVED yang cocok, lalu memberi approval gabungan konfigurasi, metadata dan aktivasi akses sampai POLICY_APPROVED. Kewenangan approver konfigurasi sumber berlaku untuk keputusan gabungan ini, walaupun bukan reviewer metadata terpisah. Ia harus bukan pembuat konfigurasi/editor metadata. Jika metadata/policy tidak valid, revisi berubah, atau syarat gate aktif belum lengkap, transaksi gagal tanpa approval sebagian. Buka Helper lengkap pada dialog ke /guide#approval-gabungan: penjelasan blocker, assignment editor, policy/binding/masa berlaku, maker-checker dan langkah memperbaiki. Jalur review metadata dan aktivasi admin di Workspace tetap tersedia untuk sumber lama/tanpa revisi konfigurasi. Policy DATA_PRODUCT tidak menggantikan policy SOURCE; jangan registrasi ulang untuk membuka akses.
+
+Sesudah approval gabungan, tidak perlu approval metadata satu per satu. Perubahan metadata membatalkan akses dan perlu review baru. Deploy hanya mengaktifkan struktur; Sync manual NON_MASTER valid langsung memuat berdasarkan approval konfigurasi, bukan meminta approval batch tambahan. Master/jadwal/batch biasa tetap review/Apply. Menunggu tindakan membuka Lihat detail berikon mata untuk keterangan dan lokasi baris; bukan izin bypass kontrol akses.
 
 Admin memilih pengguna tujuan dan memakai Preview keputusan untuk DISCOVER/QUERY pada sumber; hasil harus POLICY_MATCH. DEFAULT_DENY berarti belum ada ALLOW yang cocok atau assignment kurang; EXPLICIT_DENY tidak bisa ditimpa ALLOW. Sesudahnya uji login pengguna dan katalog. Role harus ada dalam allowed_roles produk; tabel storage MASTER tidak otomatis menjadi Data Product. Policy berlaku bagi semua pengguna yang memenuhi atribut, bukan username khusus. SOURCE_OWNER dan TECHNICAL_APPROVER sudah memiliki aksi baca/query; permission bundle bukan pengganti scope dan policy.
 

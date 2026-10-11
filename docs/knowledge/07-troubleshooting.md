@@ -16,7 +16,7 @@ Jika Hubungkan & profiling tampak tidak bereaksi, lihat pesan di bawah tombol da
 
 Dropdown unit/domain/yurisdiksi memakai assignment aktif akun pendaftar pada tenant yang sama. Registry saja tidak memberi assignment; minta admin lain menugaskan atribut melalui Administrasi → Pengguna lalu Muat ulang pilihan. Admin tidak dapat menugaskan diri sendiri. Purpose berasal dari registry aktif; owner/steward dari akun aktif. Pesan gagal memuat pilihan berbeda dari assignment kosong.
 
-Panel Berikan unit/departemen hanya memuat DEPARTMENT; domain/yurisdiksi diberikan melalui form Atribut. Centang unit sebelum memberi assignment. Sesudah sukses, centang dikosongkan, assignment tetap terlihat pada ringkasan/riwayat. Pastikan akun yang dipilih sama dengan akun pengguna Workspace.
+Panel Berikan unit/departemen memuat DEPARTMENT; domain/yurisdiksi lewat form Atribut. Centang unit dan pastikan akun tujuan sama dengan pengguna Workspace.
 
 Jika data belum muncul di dashboard, pastikan discovery, profiling, klasifikasi, konfigurasi, deploy, activation, import, dan job terakhir berhasil. Periksa master atau taxonomy binding, pertanyaan batch, data karantina, freshness, metadata sumber, serta policy akses.
 
@@ -24,17 +24,21 @@ Untuk `RELEASE_APPROVAL_REQUIRED`, buka **Persetujuan tayang**. IT harus melengk
 
 Untuk `DATABASE_PERMISSION_DENIED` (42501), admin memeriksa role DDL: USAGE/CREATE pada schema trusted/semantic serta izin/ownership objek target. `DATABASE_CONNECTION_FAILED` memerlukan pemeriksaan koneksi aplikasi/DDL. Catat ID job agar admin dapat mencari log worker.
 
-Deploy memberi role runtime INSERT untuk APPEND, SELECT/INSERT/UPDATE untuk UPSERT, dan SELECT view semantic. FULL_REFRESH memerlukan DELETE dari admin; aplikasi tidak menambahkannya otomatis.
+Deploy memberi role runtime SELECT/INSERT untuk APPEND (preview membaca target), SELECT/INSERT/UPDATE untuk UPSERT, dan SELECT view semantic. Tabel APPEND lama perlu grant SELECT terarah atau deploy ulang. FULL_REFRESH memerlukan DELETE dari admin; aplikasi tidak menambahkannya otomatis.
 
 Jika AI gagal, periksa health OpenAI, model, kuota, budget/policy, dan request ID sebelum mencoba lagi. Jangan kirim password, token, API key, credential, atau data pribadi ke asisten.
 
 Sumber tidak ada di dropdown? Cari nama/kode melalui **Sumber & tracking**, pagination, lalu **Buka sumber**. Dropdown hanya memilih konteks, bukan daftar lengkap. Kegagalan tahap tidak menghapus sumber; jangan registrasi ulang.
 
-UNLINKED menyembunyikan sumber dari daftar aktif/duplikat tanpa menghapus riwayat. Admin dapat menampilkan dan memulihkan link dengan dua konfirmasi. Unlink duplikat memerlukan sumber utama, alasan, dan dua konfirmasi; relasi operasional dapat menahannya.
+UNLINKED menyembunyikan sumber tanpa menghapus riwayat. Admin dapat memulihkan dengan dua konfirmasi. Unlink perlu sumber utama, alasan, dua konfirmasi; relasi operasional dapat menahannya.
 
-DISCOVERY gagal: periksa akses dan tab. PROFILING gagal: periksa header/pesan error; tab discovery bisa tetap ada. CONFIGURATION belum siap: lengkapi mapping/review. Master binding approved belum berarti record dimuat; periksa batch/apply. Tracking juga menampilkan Data Owner/Steward.
+DISCOVERY gagal: periksa akses/tab. PROFILING gagal: periksa header/error. CONFIGURATION belum siap: lengkapi mapping/review. Binding master approved belum memuat record; periksa batch/apply dan Owner/Steward.
 
-Ikon **!** menunjukkan kode/pesan/waktu kegagalan terakhir; **?** menjelaskan langkah tahap. **Riwayat** menunjukkan aktivitas, actor, dan waktu, dengan pemuatan event lebih lama.
+Menunggu tindakan (NEEDS_INPUT) berarti berhenti pada temuan, bukan worker masih berjalan; menunggu saja tidak menyelesaikannya. Sedang validasi/diperiksa AI/memuat berarti aktif. IN_PROGRESS berarti belum lengkap; SUCCEEDED per batch berarti pemuatan selesai, bukan hanya job induk.
+
+Lihat detail berikon mata pada tracking, hasil ETL/sync dan audit trail membuka kode, keterangan, baris asli Sheet pada snapshot (termasuk header), kolom serta tautan batch. Audit menyimpan maksimal 20 lokasi tanpa nilai mentah; Muat temuan berikutnya memaginasi pertanyaan. Jika Sheet berubah setelah snapshot, nomor baris dapat bergeser. Riwayat kegagalan lama bukan status terbaru. Membuka modal tidak approve/sync.
+
+Dugaan PII pada kolom non-sensitif masih temuan AI, bukan kepastian: verifikasi nama pribadi/mapping dengan pemilik data, perbaiki klasifikasi jika benar PII. KEEP_ORIGINAL hanya untuk nilai sah terverifikasi, alasan wajib dan diaudit; bukan bypass error teknis. Setelah blocker selesai, sync manual NON_MASTER siap dapat dilanjutkan tanpa approval batch ulang. Master/jadwal/batch biasa tetap preview/approval/Apply.
 
 Aktivasi versi baru membuat konfigurasi lama SUPERSEDED. Inventaris tabel retired hanya mencatat tabel yang masih ada, tidak menghapusnya. REVIEW_REQUIRED meminta pemeriksaan rollback/dependency/retensi; delete_ready tetap false sampai cleanup terkontrol tersedia.
 

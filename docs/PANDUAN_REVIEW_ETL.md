@@ -15,9 +15,9 @@ Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runt
 4. Login dengan tenant dan akun aplikasi. Token berada di memori; reload penuh memerlukan login ulang. Jika sesi kedaluwarsa, keluar/ganti akun lalu login kembali.
 5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Konfirmasi klasifikasi per tab di Workspace ETL. Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan; lihat [kontrak dan rollout BE-02](KLASIFIKASI_TAB_BE02.md).
 6. Periksa identitas, mapping kolom, cleansing berurutan, kualitas data, strategi pemuatan, dimensi, metrik, dan role akses. Simpan perubahan, periksa dry-run, isi checklist seluruh bagian/kolom, lalu **Ajukan review**.
-7. Gunakan akun `TECHNICAL_APPROVER` atau admin berbeda untuk membuka konfigurasi yang sama, memeriksa hasil, dan menyetujui. Admin dapat mengelola akun dan role melalui halaman `/admin/users`.
+7. Gunakan approver konfigurasi sumber yang berbeda dari pembuat konfigurasi/editor metadata. Baca ringkasan metadata sumber, pilih policy SOURCE APPROVED yang cocok, lalu setujui konfigurasi, metadata PENDING dan aktivasi akses dalam satu transaksi. Jika metadata/policy/revisi tidak valid, tidak ada approval sebagian. Jalur admin review metadata/aktivasi terpisah tetap tersedia untuk sumber aktif tanpa revisi; tidak perlu diulang setelah approval gabungan berhasil.
 8. Jika aturan siap tayang aktif, akun IT dan approver bernama dari setiap unit terkait membuka `/release-approvals`. IT menyelesaikan checklist skema/mapping, kualitas data, dan keamanan/akses. Setiap kelompok memberi keputusan pada revisi konfigurasi, snapshot review, dan revisi aturan yang sama. Status kelompok tampil pada review konfigurasi; penolakan memerlukan versi baru atau revisi aturan yang diaudit. Aturan rilis dikonfigurasi admin di `/admin`.
-9. Setelah status siap tayang, **Deploy konfigurasi**, tunggu job SUCCEEDED, lalu jalankan sinkronisasi dengan akun editor. Approval dan deployment tidak langsung memuat data. Sumber lama tanpa aturan rilis tetap dapat mengikuti review konfigurasi biasa. Rollback ke versi sebelumnya juga melewati pemeriksaan aturan rilis saat ini; approval batch import berikutnya tetap terpisah.
+9. Setelah status siap tayang, **Deploy konfigurasi**, tunggu job SUCCEEDED, lalu jalankan **Sync manual** dengan akun editor. NON_MASTER ACTIVE memakai approval konfigurasi terpisah serta akses/rilis yang masih berlaku: validasi teknis, AI dan preview konflik lolos berarti langsung dimuat tanpa approval batch tambahan. Master, FULL_REFRESH, jadwal dan batch biasa tetap memakai review/preview/approval/Apply. Approval dan deployment sendiri tidak memuat data. Rollback tetap diperiksa terhadap aturan rilis saat ini.
 
 Konfigurasi APPROVED/ACTIVE lama yang tidak memiliki bukti review tetap tidak dapat diedit. Bila perlu deployment ulang, clone menjadi draft, validasi, submit, dan approve. Runtime sync konfigurasi yang sudah ACTIVE tidak memerlukan checklist ulang untuk setiap sync. Rollback konfigurasi memeriksa snapshot yang disetujui; perubahan data dapat mengharuskan draft baru. Rollback bukan pemulihan data historis.
 
@@ -31,7 +31,7 @@ bukan registrasi ulang, untuk memperbarui dataset.
 |---|---|
 | Kolom sumber baru atau header diubah/dihapus | Ubah Google Sheets, profiling ulang, lalu buat draft dari profile terbaru dan sesuaikan mapping |
 | Cleansing, DQ, label bisnis, dimensi/metrik untuk kolom yang sudah tersedia | Edit draft; jika versi sudah APPROVED/ACTIVE/REJECTED, clone dahulu; validasi dan review snapshot terkini |
-| Nilai/baris berubah tanpa perubahan struktur | Review import snapshot terbaru; `sync-review` menjalankan profiling sebelum membuat batch |
+| Nilai/baris berubah tanpa perubahan struktur | Sync manual NON_MASTER aktif membaca/profiling snapshot terbaru dan langsung memuat data valid; master/batch biasa tetap review import |
 | Kolom/type/nullability/business key target non-master berubah pada tabel yang sudah ada | Migrasi manual yang direview sebelum deployment; approval konfigurasi tidak menjalankan ALTER TABLE otomatis |
 
 Urutan untuk kolom baru:
@@ -50,7 +50,18 @@ Urutan untuk kolom baru:
 6. Untuk tabel non-master yang sudah deployed, koordinasikan migrasi schema terlebih dahulu
    jika kolom target bertambah/berubah. Deploy hanya membuat tabel baru atau menerima schema
    identik; `SCHEMA_CHANGE_UNSAFE` bukan alasan untuk menghapus tabel atau registrasi ulang.
-7. Deploy, tunggu sukses, kemudian buat/review batch import terbaru sebelum apply.
+7. Deploy, tunggu sukses, kemudian Sync manual untuk NON_MASTER yang memenuhi syarat; master/batch biasa tetap review import sebelum Apply.
+
+### Temuan yang menghentikan pemuatan
+
+`NEEDS_INPUT` tampil **Menunggu tindakan**, bukan worker masih berjalan. Tekan **Lihat
+detail** berikon mata pada tracking/hasil ETL/hasil sync/audit trail untuk melihat
+kode, alasan, nomor baris asli Sheet pada snapshot dan kolom. Audit menyimpan aktor,
+waktu dan maksimal 20 lokasi tanpa nilai mentah; daftar pertanyaan dapat dimuat bertahap.
+Temuan AI bukan kepastian data salah. Verifikasi dengan pemilik data, koreksi mapping/PII
+atau sumber jika diperlukan. `KEEP_ORIGINAL` hanya untuk AI yang telah diverifikasi sah,
+dengan alasan wajib; bukan bypass error teknis. Setelah batch sync langsung siap tanpa
+blocker, Sync manual kembali dapat melanjutkan pemuatan. Batch biasa tetap approval/Apply.
 
 ### Mengganti label periode text dengan tanggal
 
