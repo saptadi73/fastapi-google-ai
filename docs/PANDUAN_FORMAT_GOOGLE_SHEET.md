@@ -179,4 +179,4 @@ Contoh pertanyaan konsumsi: Tampilkan target dan realisasi RESPON_SELESAI per un
 - Action plan menunjuk bukti/periodenya, tindakan terukur, owner/tenggat, status, baseline serta periode ukur ulang; hipotesis belum diperlakukan sebagai akar penyebab pasti.
 - Pemilik bisnis memverifikasi hasil analisis, keterlambatan data dan kualitas bukti sebelum mengambil keputusan. Data yang rapi meningkatkan ketepatan; tidak menjamin semua kesimpulan otomatis benar.
 
-Panduan aplikasi: **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Penanganan kode error: [Tabel error response](ERROR_RESPONSES.md).
+Panduan aplikasi: **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Penanganan kode error: [Tabel error response](ERROR_RESPONSES.md). Arti istilah: [Istilah teknis dalam bahasa sederhana](ISTILAH_TEKNIS.md).

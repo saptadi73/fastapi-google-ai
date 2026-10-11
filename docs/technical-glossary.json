@@ -1,0 +1,349 @@
+[
+  {
+    "group": "dasar",
+    "id": "dataset",
+    "term": "Dataset",
+    "meaning": "Sekumpulan data tentang satu hal.",
+    "example": "Daftar keluhan pelanggan selama 2026.",
+    "aliases": []
+  },
+  {
+    "group": "dasar",
+    "id": "record",
+    "term": "Record",
+    "meaning": "Satu catatan, biasanya satu baris.",
+    "example": "Satu keluhan dengan kode KLH-001.",
+    "aliases": []
+  },
+  {
+    "group": "dasar",
+    "id": "grain",
+    "term": "Grain",
+    "meaning": "Satu baris mewakili apa? Ini menentukan tingkat rincian data.",
+    "example": "Satu baris per keluhan berbeda dari satu baris rekap per unit per bulan.",
+    "aliases": [
+      "tingkat rincian"
+    ]
+  },
+  {
+    "group": "dasar",
+    "id": "business-key",
+    "term": "Business key",
+    "meaning": "Kode atau gabungan informasi yang membedakan setiap catatan bisnis; harus stabil, unik dan tidak kosong.",
+    "example": "keluhan_id; untuk rekap, gabungan unit + indikator + periode.",
+    "aliases": [
+      "kunci bisnis"
+    ]
+  },
+  {
+    "group": "dasar",
+    "id": "primary-key",
+    "term": "Primary key",
+    "meaning": "Identitas utama untuk menunjuk satu record di database; dapat berbeda dari kode bisnis.",
+    "example": "ID unik internal untuk record keluhan KLH-001.",
+    "aliases": [
+      "kunci utama"
+    ]
+  },
+  {
+    "group": "dasar",
+    "id": "schema",
+    "term": "Schema",
+    "meaning": "Rancangan kolom, tipe dan aturan tabel.",
+    "example": "ID wajib terisi, tanggal bertipe date, dan jumlah bertipe angka.",
+    "aliases": []
+  },
+  {
+    "group": "dasar",
+    "id": "tipe-data",
+    "term": "Tipe data",
+    "meaning": "Jenis isi yang diperbolehkan pada kolom.",
+    "example": "Tanggal untuk event_date, teks untuk kode 0012, angka untuk jumlah.",
+    "aliases": []
+  },
+  {
+    "group": "dasar",
+    "id": "nullable",
+    "term": "Nullable",
+    "meaning": "Apakah nilai pada kolom boleh kosong?",
+    "example": "Tanggal penyelesaian boleh kosong selama keluhan belum selesai; ID tetap wajib.",
+    "aliases": [
+      "boleh kosong"
+    ]
+  },
+  {
+    "group": "rujukan",
+    "id": "master-data",
+    "term": "Master data",
+    "meaning": "Daftar rujukan resmi untuk entitas yang dipakai bersama.",
+    "example": "Master unit: UNIT-01 = Layanan Anggota, dengan satu kode unik per unit.",
+    "aliases": [
+      "master"
+    ]
+  },
+  {
+    "group": "rujukan",
+    "id": "taxonomy",
+    "term": "Taxonomy",
+    "meaning": "Daftar kategori atau istilah yang disepakati.",
+    "example": "Jenis keluhan: Pelayanan, Produk, Pembayaran; gunakan kode/term baku.",
+    "aliases": [
+      "taksonomi"
+    ]
+  },
+  {
+    "group": "rujukan",
+    "id": "alias",
+    "term": "Alias",
+    "meaning": "Nama lain yang telah diakui untuk istilah yang sama.",
+    "example": "Cust Service sebagai alias Layanan Pelanggan setelah diverifikasi.",
+    "aliases": []
+  },
+  {
+    "group": "rujukan",
+    "id": "mapping",
+    "term": "Mapping",
+    "meaning": "Menentukan kolom sumber masuk ke kolom tujuan yang mana.",
+    "example": "Tanggal Keluhan pada Sheet dipetakan ke event_date.",
+    "aliases": []
+  },
+  {
+    "group": "rujukan",
+    "id": "cleansing",
+    "term": "Cleansing",
+    "meaning": "Merapikan nilai agar konsisten menurut aturan yang ditinjau.",
+    "example": "Meratakan format kategori atau membuang spasi tepi sebelum validasi.",
+    "aliases": []
+  },
+  {
+    "group": "rujukan",
+    "id": "trim",
+    "term": "Trim",
+    "meaning": "Menghapus spasi di awal dan akhir teks; spasi di tengah tetap.",
+    "example": "\"  UNIT-01  \" menjadi \"UNIT-01\"; otomatis untuk input text/varchar.",
+    "aliases": []
+  },
+  {
+    "group": "rujukan",
+    "id": "profiling",
+    "term": "Profiling",
+    "meaning": "Memeriksa kondisi awal data untuk membantu review.",
+    "example": "Membaca header, perkiraan tipe, nilai kosong dan dugaan data sensitif; bukan jaminan semua baris valid.",
+    "aliases": []
+  },
+  {
+    "group": "rujukan",
+    "id": "data-quality",
+    "term": "Data quality / DQ",
+    "meaning": "Pemeriksaan apakah data memenuhi aturan kualitas.",
+    "example": "ID tidak kosong/berulang, tanggal valid dan kode unit ditemukan di master.",
+    "aliases": [
+      "dq",
+      "kualitas data"
+    ]
+  },
+  {
+    "group": "rujukan",
+    "id": "snapshot",
+    "term": "Snapshot",
+    "meaning": "Salinan kondisi sumber pada waktu tertentu.",
+    "example": "Data Sheet yang dibaca saat review; perubahan setelahnya dapat membuat review kedaluwarsa.",
+    "aliases": [
+      "salinan data"
+    ]
+  },
+  {
+    "group": "rujukan",
+    "id": "provenance",
+    "term": "Provenance",
+    "meaning": "Jejak asal dan cara memperoleh data agar angka dapat ditelusuri.",
+    "example": "Sumber pengukuran, metode, waktu pengambilan dan versi koreksi.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "dimensi",
+    "term": "Dimensi",
+    "meaning": "Cara mengelompokkan atau membandingkan data.",
+    "example": "Menurut unit, bulan atau jenis keluhan.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "metrik",
+    "term": "Metrik",
+    "meaning": "Ukuran yang dihitung atau dibandingkan berdasarkan definisi bisnis.",
+    "example": "Jumlah keluhan, target dan realisasi penyelesaian; kolom angka tidak otomatis menjadi metrik.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "agregasi",
+    "term": "Agregasi",
+    "meaning": "Menggabungkan banyak catatan menjadi ringkasan.",
+    "example": "Menjumlahkan keluhan per bulan; rata-rata hanya jika ukuran dan basisnya sesuai.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "data-product",
+    "term": "Data product",
+    "meaning": "Data yang disiapkan untuk katalog dan analisis sesuai izin pengguna.",
+    "example": "Keluhan Pelanggan / Rekap Bulanan; memerlukan produk aktif dan hak baca yang cocok.",
+    "aliases": [
+      "produk data"
+    ]
+  },
+  {
+    "group": "analitik",
+    "id": "baseline",
+    "term": "Baseline",
+    "meaning": "Nilai awal yang dipakai sebagai pembanding.",
+    "example": "Waktu respons 48 jam sebelum perbaikan; bandingkan dengan metode/periode yang sebanding.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "gap",
+    "term": "Gap",
+    "meaning": "Selisih terhadap target dengan arah dan rumus yang disepakati.",
+    "example": "Target selesai 100, realisasi 90: kekurangan 10. Untuk batas maksimal keluhan, rumus/arahnya berbeda.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "denominator",
+    "term": "Denominator / penyebut",
+    "meaning": "Jumlah dasar yang dipakai untuk menghitung rasio atau persentase.",
+    "example": "90 selesai dari 100 kasus = 90%; dari 200 kasus = 45%. Jangan menjumlahkan persen.",
+    "aliases": [
+      "penyebut"
+    ]
+  },
+  {
+    "group": "analitik",
+    "id": "presisi",
+    "term": "Presisi",
+    "meaning": "Ketelitian/resolusi pencatatan atau pengukuran yang memang didukung sumber.",
+    "example": "Berat dicatat 0,01 kg jika alat/metodenya mendukung; banyak digit tidak menjamin hasil benar.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "periode-data",
+    "term": "Periode data",
+    "meaning": "Rentang waktu bisnis yang dicakup record atau laporan.",
+    "example": "period_start 2026-01-01 sampai period_end 2026-01-31 untuk rekap Januari.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "waktu-pengukuran",
+    "term": "Waktu pengukuran",
+    "meaning": "Kapan kondisi atau kejadian benar-benar diamati.",
+    "example": "measured_at atau event_at menunjukkan waktu di lapangan, bukan waktu sync.",
+    "aliases": []
+  },
+  {
+    "group": "analitik",
+    "id": "waktu-pengambilan",
+    "term": "Waktu pengambilan",
+    "meaning": "Kapan data dikumpulkan/ditarik; berbeda dari periode yang dilaporkan.",
+    "example": "collected_at 2026-02-02 untuk laporan Januari; waktu sync tidak mengubah bulan kinerja.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "etl",
+    "term": "ETL",
+    "meaning": "Mengambil, mengolah, lalu memasukkan data ke database.",
+    "example": "Membaca Sheet, merapikan/memvalidasi nilai, kemudian memuat data.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "discovery",
+    "term": "Discovery / Temukan tab",
+    "meaning": "Memeriksa tab yang sekarang tersedia di Google Sheet.",
+    "example": "Setelah tab dihapus/di-rename, jalankan Temukan tab untuk memperbarui daftar aplikasi.",
+    "aliases": [
+      "temukan tab"
+    ]
+  },
+  {
+    "group": "operasi",
+    "id": "preview",
+    "term": "Preview",
+    "meaning": "Melihat rencana dan dampak perubahan sebelum dijalankan.",
+    "example": "Meninjau kolom baru, contoh konversi tanggal dan blocker sebelum persetujuan.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "approval",
+    "term": "Approval",
+    "meaning": "Persetujuan reviewer terhadap versi yang diperiksa.",
+    "example": "Reviewer berwenang berbeda dari pembuat menyetujui konfigurasi; bukan izin baca otomatis.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "deploy",
+    "term": "Deploy",
+    "meaning": "Mengaktifkan konfigurasi yang disetujui dan menyiapkan struktur database yang diperlukan.",
+    "example": "Versi menjadi ACTIVE setelah deploy sukses; cek pemuatan data sebagai tahap terpisah.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "sync",
+    "term": "Sync",
+    "meaning": "Membaca dan memproses pembaruan sumber sesuai konfigurasi/alur yang berlaku.",
+    "example": "Sync manual NON_MASTER aktif dapat langsung memuat setelah semua gate lolos; master/FULL_REFRESH memakai review batch.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "append",
+    "term": "APPEND",
+    "meaning": "Menambahkan catatan baru.",
+    "example": "Cocok untuk kejadian baru; snapshot/koreksi tanpa key yang tepat bisa terhitung ganda.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "upsert",
+    "term": "UPSERT",
+    "meaning": "Memperbarui catatan jika key sudah ada, atau menambahkan jika belum ada.",
+    "example": "Koreksi rekap unit/indikator/periode yang sama memperbarui record tersebut.",
+    "aliases": [
+      "update insert"
+    ]
+  },
+  {
+    "group": "operasi",
+    "id": "full-refresh",
+    "term": "FULL_REFRESH",
+    "meaning": "Mengganti seluruh isi target dengan snapshot sumber yang lengkap.",
+    "example": "Tidak boleh menggunakan snapshot parsial seolah mencakup semua record; perlu alur review yang sesuai.",
+    "aliases": [
+      "full refresh"
+    ]
+  },
+  {
+    "group": "operasi",
+    "id": "freshness",
+    "term": "Freshness",
+    "meaning": "Seberapa mutakhir data yang tersedia.",
+    "example": "Dimuat hari ini belum tentu menggambarkan kondisi hari ini; lihat periode dan data_as_of_at.",
+    "aliases": []
+  },
+  {
+    "group": "operasi",
+    "id": "watermark",
+    "term": "Watermark",
+    "meaning": "Penanda sampai mana data sudah diproses untuk pengambilan bertahap sesuai konfigurasi.",
+    "example": "Nomor/tanggal checkpoint pemuatan; bukan penentu arti periode bisnis.",
+    "aliases": []
+  }
+]

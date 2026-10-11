@@ -121,3 +121,10 @@ Pemeliharaan tabel: edit `docs/error-responses.json` di backend, lalu jalankan `
 Baca [Panduan lengkap format Google Sheet](PANDUAN_FORMAT_GOOGLE_SHEET.md): penamaan file/tab dan produk, header tabular, grain/key, master/taxonomy, tipe/satuan/presisi, waktu/periode wajib untuk data periodik, metrik, kualitas, provenance, action plan berbasis bukti dan contoh tabel. Di aplikasi buka **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Waktu kejadian/pengukuran, periode data dan waktu pengambilan dibedakan; tanggal sync bukan pengganti waktu bisnis. Definisi metrik dan tindakan tetap perlu review, bukan asumsi otomatis dari nama kolom.
 
 Pemeliharaan panduan Sheet: edit `docs/google-sheet-format.json`, lalu jalankan `python scripts/export_sheet_format_guide.py --frontend-root D:/projek/vue-googlesheet-ai`; `--check` memverifikasi dokumentasi, knowledge base dan konten helper tetap sinkron.
+
+
+### Istilah teknis untuk pengguna non teknis
+
+[Tabel istilah teknis dalam bahasa sederhana](ISTILAH_TEKNIS.md) menjelaskan grain, business/primary key, master, taxonomy, mapping, tipe, nullable, dimensi/metrik, snapshot, ETL, periode, waktu pengambilan serta proses pemuatan dengan contoh bisnis. Buka **Bantuan > Istilah teknis dalam bahasa sederhana** atau **Panduan lengkap > Istilah teknis dalam bahasa sederhana**; cari istilah, arti atau contoh.
+
+Pemeliharaan istilah: edit `docs/technical-glossary.json`, lalu `python scripts/export_technical_glossary.py --frontend-root D:/projek/vue-googlesheet-ai`; `--check` memverifikasi dokumentasi, knowledge base dan helper tetap sinkron.

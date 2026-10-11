@@ -58,7 +58,8 @@ def documents(frontend_root=None):
         "<!-- Generated from docs/google-sheet-format.json by scripts/export_sheet_format_guide.py. -->\n\n"
         + guide["intro"] + "\n\n" + "\n\n".join(section_markdown(section) for section in sections)
         + "\n\nPanduan aplikasi: **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. "
-        "Penanganan kode error: [Tabel error response](ERROR_RESPONSES.md).\n"
+        "Penanganan kode error: [Tabel error response](ERROR_RESPONSES.md). "
+        "Arti istilah: [Istilah teknis dalam bahasa sederhana](ISTILAH_TEKNIS.md).\n"
     )
     result[ROOT / "docs/PANDUAN_FORMAT_GOOGLE_SHEET.md"] = full
     if frontend_root:
