@@ -23,6 +23,9 @@ dan ampersand. Karakter kontrol menjadi spasi, spasi berulang dirapikan, maksima
 huruf, maksimal 63 karakter. Saran memakai huruf kecil; tanda/karakter lain
 menjadi underscore, underscore berulang dirapikan. Awalan angka memerlukan
 prefix dataset_. Nama tab tetap disertakan saat pemendekan saran.
+Kode tidak valid yang diketik/ditempel juga dirapikan otomatis saat meninggalkan
+field atau menyimpan draft, disertai pemberitahuan. Kode valid termasuk huruf
+besar tetap dipertahankan; nama bisnis tidak ikut diubah.
 
 Contoh file Keluhan KAN Jabung 2026 dan tab REKAP JENIS KELUHAN menjadi nama
 bisnis Keluhan KAN Jabung 2026 / REKAP JENIS KELUHAN dan kode

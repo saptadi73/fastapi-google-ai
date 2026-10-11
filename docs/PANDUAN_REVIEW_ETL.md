@@ -163,6 +163,8 @@ karakter; karakter lain menjadi underscore. Nama tab tetap disertakan saat
 pemendekan saran kode. Saran tetap harus diperiksa; konflik kode produk antar-tab
 ditolak saat deploy, bukan mengganti kode produk aktif diam-diam. Mengambil saran
 tidak menyimpan draft, menyetujui konfigurasi, atau mengubah nama tabel tujuan.
+Kode tidak valid yang diketik/ditempel dirapikan otomatis saat keluar dari field
+atau menyimpan draft dengan pemberitahuan. Kode valid tetap dipertahankan.
 
 1. Simpan draft lalu `POST /configurations/{id}/export` dengan `{"format":"XLSX"}`. Download artifact menggunakan endpoint download berautentikasi.
 2. Workbook mempertahankan 14 tab template, menambah **14 Review** untuk identitas/jawaban dan tab metadata tersembunyi. Contoh data template dibersihkan. Sel kuning dapat diedit; sel referensi dan parameter yang belum didukung dilindungi. Jangan mengganti nama tab atau menambahkan kolom/tab. Penambahan/penghapusan mapping kolom dilakukan melalui form.
