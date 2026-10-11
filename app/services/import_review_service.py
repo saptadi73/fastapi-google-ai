@@ -75,6 +75,51 @@ class ImportReviewService:
             raise AppError("RESOURCE_NOT_FOUND", "Batch tidak ditemukan.", 404)
         return review
 
+    @staticmethod
+    def attention(review):
+        if review.status not in ("NEEDS_INPUT", "FAILED", "STALE_REVIEW", "READY_FOR_APPROVAL", "APPROVED"):
+            return None
+        checkpoint = review.checkpoint or {}
+        codes = list(checkpoint.get("blocking_codes", []))
+        if review.status == "FAILED" and checkpoint.get("last_error_code") not in codes:
+            if checkpoint.get("last_error_code"):
+                codes.append(checkpoint["last_error_code"])
+        messages = {
+            "NEEDS_INPUT": "Pemuatan berhenti menunggu tindakan. Menunggu saja tidak akan melanjutkan proses.",
+            "FAILED": "Pemuatan gagal. Periksa penyebab dan lakukan validasi ulang setelah diperbaiki.",
+            "STALE_REVIEW": "Snapshot atau konfigurasi berubah. Validasi ulang diperlukan.",
+            "READY_FOR_APPROVAL": "Review data selesai; batch menunggu langkah berikutnya.",
+            "APPROVED": "Batch disetujui tetapi data belum diterapkan.",
+        }
+        if "AI_REVIEW_ISSUES" in codes:
+            messages["NEEDS_INPUT"] += " Ada temuan pemeriksaan AI atau cakupan pemeriksaan belum lengkap; periksa baris dan kolom pada detail batch."
+        locations = set()
+        if review.status == "NEEDS_INPUT" and codes:
+            for finding in getattr(review, "findings", None) or []:
+                row = finding.get("source_row")
+                if not isinstance(row, int) or isinstance(row, bool) or row < 1:
+                    continue
+                columns = [finding.get("target_column") or finding.get("column")]
+                columns.extend(error.get("column") for error in finding.get("errors", []))
+                for column in [value for value in columns if isinstance(value, str) and value] or [""]:
+                    locations.add((row, column))
+        ordered_locations = sorted(locations)
+        return {
+            "review_id": str(review.id),
+            "source_sheet_id": str(review.source_sheet_id),
+            "status": review.status,
+            "revision_no": review.revision_no,
+            "blocking_codes": codes,
+            "message": checkpoint.get("auto_load_error") or messages[review.status],
+            "ai_coverage": checkpoint.get("ai_coverage"),
+            "affected_row_count": len({row for row, _ in locations}),
+            "locations": [
+                {"source_row": row, "target_column": column or None}
+                for row, column in ordered_locations[:20]
+            ],
+            "has_more_locations": len(ordered_locations) > 20,
+        }
+
     def move(self, review, action, *, worker=False):
         previous_status = review.status
         review.status = next_import_status(
@@ -88,6 +133,7 @@ class ImportReviewService:
             review.id,
             status=review.status,
             revision_no=review.revision_no,
+            **({"attention": self.attention(review)} if review.status == "NEEDS_INPUT" else {}),
         )
         if review.status == "NEEDS_INPUT" and previous_status != review.status:
             add_notification(
@@ -279,6 +325,7 @@ class ImportReviewService:
             policy=deps["policy"],
             finding_count=len(review.findings),
             execution_ready=review.status in ("APPROVED", "APPLYING"),
+            attention=ImportReviewService.attention(review),
         )
         return data
 
@@ -1625,6 +1672,7 @@ async def fail_import_job(session, job, code):
             job_id=job.id,
             error_code=code,
             revision_no=review.revision_no,
+            attention=ImportReviewService.attention(review),
         )
         add_notification(
             session,

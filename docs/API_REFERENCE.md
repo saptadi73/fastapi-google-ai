@@ -2,6 +2,8 @@
 
 Versi backend **0.1.0** · diperbarui untuk workflow sederhana pada **11 Oktober 2026**.
 
+Tracking sumber dan detail import menyediakan `attention` untuk batch yang berhenti, gagal, kedaluwarsa, atau menunggu langkah berikutnya: `review_id`, `source_sheet_id`, `status`, `revision_no`, `blocking_codes`, `message`, dan `ai_coverage`. Ringkasan lokasi temuan menyediakan `affected_row_count`, `locations` (maksimal 20 pasangan `source_row`/`target_column`), dan `has_more_locations`; nomor baris merujuk baris asli Sheet pada snapshot termasuk header, bukan urutan daftar temuan. `NEEDS_INPUT` berarti menunggu tindakan, bukan worker aktif. Status validasi/AI/apply tetap dibedakan; ringkasan sumber memakai `RUNNING` jika ada proses aktif dan `NEEDS_INPUT` jika ada tab berhenti. Audit `import.request_input` dan `import.failed` menyimpan ringkasan ini tanpa nilai mentah. Riwayat sumber menampilkan keterangan serta referensi batch; event lama hanya diperkaya dari batch ketika revisinya masih sama. Frontend membuka modal melalui tombol Lihat detail berikon mata dan mengambil pertanyaan terbuka dari endpoint batch dengan pagination; membuka detail tidak melakukan approval atau sync.
+
 Dokumen ini menjelaskan operasi HTTP yang sudah terdaftar di backend, bukan seluruh endpoint yang pernah disebut pada dokumen rancangan. Cakupan endpoint dan snapshot diverifikasi oleh `scripts/export_api_reference.py --check`. Contoh memakai data fiktif; UUID, kode produk, dan token harus diganti dengan hasil API lingkungan tujuan. Kehadiran endpoint tidak berarti database, Google, OpenAI, atau worker lingkungan tujuan sudah siap.
 
 ## Navigasi

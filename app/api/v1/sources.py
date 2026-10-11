@@ -33,6 +33,7 @@ from app.schemas.source import (
     SourceUnlink,
 )
 from app.services.classification_service import ClassificationService
+from app.services.import_review_service import ImportReviewService
 from app.services.job_service import enqueue
 from app.services.release_approval_service import release_status
 from app.services.source_approver_service import SourceApproverService
@@ -40,6 +41,23 @@ from app.services.source_service import SourceService, source_records
 
 router = APIRouter(tags=["Sources"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
+
+def tracking_rollup(values):
+    if not values:
+        return "NOT_STARTED"
+    normalized = [str(value or "NOT_STARTED").upper() for value in values]
+    success_states = {"SUCCEEDED", "SUCCEEDED_WITH_WARNINGS", "ACTIVE", "DEPLOYED", "CONFIRMED", "APPROVED", "BINDING_READY"}
+    if all(value == "NOT_STARTED" for value in normalized):
+        return "NOT_STARTED"
+    if all(value in success_states for value in normalized):
+        return "SUCCEEDED_WITH_WARNINGS" if "SUCCEEDED_WITH_WARNINGS" in normalized else "SUCCEEDED"
+    if any("FAIL" in value or value in {"REJECTED", "BLOCKED"} for value in normalized):
+        return "FAILED"
+    if any(value in {"QUEUED", "RUNNING", "VALIDATING", "AI_REVIEWING", "APPLYING"} for value in normalized):
+        return "RUNNING"
+    if any(value in {"NEEDS_INPUT", "STALE_REVIEW"} for value in normalized):
+        return "NEEDS_INPUT"
+    return "IN_PROGRESS"
 
 
 @router.get("/source-sheets/{sheet_id}/classification")
@@ -252,19 +270,6 @@ async def source_tracking(
     )).all()) if user_ids else []
     people = {str(item.id): item for item in users}
 
-    def rollup(values):
-        if not values:
-            return "NOT_STARTED"
-        normalized = [str(value or "NOT_STARTED").upper() for value in values]
-        success_states = {"SUCCEEDED", "SUCCEEDED_WITH_WARNINGS", "ACTIVE", "DEPLOYED", "CONFIRMED", "APPROVED", "BINDING_READY"}
-        if all(value == "NOT_STARTED" for value in normalized):
-            return "NOT_STARTED"
-        if all(value in success_states for value in normalized):
-            return "SUCCEEDED_WITH_WARNINGS" if "SUCCEEDED_WITH_WARNINGS" in normalized else "SUCCEEDED"
-        if any("FAIL" in value or value in {"REJECTED", "BLOCKED"} for value in normalized):
-            return "FAILED"
-        return "IN_PROGRESS"
-
     def it_approval_status(config, source):
         if config is None:
             return "NOT_STARTED"
@@ -325,7 +330,7 @@ async def source_tracking(
                 import_review.status if import_review else "NOT_STARTED"
             )
             if import_review and import_review.status not in ("SUCCEEDED", "FAILED"):
-                database_status = "IN_PROGRESS"
+                database_status = import_review.status
             sheet_records.append({
                 "id": sheet.id,
                 "name": sheet.sheet_name,
@@ -345,6 +350,7 @@ async def source_tracking(
                 "master_binding_status": master_binding.status if master_binding else "NOT_STARTED",
                 "data_product_code": product.code if product else None,
                 "last_failures": sheet_failures.get(str(sheet.id), {}),
+                "attention": ImportReviewService.attention(import_review) if import_review else None,
             })
         metadata = source.access_metadata or {}
         steward = people.get(str(metadata.get("data_steward_user_id"))) if metadata.get("data_steward_user_id") else None
@@ -354,12 +360,12 @@ async def source_tracking(
         result.append({
             **record(source),
             "discovery_status": "SUCCEEDED" if any(item["is_present"] for item in sheet_records) else (discovery_job.status if discovery_job else "NOT_STARTED"),
-            "profiling_status": rollup([item["profiling_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
-            "configuration_status": rollup([
+            "profiling_status": tracking_rollup([item["profiling_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
+            "configuration_status": tracking_rollup([
                 item["master_binding_status"] if item["dataset_kind"] == "MASTER" else item["configuration_status"]
                 for item in sheet_records if item["enabled"] and item["is_present"]
             ]),
-            "database_status": rollup([item["database_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
+            "database_status": tracking_rollup([item["database_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
             "it_approval_status": it_approval_rollup([
                 item["it_approval_status"] for item in sheet_records
                 if item["enabled"] and item["is_present"]
@@ -395,9 +401,11 @@ async def source_history(
     config_ids = list(await session.scalars(select(Configuration.id).where(
         Configuration.tenant_id == user.tenant_id, Configuration.source_id == source.id
     )))
-    review_ids = list(await session.scalars(select(ImportReview.id).where(
+    reviews = list((await session.scalars(select(ImportReview).where(
         ImportReview.tenant_id == user.tenant_id, ImportReview.source_id == source.id
-    )))
+    ))).all())
+    review_ids = [item.id for item in reviews]
+    reviews_by_id = {str(item.id): item for item in reviews}
     related_binding_ids = list(await session.scalars(select(MasterSourceBinding.id).where(
         MasterSourceBinding.tenant_id == user.tenant_id,
         MasterSourceBinding.source_sheet_id.in_(sheet_ids),
@@ -467,6 +475,8 @@ async def source_history(
             stage = "MASTER"
         elif item.event.startswith("taxonomy."):
             stage = "TAXONOMY"
+        elif item.event.startswith("import."):
+            stage = "DATABASE"
         summary = event_names.get(item.event, item.event.replace(".", " ").replace("_", " ").capitalize())
         if item.event == "source.stage_failed":
             stage = details.get("stage") or stage_for_job(details.get("job_kind"))
@@ -479,12 +489,22 @@ async def source_history(
             summary = f"Tahap {stage.lower()} dimulai"
         elif item.event == "source_sheet.classified":
             summary = "Tab diklasifikasikan"
+        elif item.event == "import.request_input":
+            summary = "Pemuatan berhenti: menunggu tindakan"
+        elif item.event == "import.failed":
+            summary = "Pemuatan batch gagal"
+        attention = details.get("attention")
+        if attention is None and item.event in ("import.request_input", "import.failed"):
+            review = reviews_by_id.get(str(item.resource_id))
+            if review and review.revision_no == details.get("revision_no"):
+                attention = ImportReviewService.attention(review)
         timeline.append({
             "id": f"audit:{item.id}", "occurred_at": item.created_at, "stage": stage,
             "status": details.get("status") or ("FAILED" if item.event.endswith("failed") else "RECORDED"),
             "event": item.event, "summary": summary, "actor_name": actor_names.get(str(item.user_id)),
             "error_code": details.get("error_code"), "error_message": details.get("error_message"),
             "details": {key: value for key, value in details.items() if key in safe_detail_keys},
+            "attention": attention,
         })
     # Older job attempts predate lifecycle audit events. Include each attempt as a fallback.
     audited_job_ids = {

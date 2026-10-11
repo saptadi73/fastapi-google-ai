@@ -409,3 +409,85 @@ async def test_new_batch_keeps_manual_auto_load_intent_after_validation(monkeypa
     assert review.checkpoint.get("auto_load", False) is auto_load
     service.queue.assert_awaited_once_with(review)
 
+
+@pytest.mark.parametrize("status", ["NEEDS_INPUT", "FAILED", "STALE_REVIEW", "READY_FOR_APPROVAL", "APPROVED", "SUCCEEDED", "AI_REVIEWING"])
+def test_process_attention_exposes_blockers_without_source_values(status):
+    from app.services.import_review_service import ImportReviewService
+
+    review = SimpleNamespace(
+        id="batch", source_sheet_id="sheet", status=status, revision_no=9,
+        checkpoint={"blocking_codes": ["AI_REVIEW_ISSUES"], "ai_coverage": "COMPLETE"},
+        findings=[{"message": "Potential personal name: do-not-expose"}],
+    )
+    result = ImportReviewService.attention(review)
+    if status in ("SUCCEEDED", "AI_REVIEWING"):
+        assert result is None
+    else:
+        assert result["review_id"] == "batch"
+        assert result["blocking_codes"] == ["AI_REVIEW_ISSUES"]
+        assert "do-not-expose" not in str(result)
+        if status == "NEEDS_INPUT":
+            assert "Menunggu saja" in result["message"]
+
+
+def test_request_input_audit_includes_safe_diagnosis(monkeypatch):
+    from app.domain.import_workflow import ImportAction
+    from app.services import import_review_service
+
+    review = SimpleNamespace(
+        id="batch", source_sheet_id="sheet", tenant_id="tenant",
+        status="AI_REVIEWING", revision_no=8,
+        checkpoint={"blocking_codes": ["AI_REVIEW_ISSUES"], "ai_coverage": "COMPLETE"},
+    )
+    log = Mock()
+    monkeypatch.setattr(import_review_service, "audit", log)
+    monkeypatch.setattr(import_review_service, "add_notification", Mock())
+    service = import_review_service.ImportReviewService(Mock(), SimpleNamespace(id="user", tenant_id="tenant"))
+    service.move(review, ImportAction.REQUEST_INPUT, worker=True)
+    assert log.call_args.args[2] == "import.request_input"
+    diagnosis = log.call_args.kwargs["attention"]
+    assert diagnosis["status"] == "NEEDS_INPUT"
+    assert diagnosis["revision_no"] == 9
+    assert diagnosis["blocking_codes"] == ["AI_REVIEW_ISSUES"]
+
+
+@pytest.mark.parametrize(("statuses", "expected"), [
+    (["SUCCEEDED", "NEEDS_INPUT"], "NEEDS_INPUT"),
+    (["SUCCEEDED", "STALE_REVIEW"], "NEEDS_INPUT"),
+    (["SUCCEEDED", "AI_REVIEWING", "NEEDS_INPUT"], "RUNNING"),
+    (["VALIDATING"], "RUNNING"), (["APPLYING"], "RUNNING"),
+    (["SUCCEEDED", "FAILED"], "FAILED"),
+    (["SUCCEEDED", "SUCCEEDED"], "SUCCEEDED"),
+    (["SUCCEEDED", "NOT_STARTED"], "IN_PROGRESS"), ([], "NOT_STARTED"),
+])
+def test_tracking_distinguishes_waiting_from_running(statuses, expected):
+    from app.api.v1.sources import tracking_rollup
+
+    assert tracking_rollup(statuses) == expected
+
+
+def test_audit_locations_preserve_sheet_row_numbers_cap_and_deduplicate():
+    from app.services.import_review_service import ImportReviewService
+
+    findings = [
+        {"source_row": row, "target_column": "level_jabatan", "message": "private-value"}
+        for row in range(13, 38)
+    ]
+    findings += [
+        findings[0],
+        {"source_row": 13, "errors": [{"column": "amount", "code": "INVALID", "value": "private-value"}]},
+        {"source_row": 0, "target_column": "invalid"},
+    ]
+    review = SimpleNamespace(
+        id="batch", source_sheet_id="sheet", status="NEEDS_INPUT", revision_no=9,
+        checkpoint={"blocking_codes": ["AI_REVIEW_ISSUES"]}, findings=findings,
+    )
+    attention = ImportReviewService.attention(review)
+    assert attention["affected_row_count"] == 25
+    assert len(attention["locations"]) == 20
+    assert attention["locations"][:2] == [
+        {"source_row": 13, "target_column": "amount"},
+        {"source_row": 13, "target_column": "level_jabatan"},
+    ]
+    assert attention["has_more_locations"] is True
+    assert "private-value" not in str(attention)
