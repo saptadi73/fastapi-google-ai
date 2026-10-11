@@ -78,6 +78,10 @@ menyusun structured plan dan SQL aman berdasarkan semantic catalog; pengguna tid
 
 ## Jika data belum muncul
 
+Untuk katalog kosong meskipun ETL ACTIVE, ikuti
+[panduan assignment, policy SOURCE, review metadata, dan aktivasi sumber](PANDUAN_AKSES_KATALOG.md).
+Approval konfigurasi/IT tidak menggantikan aktivasi akses POLICY_APPROVED.
+
 1. Pastikan job discovery/sync/import terakhir berhasil.
 2. Pastikan tab sudah diklasifikasikan dan konfigurasi berstatus approved, deployed, serta active.
    Jika gate siap tayang aktif, periksa apakah IT dan semua unit terkait sudah menyetujui revisi yang sama.

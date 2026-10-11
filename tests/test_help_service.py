@@ -103,6 +103,18 @@ def test_all_knowledge_articles_fit_provider_context():
     assert all(len(item.body) <= 6000 for item in articles)
 
 
+def test_catalog_access_guidance_explains_separate_source_gate():
+    articles = KnowledgeBase().search(
+        "katalog kosong sumber ACTIVE policy assignment", "SOURCE_OWNER", "/workspace"
+    )
+    content = "\n".join(item.body[:6000] for item in articles)
+    assert "POLICY_APPROVED" in content
+    assert "DISCOVER/READ/QUERY" in content
+    assert "admin berbeda" in content
+    assert "AND" in content
+    assert "Policy DATA_PRODUCT saja tidak menggantikan policy SOURCE" in content
+
+
 @pytest.mark.parametrize(
     "route,expected",
     [
