@@ -8,6 +8,8 @@ source: docs/USER_GUIDE_END_TO_END.md
 ---
 Gunakan urutan berikut agar data dapat dipakai dengan aman:
 
+> Catatan rancangan: workflow sedang dievaluasi untuk mengurangi approval rutin. Sampai rollout perubahan diberitahukan, langkah dan gate yang sedang tampil di aplikasi tetap menjadi acuan. Checklist target, risiko, dan fase pengerjaan ada di `docs/WORKFLOW_SIMPLIFICATION_TODO.md`.
+
 1. Administrator menyiapkan pengguna, role, atribut organisasi, permission, dan kebijakan akses.
 2. Pemilik sumber membagikan Google Sheet kepada service account sebagai Viewer, lalu mendaftarkan URL spreadsheet serta metadata pemilikannya.
 3. Steward mengonfirmasi setiap tab sebagai MASTER atau NON_MASTER setelah profiling selesai.

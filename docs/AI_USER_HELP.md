@@ -1,5 +1,11 @@
 # Asisten AI dan knowledge base pengguna
 
+## Arah penyederhanaan workflow ETL (rancangan; belum aktif di production)
+
+Workflow saat ini masih dapat meminta review metadata sumber, review konfigurasi, approval rilis IT/unit, approval batch, dan lifecycle master/binding. Jangan menyimpulkan bahwa approval tersebut sudah dihapus hanya dari rancangan ini. Rencana perubahan dan checklist rollout tercatat di [WORKFLOW_SIMPLIFICATION_TODO.md](WORKFLOW_SIMPLIFICATION_TODO.md).
+
+Targetnya adalah satu pemeriksaan saat registrasi/klasifikasi tab, lalu pemilik data menyelesaikan validasi konfigurasi dan deploy tanpa approval rutin. Pemeriksaan snapshot terbaru, dry-run, integritas business key, keamanan tenant, pembatasan akses, serta audit tetap wajib. Hak akses default yang direncanakan mengikuti domain dan business unit; pembatas yurisdiksi/department dapat ditambahkan oleh pemilik. Perilaku lama tetap berlaku sampai perubahan backend, frontend, migrasi, dan rollout dinyatakan selesai.
+
 Asisten tersedia melalui `POST /api/v1/help/ask` untuk pengguna yang sudah login. Backend mencari
 artikel lokal yang boleh dibaca role pengguna, mengirim hanya artikel terpilih ke OpenAI, lalu
 memvalidasi kembali ID sumber pada jawaban. Source code, filesystem, database, dan credential tidak
