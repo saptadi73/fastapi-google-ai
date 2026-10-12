@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 
 from app.core.config import get_settings
 from app.core.database import SessionFactory, deployment_transaction, transaction
@@ -11,8 +11,10 @@ from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.audit import AuditEvent
 from app.models.auth import User
 from app.models.base import now
+from app.models.configuration import Configuration
 from app.models.etl import Job
-from app.models.source import DataSource, SourceDependency
+from app.models.notification import OperationalNotification
+from app.models.source import DataSource, SourceDependency, SourceSheet
 from app.schemas.source import cron_schedule
 from app.services.ai_configuration_service import AIConfigurationService
 from app.services.configuration_service import ConfigurationService
@@ -115,7 +117,9 @@ async def execute_job(session, job):
     if not user or not user.is_active or user.tenant_id != job.tenant_id or user.role not in roles:
         raise AppError("FORBIDDEN", "Akun pembuat job tidak lagi memiliki izin.", 403)
     if job.kind == "DISCOVER":
-        return await SourceService(session, user).discover(job.source_id)
+        return await SourceService(
+            session, user, automated=bool((job.payload or {}).get("system_trigger"))
+        ).discover(job.source_id)
     if job.kind == "PROFILE":
         return await SourceService(session, user).profile(job.source_id)
     if job.kind == "AI_CONFIG":
@@ -151,9 +155,13 @@ def _audit_stage(session, job, status, *, stage=None, error_code=None, error_mes
     if status == "FAILED":
         details["error_code"] = error_code or job.error_code
         details["error_message"] = error_message or job.error_message
+    automated = bool((job.payload or {}).get("system_trigger"))
+    if automated:
+        details["actor_type"] = "SYSTEM"
+        details["requested_by_user_id"] = str(job.requested_by)
     session.add(AuditEvent(
         tenant_id=job.tenant_id,
-        user_id=job.requested_by,
+        user_id=None if automated else job.requested_by,
         event=f"source.stage_{status.lower()}",
         resource_id=str(job.source_id),
         details=details,
@@ -194,6 +202,33 @@ async def run_pending(tenant_id=None):
                     error_code=profile_error.get("code"),
                     error_message=profile_error.get("message"),
                 )
+            elif job.kind == "DISCOVER" and (job.payload or {}).get("system_trigger") == "DRIVE_CHANGE":
+                # If no deployed table and no schema drift needs a config revision,
+                # a successful automatic refresh has fully resolved the notice.
+                active_config = await session.scalar(
+                    select(SourceSheet.id).where(
+                        SourceSheet.source_id == job.source_id,
+                        SourceSheet.active_configuration_id.is_not(None),
+                    ).limit(1)
+                )
+                submitted_config = await session.scalar(
+                    select(Configuration.id).where(
+                        Configuration.source_id == job.source_id,
+                        Configuration.status.in_(("APPROVED", "NEEDS_REVIEW")),
+                    ).limit(1)
+                )
+                if not active_config and not submitted_config and not (result or {}).get("schema_drift"):
+                    await session.execute(
+                        update(OperationalNotification)
+                        .where(
+                            OperationalNotification.tenant_id == job.tenant_id,
+                            OperationalNotification.resource_type == "SOURCE",
+                            OperationalNotification.resource_id == str(job.source_id),
+                            OperationalNotification.kind == "SOURCE_CHANGED",
+                            OperationalNotification.acknowledged_at.is_(None),
+                        )
+                        .values(acknowledged_at=now())
+                    )
     except Exception as exc:
         if not isinstance(exc, AppError):
             logger.exception(

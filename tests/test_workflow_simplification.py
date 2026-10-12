@@ -12,10 +12,16 @@ from app.domain.import_workflow import ImportAction, ImportStatus, next_import_s
 from app.models.source import DataSource
 from app.schemas.access import AccessRequestBatchDecision
 from app.schemas.auth import UserCreate
-from app.schemas.configuration import Decision
+from app.schemas.configuration import Decision, ReviewSubmission
 from app.services import auth_service, configuration_service, master_service, source_service
 from app.services.access_service import AccessService
 from app.services.semantic_catalog_service import inventory_update_state
+
+
+def test_owner_configuration_submit_payload_does_not_require_checklist_fields():
+    payload = ReviewSubmission(revision_no=1, snapshot_hash="a" * 64)
+    assert payload.reviewed_columns == []
+    assert payload.reviewed_sections == []
 
 
 def test_source_access_backfill_report_never_auto_approves_legacy_sources():
@@ -201,9 +207,10 @@ def configuration_context(monkeypatch):
     return service, config, source, access
 
 
-async def test_owner_workflow_self_validates_only_after_complete_review(monkeypatch):
+async def test_owner_workflow_self_validates_without_reviewer_checklists(monkeypatch):
     actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
     service = configuration_service.ConfigurationService(Mock(), actor)
+    service.session.execute = AsyncMock()
     config = SimpleNamespace(
         id="config", source_id="source", source_sheet_id="sheet", status="AI_DRAFT",
         revision_no=4, configuration_json={"columns": [{"target_column": "code"}]},
@@ -223,8 +230,8 @@ async def test_owner_workflow_self_validates_only_after_complete_review(monkeypa
     audit = Mock()
     monkeypatch.setattr(configuration_service, "audit", audit)
     submission = SimpleNamespace(
-        revision_no=4, snapshot_hash="snapshot-hash", reviewed_columns=["code"],
-        reviewed_sections=configuration_service.REVIEW_SECTIONS, reviewed_schema_fingerprint=None,
+        revision_no=4, snapshot_hash="snapshot-hash", reviewed_columns=[],
+        reviewed_sections=[], reviewed_schema_fingerprint=None,
     )
 
     result = await service.submit_review("config", submission)
@@ -238,9 +245,10 @@ async def test_owner_workflow_self_validates_only_after_complete_review(monkeypa
     service.artifacts.create.assert_awaited_once_with(config)
 
 
-async def test_owner_workflow_does_not_skip_invalid_config_or_incomplete_checklist(monkeypatch):
+async def test_owner_workflow_does_not_skip_invalid_configuration(monkeypatch):
     actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
     service = configuration_service.ConfigurationService(Mock(), actor)
+    service.session.execute = AsyncMock()
     config = SimpleNamespace(
         id="config", source_id="source", source_sheet_id="sheet", status="AI_DRAFT",
         revision_no=4, configuration_json={"columns": [{"target_column": "code"}]}, review_state={},
@@ -495,7 +503,7 @@ async def test_auto_load_reuses_active_approval_only_after_all_data_checks(monke
     assert service.apply.await_args.args[1].revision_no == review.revision_no
 
 
-@pytest.mark.parametrize("case", ["valid", "owner-managed", "master", "inactive", "self-approved", "revoked", "paused", "full-refresh", "revision", "stale", "release"])
+@pytest.mark.parametrize("case", ["valid", "owner-managed", "full-refresh-owner", "master", "inactive", "self-approved", "revoked", "paused", "revision", "stale", "release"])
 async def test_auto_load_requires_current_active_configuration_and_valid_release(monkeypatch, case):
     from app.services import import_review_service
 
@@ -509,14 +517,14 @@ async def test_auto_load_requires_current_active_configuration_and_valid_release
         config.status = "APPROVED"
     if case == "self-approved":
         config.approved_by = config.created_by
-    if case == "owner-managed":
+    if case in ("owner-managed", "full-refresh-owner"):
         config.approved_by = config.created_by
         config.review_state["owner_managed"] = True
     if case == "revoked":
         source.access_status = "ACCESS_POLICY_REQUIRED"
     if case == "paused":
         source.paused = True
-    if case == "full-refresh":
+    if case == "full-refresh-owner":
         config.configuration_json["load_strategy"] = "FULL_REFRESH"
     if case == "revision":
         config.revision_no += 1
@@ -528,14 +536,14 @@ async def test_auto_load_requires_current_active_configuration_and_valid_release
     release = Mock(side_effect=AppError("RELEASE_APPROVAL_REQUIRED", "Pending", 409) if case == "release" else None)
     monkeypatch.setattr(import_review_service, "require_release_ready", release)
     monkeypatch.setattr(import_review_service, "get_settings", lambda: SimpleNamespace(
-        etl_owner_workflow_enabled=case == "owner-managed",
+        etl_owner_workflow_enabled=case in ("owner-managed", "full-refresh-owner"),
     ))
-    if case not in ("valid", "owner-managed"):
+    if case not in ("valid", "owner-managed", "full-refresh-owner"):
         with pytest.raises(AppError):
             await service.active_load_configuration(review)
     else:
         assert await service.active_load_configuration(review) is config
-        if case == "owner-managed":
+        if case in ("owner-managed", "full-refresh-owner"):
             release.assert_not_called()
         else:
             release.assert_called_once_with(config, source)

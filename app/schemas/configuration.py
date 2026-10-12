@@ -374,8 +374,9 @@ REVIEW_SECTIONS = ["identity", "columns", "cleansing", "quality", "load", "seman
 class ReviewSubmission(StrictModel):
     revision_no: int = Field(ge=1)
     snapshot_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
-    reviewed_columns: list[str] = Field(min_length=1, max_length=100)
-    reviewed_sections: list[Literal["identity", "columns", "cleansing", "quality", "load", "semantic"]]
+    # Legacy reviewer evidence is optional in the owner-managed flow.
+    reviewed_columns: list[str] = Field(default_factory=list, max_length=100)
+    reviewed_sections: list[Literal["identity", "columns", "cleansing", "quality", "load", "semantic"]] = Field(default_factory=list)
     reviewed_schema_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 

@@ -133,8 +133,8 @@ Aplikasi menyediakan ETL, katalog, query dan visualisasi dari metrik/dimensi/rel
 ## 11. Strategi load, pembaruan dan perubahan Sheet
 
 - UPSERT cocok untuk KPI periodik/current-state yang dapat dikoreksi: record dengan key sama diperbarui. APPEND cocok untuk kejadian baru yang stabil; keyless APPEND dapat memakai SKIP_IDENTICAL sesuai review, tetapi baris yang berubah bisa menjadi record baru dan menyebabkan hitungan ganda.
-- FULL_REFRESH mengganti isi target dengan snapshot lengkap dan memerlukan alur review yang sesuai; snapshot parsial tidak boleh dipakai seolah mencakup semua data. Master memakai definisi/storage/source binding dan batch master, bukan ETL biasa.
-- Sepakati jadwal, cutoff, target freshness dan petugas. Setelah deploy ACTIVE dengan approval terpisah, akses/rilis siap, Sync manual memuat NON_MASTER yang valid; master/FULL_REFRESH/batch biasa tetap memakai preview, approval dan Apply sesuai alurnya.
+- FULL_REFRESH mengganti seluruh isi baris target dari snapshot sumber lengkap setelah validasi; bila ada baris invalid, data lama dipertahankan. Snapshot parsial tidak boleh dipakai seolah mencakup semua data. Perubahan skema tetap diperiksa terpisah.
+- Setelah konfigurasi owner-managed aktif dan akses sumber disetujui, Sync manual memvalidasi dan memuat data tanpa approval rutin kedua. Konflik bisnis dan error kualitas tetap perlu ditangani.
 - Jika file/tab di-rename, ditambah atau dihapus, pilih sumber yang sama di Workspace dan tekan Temukan tab, tunggu SUCCEEDED, lalu Profiling ulang. Muat ulang data tersimpan tidak membaca ulang daftar tab di Google.
 - Perubahan header, mapping, tipe, key atau makna memerlukan profil/draft/review terbaru. Preview perubahan schema di langkah 7, konfirmasi dan approval sebelum worker deploy. Rename/drop fisik atau dependency tidak aman dapat diblokir; jangan hapus tabel untuk mengakalinya.
 - REVIEW_STALE berarti sumber berubah dibanding snapshot review. Contoh starat_date diganti start_date: profil dan review ulang; tidak cukup retry deploy lama. Hindari perubahan selama review/deploy, termasuk formula volatil yang mengubah nilai tiap pembacaan.

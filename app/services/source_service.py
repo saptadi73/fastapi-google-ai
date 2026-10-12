@@ -22,7 +22,7 @@ from app.repositories.base import record
 from app.repositories.source_repository import SourceRepository
 from app.schemas.import_review import ImportReviewCreate
 from app.schemas.source import SourceAccessMetadata, spreadsheet_id
-from app.services.audit_service import audit
+from app.services.audit_service import audit, system_audit
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.import_review_service import ImportReviewService
 from app.services.job_service import enqueue
@@ -78,7 +78,7 @@ def source_code_base(name: str) -> str:
     return code[:63].rstrip("_")
 
 
-def invalidate_registration_review(session, user, source, reason):
+def invalidate_registration_review(session, user, source, reason, *, automated=False):
     if not get_settings().unit_domain_default_access_enabled or source.access_review_status != "APPROVED":
         return False
     source.access_review_status = "PENDING"
@@ -87,16 +87,19 @@ def invalidate_registration_review(session, user, source, reason):
     source.access_review_reason = ""
     source.access_status = "ACCESS_POLICY_REQUIRED"
     source.access_revision += 1
-    audit(
-        session, user, "source.registration_review_invalidated", source.id,
-        revision_no=source.access_revision, reason=reason,
-    )
+    if automated:
+        system_audit(session, source.tenant_id, "source.registration_review_invalidated", source.id,
+                     revision_no=source.access_revision, reason=reason)
+    else:
+        audit(session, user, "source.registration_review_invalidated", source.id,
+              revision_no=source.access_revision, reason=reason)
     return True
 
 
 class SourceService:
-    def __init__(self, session, user, google=None):
+    def __init__(self, session, user, google=None, *, automated=False):
         self.session, self.user = session, user
+        self.automated = automated
         self.repo = SourceRepository(session, user.tenant_id)
         self.google = google or GoogleSheetsService()
 
@@ -825,15 +828,14 @@ class SourceService:
                 sheet.enabled = False
                 missing.append({"source_sheet_id": sheet.id, "sheet_id": sheet.sheet_id, "sheet_name": sheet.sheet_name})
         if inventory_changed:
-            invalidate_registration_review(self.session, self.user, source, "TAB_INVENTORY_CHANGED")
-        audit(
-            self.session,
-            self.user,
-            "source.discovered",
-            source.id,
-            sheet_count=len(discovered),
-            missing_tabs=missing,
-        )
+            invalidate_registration_review(self.session, self.user, source, "TAB_INVENTORY_CHANGED", automated=self.automated)
+        if self.automated:
+            system_audit(self.session, source.tenant_id, "source.discovered", source.id,
+                         sheet_count=len(discovered), missing_tabs=missing,
+                         actor_requested_by=str(self.user.id))
+        else:
+            audit(self.session, self.user, "source.discovered", source.id,
+                  sheet_count=len(discovered), missing_tabs=missing)
         if not discovered:
             source.status = "PROFILE_FAILED"
             return {
@@ -901,13 +903,17 @@ class SourceService:
                 {"profiling_run_id": run.id, "source_sheet_id": sheet.id, "snapshot_id": snapshot.id}
             )
         if drift:
-            invalidate_registration_review(self.session, self.user, source, "PROFILE_SCHEMA_CHANGED")
+            invalidate_registration_review(self.session, self.user, source, "PROFILE_SCHEMA_CHANGED", automated=self.automated)
         source.status = (
             "CHANGE_DETECTED"
             if drift
             else ("ACTIVE" if all(s.active_configuration_id for s in sheets) else "NEEDS_REVIEW")
         )
-        audit(self.session, self.user, "source.profiled", source.id, drift=drift)
+        if self.automated:
+            system_audit(self.session, source.tenant_id, "source.profiled", source.id,
+                         drift=drift, actor_requested_by=str(self.user.id))
+        else:
+            audit(self.session, self.user, "source.profiled", source.id, drift=drift)
         return {"profiles": results, "schema_drift": drift}
 
     async def sync_review(self, source_id, *, auto_load=False):

@@ -1,5 +1,7 @@
 import json
 
+from sqlalchemy import update
+
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import REVIEW_ROLES
@@ -7,6 +9,7 @@ from app.models.audit import AuditEvent
 from app.models.base import now
 from app.models.configuration import Approval, Artifact, Configuration
 from app.models.etl import Snapshot
+from app.models.notification import OperationalNotification
 from app.models.semantic import DataProduct
 from app.models.source import DataSource, SourceSheet
 from app.repositories.configuration_repository import ConfigurationRepository
@@ -54,12 +57,13 @@ class ConfigurationService:
         migration = validation["deployment_plan"]["migration"]
         if any(op["action"] != "CREATE_TABLE" for op in migration["operations"]) and data.reviewed_schema_fingerprint != migration["fingerprint"]:
             raise AppError("SCHEMA_REVIEW_REQUIRED", "Periksa dan konfirmasi rencana perubahan schema sebelum mengajukan review.", 409)
+        owner_managed = get_settings().etl_owner_workflow_enabled
         expected_columns = {c["target_column"] for c in config.configuration_json["columns"]}
-        if set(data.reviewed_columns) != expected_columns or set(data.reviewed_sections) != set(
-            REVIEW_SECTIONS
+        if not owner_managed and (
+            set(data.reviewed_columns) != expected_columns
+            or set(data.reviewed_sections) != set(REVIEW_SECTIONS)
         ):
             raise AppError("REVIEW_INCOMPLETE", "Periksa seluruh kolom dan bagian konfigurasi.")
-        owner_managed = get_settings().etl_owner_workflow_enabled
         config.status = "APPROVED" if owner_managed else "NEEDS_REVIEW"
         config.revision_no += 1
         config.review_state = {
@@ -84,6 +88,17 @@ class ConfigurationService:
                   revision=config.revision_no, snapshot_hash=validation["snapshot_hash"])
         else:
             audit(self.session, self.user, "configuration.review_requested", config.id)
+        await self.session.execute(
+            update(OperationalNotification)
+            .where(
+                OperationalNotification.tenant_id == self.user.tenant_id,
+                OperationalNotification.resource_type == "SOURCE",
+                OperationalNotification.resource_id == str(config.source_id),
+                OperationalNotification.kind == "SOURCE_CHANGED",
+                OperationalNotification.acknowledged_at.is_(None),
+            )
+            .values(acknowledged_by=self.user.id, acknowledged_at=now())
+        )
         return config
 
     async def queue_deployment(self, config_id, rollback=False):

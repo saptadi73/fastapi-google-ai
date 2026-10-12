@@ -27,7 +27,10 @@ class GoogleSheetsService:
             raise AppError("GOOGLE_NOT_CONFIGURED", "Isi GOOGLE_SERVICE_ACCOUNT_FILE pada .env.", 503)
         try:
             credentials = Credentials.from_service_account_file(
-                str(path), scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+                str(path), scopes=[
+                    "https://www.googleapis.com/auth/spreadsheets.readonly",
+                    "https://www.googleapis.com/auth/drive.metadata.readonly",
+                ]
             )
             http = google_auth_httplib2.AuthorizedHttp(
                 credentials, http=httplib2.Http(timeout=s.google_api_timeout_seconds)
@@ -83,6 +86,50 @@ class GoogleSheetsService:
             return await asyncio.to_thread(self._execute, spreadsheet_id)
         except TemporaryGoogleError:
             raise AppError("UPSTREAM_RATE_LIMITED", "Google Sheets sementara tidak tersedia.", 503) from None
+
+    def _drive_modified_time(self, spreadsheet_id):
+        s = get_settings()
+        path = Path(s.google_service_account_file)
+        path = path if path.is_absolute() else ROOT / path
+        if not path.is_file():
+            raise AppError("GOOGLE_NOT_CONFIGURED", "Isi GOOGLE_SERVICE_ACCOUNT_FILE pada .env.", 503)
+        try:
+            credentials = Credentials.from_service_account_file(
+                str(path), scopes=["https://www.googleapis.com/auth/drive.metadata.readonly"]
+            )
+        except (ValueError, GoogleAuthError):
+            raise AppError("GOOGLE_NOT_CONFIGURED", "Konfigurasi Service Account tidak valid.", 503) from None
+        http = google_auth_httplib2.AuthorizedHttp(
+            credentials, http=httplib2.Http(timeout=s.google_api_timeout_seconds)
+        )
+        try:
+            with build("drive", "v3", http=http, cache_discovery=False) as drive:
+                return drive.files().get(
+                    fileId=spreadsheet_id, fields="id,modifiedTime", supportsAllDrives=True
+                ).execute().get("modifiedTime")
+        except HttpError as exc:
+            status = exc.resp.status
+            if status == 403:
+                raise AppError(
+                    "SOURCE_CHANGE_CHECK_DENIED",
+                    "Pemeriksaan otomatis perlu Drive API aktif dan izin metadata Drive untuk Service Account.",
+                    403,
+                ) from None
+            if status == 404:
+                raise AppError("SOURCE_NOT_FOUND", "Spreadsheet tidak ditemukan di Google Drive.", 404) from None
+            if status == 429 or status >= 500:
+                raise TemporaryGoogleError() from None
+            raise AppError("SOURCE_READ_FAILED", "Google Drive menolak pemeriksaan perubahan.", 422) from None
+
+    async def modified_time(self, spreadsheet_id):
+        try:
+            return await asyncio.to_thread(self._drive_modified_time, spreadsheet_id)
+        except TemporaryGoogleError:
+            raise AppError("UPSTREAM_RATE_LIMITED", "Google Drive sementara tidak tersedia.", 503) from None
+        except GoogleAuthError:
+            raise AppError("GOOGLE_NOT_CONFIGURED", "Service Account tidak dapat mengakses metadata Google Drive.", 503) from None
+        except (httplib2.HttpLib2Error, OSError, TimeoutError):
+            raise AppError("UPSTREAM_RATE_LIMITED", "Koneksi ke Google Drive gagal sementara.", 503) from None
 
     async def read_sheets(self, spreadsheet_id, sheets):
         s = get_settings()

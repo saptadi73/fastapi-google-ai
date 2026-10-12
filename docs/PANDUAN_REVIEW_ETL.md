@@ -14,12 +14,12 @@ Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runt
 3. Di `C:\projek\vue-googlesheet-ai`, gunakan `npm run dev`. Pastikan `VITE_API_ORIGIN`, `VITE_API_BASE_PATH`, dan CORS backend sesuai. Buka `/workspace` atau tombol **Buka workspace ETL** pada halaman utama.
 4. Login dengan tenant dan akun aplikasi. Token berada di memori; reload penuh memerlukan login ulang. Jika sesi kedaluwarsa, keluar/ganti akun lalu login kembali.
 5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Konfirmasi klasifikasi per tab di Workspace ETL. Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan; lihat [kontrak dan rollout BE-02](KLASIFIKASI_TAB_BE02.md).
-6. Periksa identitas, mapping kolom, cleansing berurutan, kualitas data, strategi pemuatan, dimensi, metrik, dan role akses. Simpan perubahan, periksa dry-run, isi checklist seluruh bagian/kolom, lalu **Ajukan review**.
-7. Gunakan approver konfigurasi sumber yang berbeda dari pembuat konfigurasi/editor metadata. Baca ringkasan metadata sumber, pilih policy SOURCE APPROVED yang cocok, lalu setujui konfigurasi, metadata PENDING dan aktivasi akses dalam satu transaksi. Jika metadata/policy/revisi tidak valid, tidak ada approval sebagian. Jalur admin review metadata/aktivasi terpisah tetap tersedia untuk sumber aktif tanpa revisi; tidak perlu diulang setelah approval gabungan berhasil.
-8. Jika aturan siap tayang aktif, akun IT dan approver bernama dari setiap unit terkait membuka `/release-approvals`. IT menyelesaikan checklist skema/mapping, kualitas data, dan keamanan/akses. Setiap kelompok memberi keputusan pada revisi konfigurasi, snapshot review, dan revisi aturan yang sama. Status kelompok tampil pada review konfigurasi; penolakan memerlukan versi baru atau revisi aturan yang diaudit. Aturan rilis dikonfigurasi admin di `/admin`.
-9. Setelah status siap tayang, **Deploy konfigurasi**, tunggu job SUCCEEDED, lalu jalankan **Sync manual** dengan akun editor. NON_MASTER ACTIVE memakai approval konfigurasi terpisah serta akses/rilis yang masih berlaku: validasi teknis, AI dan preview konflik lolos berarti langsung dimuat tanpa approval batch tambahan. Master, FULL_REFRESH, jadwal dan batch biasa tetap memakai review/preview/approval/Apply. Approval dan deployment sendiri tidak memuat data. Rollback tetap diperiksa terhadap aturan rilis saat ini.
+6. Periksa mapping kolom, cleansing, kualitas data, strategi pemuatan, dimensi, metrik, dan akses. Simpan perubahan, periksa validasi/dry-run, lalu **Validasi & siapkan deploy**. Pemilik tidak perlu mengisi checklist review berulang.
+7. Persetujuan orang hanya dilakukan saat registrasi awal sumber. Untuk konfigurasi berikutnya, sistem memvalidasi snapshot, klasifikasi, dry-run, business key, akses, dan rencana schema; masalah validasi ditampilkan ke pemilik untuk diperbaiki.
+8. **Deploy konfigurasi** oleh data owner/steward yang tercatat, tunggu job SUCCEEDED, lalu jalankan sync. Sinkronisasi memakai policy akses aktif, pemeriksaan sumber terbaru, preview konflik, dan validasi kualitas. Tidak ada approval konfigurasi/rilis rutin.
+9. `FULL_REFRESH` mengganti semua baris target dari snapshot sumber yang lolos validasi dalam transaksi; baris yang sudah dihapus dari Sheet ikut hilang di target. Bila ada baris invalid, transaksi batal dan data aktif lama dipertahankan. Perubahan struktur tabel dinilai terpisah dan perubahan destruktif tetap diblokir.
 
-Konfigurasi APPROVED/ACTIVE lama yang tidak memiliki bukti review tetap tidak dapat diedit. Bila perlu deployment ulang, clone menjadi draft, validasi, submit, dan approve. Runtime sync konfigurasi yang sudah ACTIVE tidak memerlukan checklist ulang untuk setiap sync. Rollback konfigurasi memeriksa snapshot yang disetujui; perubahan data dapat mengharuskan draft baru. Rollback bukan pemulihan data historis.
+Konfigurasi APPROVED/ACTIVE lama tetap immutable. Buat versi draft baru, validasi, lalu deploy sebagai versi aktif; riwayat lama tetap tersimpan untuk audit/rollback. Perubahan sumber yang terdeteksi memerlukan profil dan validasi terbaru sebelum deploy. Rollback konfigurasi bukan pemulihan data historis.
 
 ## Perubahan sumber, kolom, dan periode waktu
 
@@ -171,7 +171,7 @@ Contoh record/kolom/plan/capabilities disingkat; struktur konfigurasi lengkap ad
 
 Setiap pertanyaan yang dihapus dari `unresolved_questions` wajib mempunyai jawaban nonkosong maksimal 2.000 karakter. Key jawaban adalah teks pertanyaan persis, bukan ID baru. Sesuaikan parameter bisnis pada konfigurasi; jawaban teks tidak otomatis mengubah mapping. Jawaban disimpan di `review_state.answers` bersama user_id dan waktu. PATCH menaikkan revision dan membatalkan submission sebelumnya.
 
-`POST /configurations/{id}/submit-review` kini **wajib mempunyai body**:
+`POST /configurations/{id}/submit-review` menerima `revision_no` dan `snapshot_hash` yang wajib. Field checklist berikut opsional untuk owner-managed dan hanya dipakai pada workflow reviewer legacy:
 
 ```json
 {
@@ -182,7 +182,7 @@ Setiap pertanyaan yang dihapus dari `unresolved_questions` wajib mempunyai jawab
 }
 ```
 
-Gunakan hash dari dry-run terbaru dan nama target seluruh kolom konfigurasi. Server memvalidasi ulang, memeriksa revisi/hash/checklist, menaikkan revision, serta menyimpan submitted_by/at, submitted_revision, snapshot_id/hash, dan checklist di `review_state`. Respons adalah Configuration terbaru. Approve memakai revision dari respons tersebut dan ditolak jika submission tidak tersedia atau snapshot berubah. Kontrol ini memastikan keterkaitan review; checklist tidak membuktikan kebenaran keputusan bisnis pengguna.
+Gunakan hash dari dry-run terbaru. Server memvalidasi ulang, memeriksa revision dan snapshot, lalu owner-managed menandai konfigurasi siap tanpa approval reviewer. Legacy reviewer dapat mengirim nama target dan bagian yang diperiksa; checklist tidak membuktikan kebenaran keputusan bisnis pengguna. Response Configuration menyimpan siapa yang menjalankan validasi dan hash snapshot yang diperiksa.
 
 ## Excel: export, preview, apply
 
@@ -253,7 +253,7 @@ Status `Tidak` pada cleansing atau `Nonaktif` pada aturan kualitas/metrik berart
 | WORKBOOK_PREVIEW_STALE / WORKBOOK_TOKEN_INVALID | 409 | Preview ulang dengan akun dan draft yang sama |
 | REVIEW_REQUIRED | 409 | Ajukan review revision terbaru |
 | REVIEW_STALE | 409 | Profiling/validasi ulang; untuk approved, clone dan review draft baru |
-| REVIEW_INCOMPLETE | 422 | Lengkapi checklist semua bagian dan kolom |
+| REVIEW_INCOMPLETE | 422 | Workflow legacy memerlukan checklist semua bagian dan kolom; owner-managed tidak memerlukannya |
 | QUESTION_ANSWER_REQUIRED / QUESTION_INVALID | 422 | Cocokkan pertanyaan dan isi jawaban |
 | WORKBOOK_INVALID / WORKBOOK_STRUCTURE | 422 | Gunakan XLSX export aplikasi yang utuh |
 | SEPARATE_APPROVER_REQUIRED | 403 | Gunakan approver berbeda |

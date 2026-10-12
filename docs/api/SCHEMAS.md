@@ -3560,8 +3560,8 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `snapshot_hash` | Ya | `string` | — | {"pattern":"^[a-f0-9]{64}$"} |
-| `reviewed_columns` | Ya | `array<string>` | — | {"maxItems":100,"minItems":1} |
-| `reviewed_sections` | Ya | `array<enum ["identity","columns","cleansing","quality","load","semantic"]>` | — | — |
+| `reviewed_columns` | Tidak | `array<string>` | [] | {"maxItems":100} |
+| `reviewed_sections` | Tidak | `array<enum ["identity","columns","cleansing","quality","load","semantic"]>` | [] | — |
 | `reviewed_schema_fingerprint` | Tidak | `string / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
@@ -4572,6 +4572,8 @@ Field hasil serialisasi ORM; semuanya read-only dari sisi response. Ini bukan pa
 | `schedule_revision` | `INTEGER` | Tidak |
 | `paused` | `BOOLEAN` | Tidak |
 | `last_scheduled_at` | `DATETIME` | Ya |
+| `drive_modified_at` | `DATETIME` | Ya |
+| `change_checked_at` | `DATETIME` | Ya |
 | `unlinked_at` | `DATETIME` | Ya |
 | `unlinked_by` | `CHAR(32)` | Ya |
 | `unlinked_to_source_id` | `CHAR(32)` | Ya |

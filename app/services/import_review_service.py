@@ -395,9 +395,8 @@ class ImportReviewService:
             or (not owner_managed and (not config.approved_by or config.approved_by == config.created_by))
             or source.unlinked_at is not None or source.paused
             or source.access_status != "POLICY_APPROVED"
-            or config.configuration_json.get("load_strategy") == "FULL_REFRESH"
         ):
-            raise AppError("IMPORT_ACTIVE_APPROVAL_REQUIRED", "Sync langsung memerlukan konfigurasi aktif yang valid, akses sumber aktif, dan load strategy incremental.", 409)
+            raise AppError("IMPORT_ACTIVE_APPROVAL_REQUIRED", "Sync langsung memerlukan konfigurasi aktif yang valid dan akses sumber aktif.", 409)
         if not owner_managed:
             require_release_ready(config, source)
         if not await self.is_current(review):

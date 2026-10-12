@@ -28119,7 +28119,6 @@
             },
             "type": "array",
             "maxItems": 100,
-            "minItems": 1,
             "title": "Reviewed Columns"
           },
           "reviewed_sections": {
@@ -28154,9 +28153,7 @@
         "type": "object",
         "required": [
           "revision_no",
-          "snapshot_hash",
-          "reviewed_columns",
-          "reviewed_sections"
+          "snapshot_hash"
         ],
         "title": "ReviewSubmission"
       },

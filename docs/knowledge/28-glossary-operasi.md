@@ -15,9 +15,9 @@ Bayangkan Google Sheet sebagai buku pencatatan bisnis. Istilah berikut menjelask
 | **Preview** | Melihat rencana dan dampak perubahan sebelum dijalankan. | Meninjau kolom baru, contoh konversi tanggal dan blocker sebelum persetujuan. |
 | **Approval** | Persetujuan reviewer terhadap versi yang diperiksa. | Reviewer berwenang berbeda dari pembuat menyetujui konfigurasi; bukan izin baca otomatis. |
 | **Deploy** | Mengaktifkan konfigurasi yang disetujui dan menyiapkan struktur database yang diperlukan. | Versi menjadi ACTIVE setelah deploy sukses; cek pemuatan data sebagai tahap terpisah. |
-| **Sync** | Membaca dan memproses pembaruan sumber sesuai konfigurasi/alur yang berlaku. | Sync manual NON_MASTER aktif dapat langsung memuat setelah semua gate lolos; master/FULL_REFRESH memakai review batch. |
+| **Sync** | Membaca dan memproses pembaruan sumber sesuai konfigurasi aktif. | Owner-managed memvalidasi sumber, mapping, akses, kualitas, dan konflik sebelum memuat; tidak meminta approval rutin kedua. |
 | **APPEND** | Menambahkan catatan baru. | Cocok untuk kejadian baru; snapshot/koreksi tanpa key yang tepat bisa terhitung ganda. |
 | **UPSERT** | Memperbarui catatan jika key sudah ada, atau menambahkan jika belum ada. | Koreksi rekap unit/indikator/periode yang sama memperbarui record tersebut. |
-| **FULL_REFRESH** | Mengganti seluruh isi target dengan snapshot sumber yang lengkap. | Tidak boleh menggunakan snapshot parsial seolah mencakup semua record; perlu alur review yang sesuai. |
+| **FULL_REFRESH** | Mengganti seluruh isi baris target dengan snapshot lengkap sumber yang valid. | Seluruh baris divalidasi sebelum transaksi penggantian; jika ada error data lama tetap utuh. Perubahan skema tetap terpisah. |
 | **Freshness** | Seberapa mutakhir data yang tersedia. | Dimuat hari ini belum tentu menggambarkan kondisi hari ini; lihat periode dan data_as_of_at. |
 | **Watermark** | Penanda sampai mana data sudah diproses untuk pengambilan bertahap sesuai konfigurasi. | Nomor/tanggal checkpoint pemuatan; bukan penentu arti periode bisnis. |

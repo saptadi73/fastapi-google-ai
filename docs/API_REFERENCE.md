@@ -848,14 +848,14 @@ Nilai `ddl` di contoh dipersingkat; server mengirim SQL lengkap. Tampilkan hanya
 Urutan UI:
 
 1. GET draft → edit → PATCH → validate.
-2. Jika valid, submit-review dengan `revision_no`, `snapshot_hash` dari validasi, seluruh `reviewed_columns` (nama target), serta `reviewed_sections`: identity, columns, cleansing, quality, load, semantic. Gunakan revision_no dari respons submit untuk keputusan berikutnya. Checklist yang tidak lengkap ditolak server.
+2. Jika valid, submit-review dengan `revision_no` dan `snapshot_hash` dari validasi. Pada owner-managed, checklist `reviewed_columns`/`reviewed_sections` opsional; legacy reviewer dapat tetap menggunakannya. Gunakan revision_no dari respons submit untuk tindakan berikutnya.
 3. User R mengirim approve/reject:
 
 ```json
 {"revision_no":2,"comment":"Mapping, business key, dan hasil validasi sudah diperiksa."}
 ```
 
-4. Default `REQUIRE_SEPARATE_APPROVER=true`: pembuat/editor terakhir tidak boleh menyetujui draft sendiri, termasuk admin. Setelah PATCH, `created_by` menjadi editor tersebut.
+4. Pada workflow kompatibilitas, pemisahan reviewer lama dikendalikan `REQUIRE_SEPARATE_APPROVER` (default `false`). Owner-managed aktif secara default dan tidak memanggil keputusan reviewer konfigurasi; approval awal registrasi sumber tetap tersendiri.
 5. Approve menghasilkan APPROVED dan runtime artifact. Ini belum ACTIVE.
 6. Deploy/activate menerima APPROVED, mengantrekan job. Tunggu SUCCEEDED, lalu reload konfigurasi, tab aktif, dan katalog produk.
 

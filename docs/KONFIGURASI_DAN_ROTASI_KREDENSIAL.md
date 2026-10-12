@@ -32,7 +32,7 @@ Setelah mengganti konfigurasi, restart atau redeploy **API, worker Celery, dan s
 | `REDIS_REQUIRED` | Jika `true`, Redis menjadi syarat readiness |
 | `TEST_DATABASE_URL` | Database terpisah khusus tes; bukan database production |
 
-Untuk production, isi `APP_ENV=production` dan sesuaikan `HOST` serta `PORT` dengan deployment. Pada mode ini FastAPI tidak memasang `CORSMiddleware`; TLS, preflight, dan header CORS ditangani Nginx. Gunakan contoh `deploy/nginx/api-google.kanjabung.web.id.conf.example`. `CORS_ORIGINS` hanya dipakai FastAPI di environment non-production. Pertahankan `REQUIRE_SEPARATE_APPROVER=true` dan sediakan akun approver terpisah.
+Untuk production, isi `APP_ENV=production` dan sesuaikan `HOST` serta `PORT` dengan deployment. Pada mode ini FastAPI tidak memasang `CORSMiddleware`; TLS, preflight, dan header CORS ditangani Nginx. Gunakan contoh `deploy/nginx/api-google.kanjabung.web.id.conf.example`. `CORS_ORIGINS` hanya dipakai FastAPI di environment non-production. Owner-managed ETL aktif secara default (`ETL_OWNER_WORKFLOW_ENABLED=true`); `REQUIRE_SEPARATE_APPROVER=false` mencegah pemisahan approver lama pada workflow kompatibilitas. Nilai yang ditetapkan dalam `.env` production mengesampingkan default dan perlu diverifikasi setelah rollout. Persetujuan registrasi sumber tetap merupakan pemeriksaan awal tersendiri.
 
 ## 3. PostgreSQL: satu database, tiga role
 

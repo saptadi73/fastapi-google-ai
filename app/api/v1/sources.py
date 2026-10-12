@@ -312,6 +312,12 @@ async def source_tracking(
     result = []
     for source in sources:
         source_sheets = sheets_by_source.get(str(source.id), [])
+        discovery_job = discover_by_source.get(str(source.id))
+        auto_refresh_pending = (
+            source.status == "CHANGE_DETECTED"
+            and discovery_job is not None
+            and discovery_job.status in ("QUEUED", "RUNNING")
+        )
         sheet_records = []
         for sheet in source_sheets:
             profile = profile_by_sheet.get(str(sheet.id))
@@ -338,7 +344,11 @@ async def source_tracking(
                 "is_present": sheet.is_present,
                 "presence_status": "PRESENT" if sheet.is_present else "MISSING",
                 "dataset_kind": sheet.dataset_kind,
-                "profiling_status": profile.status if profile else ("FAILED" if source.status == "PROFILE_FAILED" else "NOT_STARTED"),
+                "profiling_status": (
+                    "RUNNING" if auto_refresh_pending
+                    else "FAILED" if source.status == "PROFILE_FAILED"
+                    else profile.status if profile else "NOT_STARTED"
+                ),
                 "profiled_at": profile.created_at if profile else None,
                 "configuration_status": config.status if config else ("AI_FAILED" if source.status == "AI_FAILED" else "NOT_STARTED"),
                 "it_approval_status": sheet_it_approval_status,
@@ -356,10 +366,13 @@ async def source_tracking(
         steward = people.get(str(metadata.get("data_steward_user_id"))) if metadata.get("data_steward_user_id") else None
         owner = people.get(str(metadata.get("data_owner_user_id"))) if metadata.get("data_owner_user_id") else None
         registration_owner = people.get(str(source.owner_user_id))
-        discovery_job = discover_by_source.get(str(source.id))
         result.append({
             **record(source),
-            "discovery_status": "SUCCEEDED" if any(item["is_present"] for item in sheet_records) else (discovery_job.status if discovery_job else "NOT_STARTED"),
+            "discovery_status": (
+                "RUNNING" if auto_refresh_pending
+                else "SUCCEEDED" if any(item["is_present"] for item in sheet_records)
+                else (discovery_job.status if discovery_job else "NOT_STARTED")
+            ),
             "profiling_status": tracking_rollup([item["profiling_status"] for item in sheet_records if item["enabled"] and item["is_present"]]),
             "configuration_status": tracking_rollup([
                 item["master_binding_status"] if item["dataset_kind"] == "MASTER" else item["configuration_status"]
@@ -446,6 +459,8 @@ async def source_history(
     event_names = {
         "source.registered": "Sumber didaftarkan", "source.discovered": "Tab ditemukan",
         "source.profiled": "Profiling selesai", "source.unlinked": "Sumber di-unlink",
+        "source.external_change_detected": "Perubahan Google Sheet terdeteksi",
+        "source.change_monitor_unavailable": "Pemantauan perubahan tidak tersedia",
         "source.unlink_restored": "Link sumber dipulihkan",
         "source.access_metadata_updated": "Metadata akses diperbarui",
         "source.access_metadata_reviewed": "Metadata akses direview",
@@ -459,7 +474,9 @@ async def source_history(
     }
     timeline = []
     safe_detail_keys = {"kind", "decision", "drift", "sheet_count", "revision_no", "changed_fields", "stage",
-                        "reason_code", "reason", "job_kind", "status", "error_code"}
+                        "reason_code", "reason", "job_kind", "status", "error_code", "previous_modified_at",
+                        "modified_at", "job_id", "detected_by", "actor_type"}
+    safe_detail_keys.update({"initial_baseline", "since_profiled_at"})
     for item in audit_rows:
         if item.event == "job.queued":
             continue
@@ -501,7 +518,8 @@ async def source_history(
         timeline.append({
             "id": f"audit:{item.id}", "occurred_at": item.created_at, "stage": stage,
             "status": details.get("status") or ("FAILED" if item.event.endswith("failed") else "RECORDED"),
-            "event": item.event, "summary": summary, "actor_name": actor_names.get(str(item.user_id)),
+            "event": item.event, "summary": summary,
+            "actor_name": actor_names.get(str(item.user_id)) or ("Sistem" if details.get("actor_type") == "SYSTEM" else None),
             "error_code": details.get("error_code"), "error_message": details.get("error_message"),
             "details": {key: value for key, value in details.items() if key in safe_detail_keys},
             "attention": attention,

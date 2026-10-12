@@ -20,5 +20,6 @@ celery_app.conf.update(
     beat_schedule={
         "dispatch-durable-jobs": {"task": "platform.poll", "schedule": s.job_poll_seconds},
         "schedule-sources": {"task": "platform.schedule", "schedule": 60.0},
+        "monitor-source-changes": {"task": "platform.monitor-source-changes", "schedule": 60.0},
     },
 )

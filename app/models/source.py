@@ -78,6 +78,8 @@ class DataSource(TenantEntity, Base):
     schedule_revision: Mapped[int] = mapped_column(Integer, default=1)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
     last_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    drive_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    change_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     unlinked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     unlinked_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
     unlinked_to_source_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.data_source.id"))

@@ -1,6 +1,6 @@
 # Penyederhanaan workflow ETL — TODO dan review risiko
 
-Status dokumen: rancangan implementasi bertahap, belum menjadi perubahan production.
+Status dokumen: implementasi lokal parsial; belum menjadi perubahan production. Audit ulang terakhir: 13 Oktober 2026.
 
 ## Temuan dari implementasi saat ini
 
@@ -12,6 +12,10 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - Master memakai lifecycle definisi/storage, binding sumber, binding kolom, serta batch import sendiri. `MASTER_RUNTIME_PENDING` masih menjadi blocker pada jalur ETL umum.
 - Policy evaluator bersifat default-deny; policy sumber dan data product serta assignment memengaruhi katalog dan query.
 - Role `PLATFORM_ADMIN` sudah mempunyai aksi `ADMIN`, tetapi sejumlah alur administrasi dan resource tetap memiliki pemeriksaan policy tersendiri.
+- Workflow owner-managed sebelumnya default OFF. Default aplikasi kini ON, tetapi nilai `.env` production tetap perlu diverifikasi.
+- Submit konfigurasi owner-managed sebelumnya mewajibkan checklist kolom/bagian. Checklist kini opsional di owner-managed dan tetap ada untuk workflow reviewer legacy.
+- Sync aktif sebelumnya menolak `FULL_REFRESH`. Owner-managed kini boleh langsung sync penuh setelah pemeriksaan status, freshness, akses, preview konflik, dan validasi baris.
+- Monitor perubahan Drive lokal mendeteksi perubahan melalui polling dan mengantre discovery/profiling. Production bergantung pada migration, Drive API/permission, worker dan Beat; pelaku edit eksternal tidak dapat dipastikan hanya dari `modifiedTime`.
 
 ## Target workflow
 
@@ -30,10 +34,11 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [x] Tetapkan default scope business domain + unit pemilik; yurisdiksi/department menjadi pembatas opsional.
 - [x] Petakan state approval, policy, binding master/taxonomy, dan batch lama; detail backfill masih menjadi TODO P1.
 - [x] Buat skenario penerimaan untuk role, tenant boundary, keamanan data, dan jalur UI/API.
+- [x] Audit ulang default flag, checklist submit, jalur FULL_REFRESH, dan deteksi perubahan sumber; mismatch runtime production tetap perlu diverifikasi.
 
 ### P1 — akses sederhana tanpa kehilangan isolasi
 
-- [x] Tambahkan jalur fallback baca/query untuk pasangan business domain + unit pemilik di belakang `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED` (default OFF). Fallback hanya berlaku untuk sumber yang sudah ditinjau, tidak memberi EXPORT, dan tidak aktif bila ada policy resource non-REVOKED.
+- [x] Jadikan fallback baca/query bagi domain + unit pemilik default ON untuk sumber yang sudah ditinjau. Fallback tidak memberi EXPORT dan tidak aktif bila ada policy resource non-REVOKED; sumber lama tanpa review tetap memakai policy sebelumnya.
 - [~] Metadata setelah review sumber dapat diperbarui pemilik/data owner/steward tanpa review kedua; scope harus tetap assignment aktif, perubahan diaudit, dan aktivasi legacy dibatasi owner/admin saat feature flag ON.
 - [x] Tetapkan interaksi default scope dengan `DataProduct.allowed_roles`: untuk sumber bermetadata yang sudah direview, fallback hanya dapat melewati allow-list lama pada DISCOVER/READ/QUERY; evaluator tetap harus mengizinkan aksi berdasarkan assignment domain+unit dan role capability. EXPORT dan produk tanpa metadata tetap memakai allow-list lama.
 - [ ] Jadikan restriction yurisdiksi/department opsional dan eksplisit; jangan mengubah data lama menjadi terbuka otomatis.
@@ -51,10 +56,12 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ### P3 — konfigurasi dan deployment
 
-- [x] Tambahkan mode submit konfigurasi sebagai validasi + bukti pemeriksaan pemilik di balik `ETL_OWNER_WORKFLOW_ENABLED` (default OFF).
+- [x] Jadikan submit konfigurasi owner-managed aktif secara default (`ETL_OWNER_WORKFLOW_ENABLED=true`); validasi dan bukti pemilik tetap terikat pada snapshot serta klasifikasi.
+- [x] Hilangkan checklist kolom/bagian berulang pada submit owner-managed; workflow legacy tetap meminta bukti reviewer yang diperlukan.
 - [x] Pertahankan snapshot freshness, dry-run penuh, schema plan, checklist, collision check, audit, dan idempotency.
 - [x] Izinkan data owner/steward men-deploy dan rollback konfigurasi owner-managed yang lolos; konfigurasi legacy tetap memerlukan reviewer.
-- [x] Izinkan sync incremental langsung untuk konfigurasi owner-managed aktif tanpa release approval kedua; akses sumber dan freshness tetap diperiksa.
+- [x] Izinkan sync incremental maupun FULL_REFRESH langsung untuk konfigurasi owner-managed aktif tanpa release approval kedua; akses sumber dan freshness tetap diperiksa.
+- [x] Pertahankan transaksi FULL_REFRESH: validasi seluruh baris sebelum mengganti data; bila ada error, rollback dan data lama tetap tersedia. DDL destruktif tetap terpisah dan diblokir.
 - [~] Owner-managed ETL tidak lagi memanggil endpoint atau menampilkan UI release approval; konfigurasi legacy tetap memakai keduanya. Hapus release groups global/inbox hanya setelah kompatibilitas data lama dan rollout siap.
 - [~] Verifikasi ulang deploy hanya bila snapshot terbaru lulus; pesan dry-run menunjukkan baris/field/kode masalah tanpa nilai sel, dan blocker aturan kualitas menunjukkan baris serta field. Rincian validasi lain dan tahap runtime tetap perlu diperluas.
 - [ ] Hapus UI inbox/assignment approval konfigurasi setelah endpoint dan data lama memiliki jalur kompatibilitas.
@@ -73,11 +80,13 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ### P5 — frontend, dokumentasi, rollout
 
-- [ ] Tampilkan 7 langkah sebagai progres berurutan dengan status, blocker terakhir, tindakan berikutnya, dan helper per langkah.
+- [~] Tampilkan 7 langkah sebagai progres berurutan: checklist ditinjau/kedaluwarsa, status validasi/deploy, job gagal, dan tindakan berikutnya; helper per tahap tetap tersedia. Status tiap tahap hanya mencerminkan bukti UI yang ada dan tidak menggantikan validasi backend. Helper tracking menjelaskan approval IT awal; batch import dan Persetujuan tayang telah diperjelas untuk owner-managed versus legacy. Masih perlu menuntaskan keselarasan navigasi/panduan admin dan review semua teks workflow lama.
 - [ ] Hilangkan tombol/menu approval yang tidak lagi menjadi bagian alur setelah backend dan migration siap.
 - [~] Perbarui helper/knowledge base untuk AI review, sumber legacy, rollback owner workflow, error owner/legacy, serta alur master owner-managed versus legacy. Generator backend dan salinan helper frontend diselaraskan; helper semua 7 langkah, panduan admin lengkap, dan runbook rollout masih perlu dituntaskan.
 - [ ] Jalankan migrasi staging, dry-run data lama, regression/security tests, lalu canary terbatas.
 - [ ] Siapkan rollback feature flag dan audit sebelum rollout global.
+- [ ] Verifikasi `.env` production: `ETL_OWNER_WORKFLOW_ENABLED=true`, `REQUIRE_SEPARATE_APPROVER=false`, `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED=true`; pastikan worker/Beat berjalan dan Drive metadata permission tersedia untuk deteksi otomatis.
+- [ ] Samakan frontend dengan owner-managed default: CTA “Validasi & siapkan deploy”, hilangkan approval rutin, dan jelaskan FULL_REFRESH sebagai penggantian isi tabel setelah validasi.
 
 ## Blocker yang jangan dihapus
 
@@ -85,7 +94,7 @@ Jangan melewati tenant isolation, autentikasi, validasi role admin, sumber tidak
 
 ## Risiko dan urutan rollout
 
-Perubahan default akses berisiko membuka data lama; karena itu backfill harus konservatif dan policy lama tidak boleh diam-diam dilonggarkan. Penghapusan approval berisiko mengubah state lama yang masih menunggu keputusan; jalankan mode kompatibilitas dan rekonsiliasi status terlebih dahulu. Penyatuan runtime master berisiko pada referential integrity dan migrasi schema. Implementasikan per fase di staging, bandingkan hasil effective access dan dry-run dengan perilaku lama, lalu aktifkan per tenant/feature flag. Perubahan BE-10 dan tombol bulk review sudah tersedia lokal di backend dan frontend, tetapi belum dideploy ke production.
+Perubahan default akses berisiko membuka data lama; backfill harus konservatif dan policy lama tidak boleh diam-diam dilonggarkan. Owner workflow ON tidak mengubah assignment domain/unit, access status, tenant boundary, atau approval registrasi sumber. Pertahankan endpoint/status legacy untuk record lama tanpa memalsukan keputusan reviewer. Full refresh hanya mengganti isi data setelah lulus validasi dan tidak mengesahkan perubahan schema secara otomatis. Penyatuan runtime master tetap berisiko pada referential integrity dan migrasi schema. Uji per fase di staging; periksa setting runtime dan preview sebelum production. Perubahan lokal pada default, checklist, dan sync FULL_REFRESH belum dideploy.
 
 ## Review ulang sebelum tiap fase dianggap selesai
 

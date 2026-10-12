@@ -60,10 +60,12 @@ class Settings(BaseSettings):
     etl_sample_row_limit: int = Field(200, ge=1, le=1000)
     job_poll_seconds: int = 5
     job_stale_minutes: int = 30
+    source_change_monitor_enabled: bool = True
+    source_change_monitor_batch_size: int = Field(20, ge=1, le=500)
     artifact_storage_path: Path = ROOT / "storage/configs"
-    require_separate_approver: bool = True
-    unit_domain_default_access_enabled: bool = False
-    etl_owner_workflow_enabled: bool = False
+    require_separate_approver: bool = False
+    unit_domain_default_access_enabled: bool = True
+    etl_owner_workflow_enabled: bool = True
     test_database_url: SecretStr = SecretStr("")
 
     @model_validator(mode="after")
