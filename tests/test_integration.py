@@ -32,6 +32,8 @@ from app.models.import_review import ImportReview
 from app.models.master import MasterDefinition
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, SourceSheet
+from app.schemas.access import AccessEvaluationRequest
+from app.services.access_service import AccessService
 from app.services.configuration_service import ConfigurationService
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.release_approval_service import require_release_ready
@@ -518,6 +520,159 @@ async def source_access_metadata(ctx):
                     )
                 )
     return metadata
+
+
+async def test_unit_domain_default_access_is_flagged_scoped_and_never_exports(context, monkeypatch):
+    ctx = context
+    settings = get_settings()
+    monkeypatch.setattr(settings, "unit_domain_default_access_enabled", True)
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        users = {user.username: user for user in (await session.scalars(
+            select(User).where(User.tenant_id == ctx.tenant_id)
+        )).all()}
+        viewer = users["viewer"]
+        other_domain = AccessAttribute(
+            tenant_id=ctx.tenant_id, kind="BUSINESS_DOMAIN", code="OTHER_" + uuid4().hex,
+            label="Other domain",
+        )
+        session.add(other_domain)
+        await session.flush()
+        for attribute_id in (metadata["owner_unit_id"], metadata["business_domain_id"]):
+            session.add(UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer.id, attribute_id=attribute_id,
+                granted_by=users["admin"].id,
+                valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            ))
+        same_domain_source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="unit_domain_default",
+            name="Unit domain default", spreadsheet_id="unit_domain_default_sheet",
+            owner_user_id=users["admin"].id, status="ACTIVE", access_status="POLICY_APPROVED",
+            access_review_status="APPROVED", access_metadata=metadata,
+        )
+        other_source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="other_domain_default",
+            name="Other domain", spreadsheet_id="other_domain_default_sheet",
+            owner_user_id=users["admin"].id, status="ACTIVE", access_status="POLICY_APPROVED",
+            access_review_status="APPROVED",
+            access_metadata={**metadata, "business_domain_id": other_domain.id},
+        )
+        session.add_all([same_domain_source, other_source])
+        await session.flush()
+        same_source_code, other_source_code = same_domain_source.source_code, other_source.source_code
+        viewer_id = viewer.id
+        admin_id = users["admin"].id
+
+    async with SessionFactory() as session, session.begin():
+        viewer = await session.get(User, viewer_id)
+        service = AccessService(session, viewer)
+        query_access = await service.evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=same_source_code,
+        ))
+        export_access = await service.evaluate(AccessEvaluationRequest(
+            action="EXPORT", resource_type="SOURCE", resource_id=same_source_code,
+        ))
+        wrong_domain_access = await service.evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=other_source_code,
+        ))
+        assert query_access["allowed"] is True
+        assert query_access["reason_code"] == "DEFAULT_UNIT_DOMAIN"
+        assert export_access["allowed"] is False
+        assert wrong_domain_access["allowed"] is False
+
+    async with SessionFactory() as session, session.begin():
+        deny = AccessPolicy(
+            tenant_id=ctx.tenant_id, code="UNIT_DOMAIN_DENY_" + uuid4().hex,
+            label="Explicit deny", effect="DENY", actions=["QUERY"],
+            required_attribute_ids=[], status="APPROVED",
+            valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            created_by=admin_id, approved_by=admin_id,
+        )
+        session.add(deny)
+        await session.flush()
+        session.add(AccessPolicyBinding(
+            tenant_id=ctx.tenant_id, policy_id=deny.id, resource_type="SOURCE",
+            resource_id=same_source_code,
+        ))
+    async with SessionFactory() as session, session.begin():
+        viewer = await session.get(User, viewer_id)
+        decision = await AccessService(session, viewer).evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=same_source_code,
+        ))
+        assert decision["allowed"] is False
+        assert decision["reason_code"] == "EXPLICIT_DENY"
+
+
+async def test_unit_domain_default_access_is_disabled_by_default(context, monkeypatch):
+    ctx = context
+    settings = get_settings()
+    monkeypatch.setattr(settings, "unit_domain_default_access_enabled", False)
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        admin = await session.scalar(select(User).where(
+            User.tenant_id == ctx.tenant_id, User.username == "admin"
+        ))
+        viewer = await session.scalar(select(User).where(
+            User.tenant_id == ctx.tenant_id, User.username == "viewer"
+        ))
+        for attribute_id in (metadata["owner_unit_id"], metadata["business_domain_id"]):
+            session.add(UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer.id, attribute_id=attribute_id,
+                granted_by=admin.id, valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            ))
+        source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="unit_domain_flag_off", name="Flag off",
+            spreadsheet_id="unit_domain_flag_off_sheet", owner_user_id=admin.id,
+            status="ACTIVE", access_status="POLICY_APPROVED", access_review_status="APPROVED",
+            access_metadata=metadata,
+        )
+        session.add(source)
+        await session.flush()
+        source_code, viewer_id = source.source_code, viewer.id
+    async with SessionFactory() as session, session.begin():
+        viewer = await session.get(User, viewer_id)
+        decision = await AccessService(session, viewer).evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=source_code,
+        ))
+        assert decision["allowed"] is False
+        assert decision["reason_code"] == "DEFAULT_DENY"
+
+
+async def test_reviewed_source_access_metadata_can_be_owner_managed_without_reapproval(context, monkeypatch):
+    ctx = context
+    settings = get_settings()
+    monkeypatch.setattr(settings, "unit_domain_default_access_enabled", True)
+    metadata = await source_access_metadata(ctx)
+    async with SessionFactory() as session, session.begin():
+        users = {user.username: user for user in (await session.scalars(
+            select(User).where(User.tenant_id == ctx.tenant_id)
+        )).all()}
+        source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="owner_metadata_test", name="Owner metadata test",
+            spreadsheet_id="owner_metadata_test_sheet", owner_user_id=users["admin"].id,
+            access_metadata=metadata, access_metadata_editor_id=users["admin"].id,
+            access_status="ACCESS_POLICY_REQUIRED", access_review_status="PENDING",
+            approval_assignees={"metadata_review": [users["approver"].id]},
+        )
+        session.add(source)
+        await session.flush()
+        source_id, approver_id = source.id, users["approver"].id
+
+    reviewed = await request(
+        ctx, "POST", f"/sources/{source_id}/access-review", who="approver",
+        data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"},
+    )
+    assert reviewed["data"]["access_review_status"] == "APPROVED"
+    assert reviewed["data"]["access_status"] == "POLICY_APPROVED"
+
+    changed = await request(
+        ctx, "PATCH", f"/sources/{source_id}/access-metadata",
+        data={"revision_no": 2, "access_metadata": {**metadata, "sensitivity": "MEDIUM"}},
+    )
+    assert changed["data"]["access_review_status"] == "APPROVED"
+    assert changed["data"]["access_status"] == "POLICY_APPROVED"
+    assert changed["data"]["access_reviewed_by"] == approver_id
+    assert changed["data"]["access_revision"] == 3
 
 
 async def test_new_unit_assignment_appears_for_source_registrant(context):

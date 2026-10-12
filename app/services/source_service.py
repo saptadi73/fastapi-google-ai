@@ -452,11 +452,17 @@ class SourceService:
         )
         if source is None:
             raise AppError("RESOURCE_NOT_FOUND", "Data tidak ditemukan.", 404)
+        if get_settings().unit_domain_default_access_enabled and not self._may_manage_access_metadata(source):
+            raise AppError("FORBIDDEN", "Metadata akses hanya dapat diubah pemilik, data owner/steward, atau PLATFORM_ADMIN.", 403)
         if source.access_revision != data.revision_no:
             raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
-        metadata = await self._validated_access_metadata(data.access_metadata)
-        if (source.access_metadata == metadata and source.access_status == "ACCESS_POLICY_REQUIRED"
-            and source.access_review_status != "REJECTED" and source.access_metadata_editor_id):
+        validation_subject = (
+            data.access_metadata.data_owner_user_id
+            if self.user.role == "PLATFORM_ADMIN" and get_settings().unit_domain_default_access_enabled
+            else None
+        )
+        metadata = await self._validated_access_metadata(data.access_metadata, subject_id=validation_subject)
+        if source.access_metadata == metadata:
             return record(source)
         previous_status = source.access_status
         changed_fields = [
@@ -465,11 +471,21 @@ class SourceService:
         ]
         source.access_metadata = metadata
         source.access_metadata_editor_id = self.user.id
-        source.access_status = "ACCESS_POLICY_REQUIRED"
-        source.access_review_status = "PENDING"
-        source.access_reviewed_by = None
-        source.access_reviewed_at = None
-        source.access_review_reason = ""
+        registration_review_complete = (
+            get_settings().unit_domain_default_access_enabled
+            and source.access_review_status == "APPROVED"
+        )
+        if registration_review_complete:
+            # The source was checked once at registration. Later access metadata
+            # changes are owner-managed, validated against active assignments,
+            # and audited without reopening a second approval workflow.
+            source.access_status = "POLICY_APPROVED"
+        else:
+            source.access_status = "ACCESS_POLICY_REQUIRED"
+            source.access_review_status = "PENDING"
+            source.access_reviewed_by = None
+            source.access_reviewed_at = None
+            source.access_review_reason = ""
         source.access_revision += 1
         audit(
             self.session, self.user, "source.access_metadata_updated", source.id,
@@ -478,6 +494,16 @@ class SourceService:
             previous_status=previous_status,
         )
         return record(source)
+
+    def _may_manage_access_metadata(self, source):
+        if self.user.role == "PLATFORM_ADMIN":
+            return True
+        metadata = source.access_metadata or {}
+        return self.user.id in {
+            source.owner_user_id,
+            metadata.get("data_owner_user_id"),
+            metadata.get("data_steward_user_id"),
+        }
 
     async def review_access_metadata(self, source_id, data, *, workflow="metadata_review"):
         source = await self.session.scalar(
@@ -508,7 +534,11 @@ class SourceService:
         source.access_reviewed_by = self.user.id
         source.access_reviewed_at = now()
         source.access_review_reason = data.reason
-        source.access_status = "ACCESS_POLICY_REQUIRED"
+        source.access_status = (
+            "POLICY_APPROVED"
+            if data.decision == "APPROVE" and get_settings().unit_domain_default_access_enabled
+            else "ACCESS_POLICY_REQUIRED"
+        )
         source.access_revision += 1
         audit(
             self.session, self.user, "source.access_metadata_reviewed", source.id,
@@ -567,6 +597,24 @@ class SourceService:
 
     async def activate_source_access(self, source_id, data):
         source = await self.repo.get(DataSource, source_id, lock=True)
+        if get_settings().unit_domain_default_access_enabled:
+            if not self._may_manage_access_metadata(source):
+                raise AppError("FORBIDDEN", "Hanya pemilik sumber atau PLATFORM_ADMIN yang dapat mengaktifkan akses.", 403)
+            if source.access_review_status != "APPROVED" or not source.access_metadata:
+                raise AppError("SOURCE_METADATA_REVIEW_REQUIRED", "Approver harus lebih dahulu memeriksa sumber dan tab yang didaftarkan.", 409)
+            if source.access_revision != data.revision_no:
+                raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
+            await self._validated_access_metadata(
+                SourceAccessMetadata.model_validate(source.access_metadata),
+                subject_id=source.access_metadata.get("data_owner_user_id"),
+            )
+            source.access_status = "POLICY_APPROVED"
+            source.access_revision += 1
+            audit(self.session, self.user, "source.access_activated_default", source.id,
+                  revision_no=source.access_revision, scope=["owner_unit_id", "business_domain_id"])
+            return record(source)
+        if self.user.role != "PLATFORM_ADMIN":
+            raise AppError("FORBIDDEN", "PLATFORM_ADMIN diperlukan untuk aktivasi policy legacy.", 403)
         if source.release_policy is not None:
             active_configs = (await self.session.scalars(
                 self.repo.query(Configuration).where(

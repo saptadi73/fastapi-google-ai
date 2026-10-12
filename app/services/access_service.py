@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import func, or_, select
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.access import (
     AccessAttribute,
@@ -995,8 +996,22 @@ class AccessService:
             .distinct()
         )
         policies = list((await self.session.scalars(query)).all())
+        has_bound_policy = False
+        if get_settings().unit_domain_default_access_enabled:
+            has_bound_policy = bool(await self.session.scalar(
+                select(AccessPolicy.id)
+                .join(AccessPolicyBinding, AccessPolicyBinding.policy_id == AccessPolicy.id)
+                .where(
+                    AccessPolicy.tenant_id == self.actor.tenant_id,
+                    AccessPolicyBinding.tenant_id == self.actor.tenant_id,
+                    or_(*resource_bindings),
+                    AccessPolicy.status != "REVOKED",
+                )
+                .limit(1)
+            ))
         active_attributes = {item["attribute_id"] for item in effective["assignments"]}
         source_scope = set()
+        source = None
         if data.resource_type in ("SOURCE", "DATA_PRODUCT"):
             source = parent_source
             if source is None and data.resource_type == "SOURCE":
@@ -1040,6 +1055,38 @@ class AccessService:
             )
         allowed = [policy for policy in matched if policy.effect == "ALLOW"]
         if not allowed:
+            default_scope = (
+                {
+                    source.access_metadata.get("owner_unit_id"),
+                    source.access_metadata.get("business_domain_id"),
+                }
+                if source is not None and source.access_metadata
+                else set()
+            )
+            default_allowed = (
+                get_settings().unit_domain_default_access_enabled
+                and not has_bound_policy
+                and data.resource_type in ("SOURCE", "DATA_PRODUCT")
+                and source is not None
+                and source.access_status == "POLICY_APPROVED"
+                and source.access_review_status == "APPROVED"
+                and bool(default_scope)
+                and None not in default_scope
+                and default_scope.issubset(active_attributes)
+                and data.action in {"DISCOVER", "READ", "QUERY"}
+                and data.action in effective["actions"]
+            )
+            if default_allowed:
+                return finish(
+                    {
+                        "allowed": True,
+                        "reason_code": "DEFAULT_UNIT_DOMAIN",
+                        "policy_ids": [],
+                        "row_scope": {},
+                        "columns": {},
+                        "export_allowed": False,
+                    }
+                )
             return finish(
                 {
                     "allowed": False,

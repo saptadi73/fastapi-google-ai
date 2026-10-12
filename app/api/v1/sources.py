@@ -605,7 +605,7 @@ async def access_review_context(source_id: UUID, session: Session, user: Current
     return success(await SourceService(session, user).metadata_review_context(source_id))
 
 
-@router.post("/sources/{source_id}/access-activate", dependencies=[Depends(require_roles("PLATFORM_ADMIN"))])
+@router.post("/sources/{source_id}/access-activate", dependencies=edit)
 async def activate_source_access(
     source_id: UUID, data: SourceAccessActivation, session: Session, user: CurrentUser
 ):

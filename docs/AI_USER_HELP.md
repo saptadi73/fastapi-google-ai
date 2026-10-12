@@ -6,6 +6,8 @@ Workflow saat ini masih dapat meminta review metadata sumber, review konfigurasi
 
 Targetnya adalah satu pemeriksaan saat registrasi/klasifikasi tab, lalu pemilik data menyelesaikan validasi konfigurasi dan deploy tanpa approval rutin. Pemeriksaan snapshot terbaru, dry-run, integritas business key, keamanan tenant, pembatasan akses, serta audit tetap wajib. Hak akses default yang direncanakan mengikuti domain dan business unit; pembatas yurisdiksi/department dapat ditambahkan oleh pemilik. Perilaku lama tetap berlaku sampai perubahan backend, frontend, migrasi, dan rollout dinyatakan selesai.
 
+Setelah sumber lolos pemeriksaan awal, pemilik data dapat memperbarui metadata akses tanpa meminta approver lagi pada workflow target. Backend tetap memeriksa bahwa domain/unit yang dipilih aktif dan merupakan assignment pemilik, membatasi fallback ke DISCOVER/READ/QUERY, serta mencatat perubahan. Feature flag backend `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED` masih OFF secara default; role filter katalog, migrasi metadata lama, dan keseragaman seluruh jalur baca harus lulus pengujian sebelum flag boleh diaktifkan.
+
 Asisten tersedia melalui `POST /api/v1/help/ask` untuk pengguna yang sudah login. Backend mencari
 artikel lokal yang boleh dibaca role pengguna, mengirim hanya artikel terpilih ke OpenAI, lalu
 memvalidasi kembali ID sumber pada jawaban. Source code, filesystem, database, dan credential tidak
