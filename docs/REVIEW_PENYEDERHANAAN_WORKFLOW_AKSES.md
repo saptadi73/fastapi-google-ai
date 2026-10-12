@@ -65,13 +65,13 @@ Simpan draft, lakukan validasi/preview, lalu aktifkan. Pengelola tidak perlu sub
 
 | Hak | Penerima default | Kewenangan |
 | --- | --- | --- |
-| Baca dan analitik | Pengguna aktif dengan keanggotaan aktif dalam unit sumber, tenant sama | Lihat katalog, baca data yang diizinkan, chart, query, analitik/action plan |
+| Baca dan analitik | Pengguna aktif dengan keanggotaan aktif pada business domain **dan** unit pemilik sumber, tenant sama | Lihat katalog, baca data yang diizinkan, chart, query, analitik/action plan |
 | Kelola sumber | Pemilik/pengelola sumber yang tercatat | Edit setup, aktivasi, sync/import, pengaturan akses sumber |
 | Kelola platform | Admin tenant | Kelola akun/unit, pemilik sumber, pemulihan dan konfigurasi platform |
 | Ekspor | Izin tersendiri | Unduh data; hak baca tidak otomatis berarti hak ekspor |
 | Akses lintas unit | Pengguna/grup yang dipilih pemilik/pengelola atau admin | Baca atau kelola sesuai hak eksplisit; tidak ada approval policy |
 
-Keanggotaan unit adalah pemberian hak oleh admin, bukan hasil membaca kolom `bisnis` atau klaim pengguna sendiri. Kesamaan tenant saja tidak memberi akses. Pemilik dapat memakai beberapa grup tambahan tetapi hak kelola harus eksplisit; anggota unit biasa tidak dapat mengganti business key, memuat data atau membagikan ulang sumber.
+Keanggotaan domain dan unit adalah pemberian hak oleh admin, bukan hasil membaca kolom `bisnis` atau klaim pengguna sendiri. Kesamaan tenant saja tidak memberi akses. Default memerlukan kecocokan kedua atribut tersebut. Pemilik dapat memakai yurisdiksi/department sebagai pembatas tambahan atau memilih beberapa grup tambahan; hak kelola tetap eksplisit dan anggota unit biasa tidak dapat mengganti business key, memuat data atau membagikan ulang sumber.
 
 Sumber baru wajib mempunyai unit bisnis. Sumber lama yang belum memiliki unit tetap ditandai perlu penetapan unit; jangan menebak dari nama file/tab atau menyebarkan akses seluruh tenant. Unit sumber yang sudah valid dapat dimigrasikan dari `owner_unit_id`; tampilkan hasil pemetaan.
 

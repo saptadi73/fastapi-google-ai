@@ -4,6 +4,8 @@ Status dokumen: rancangan implementasi bertahap, belum menjadi perubahan product
 
 ## Temuan dari implementasi saat ini
 
+Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada [review menyeluruh](REVIEW_PENYEDERHANAAN_WORKFLOW_AKSES.md). Dokumen ini menjadi checklist eksekusi; bila ada perbedaan, keputusan pengguna pada permintaan perubahan menjadi acuan. Khusus akses default, acuan pengguna adalah **business domain dan unit pemilik yang sama**, bukan unit saja.
+
 - Registrasi sumber, metadata akses, dan aktivasi akses memiliki review/policy terpisah.
 - Konfigurasi harus divalidasi, diajukan, disetujui reviewer, lalu dapat tertahan lagi oleh approval rilis IT dan unit.
 - Batch import masih memerlukan pertanyaan selesai, revalidate, preview, approval, dan apply.
@@ -21,13 +23,13 @@ Status dokumen: rancangan implementasi bertahap, belum menjadi perubahan product
 
 ## TODO implementasi bertahap
 
-### P0 — inventarisasi dan acceptance criteria
+### P0 — inventarisasi dan acceptance criteria (selesai untuk audit kode)
 
-- [ ] Inventaris semua state transition/API yang menghalangi profiling, konfigurasi, deploy, sync, dan query.
-- [ ] Tetapkan satu keputusan registrasi/tab dan kondisi yang mengharuskan pemeriksaan ulang.
-- [ ] Tetapkan aturan default scope domain + business unit, serta semantik tambahan yurisdiksi/department.
-- [ ] Petakan data produksi lama: konfigurasi APPROVED/ACTIVE, policy, approval, binding master/taxonomy, batch, dan status legacy.
-- [ ] Buat test matrix per role dan jalur UI/API langsung.
+- [x] Inventaris state transition/API yang menghalangi profiling, konfigurasi, deploy, sync, dan query.
+- [x] Tetapkan target satu keputusan registrasi/tab dan kondisi yang mengharuskan pemeriksaan ulang.
+- [x] Tetapkan default scope business domain + unit pemilik; yurisdiksi/department menjadi pembatas opsional.
+- [x] Petakan state approval, policy, binding master/taxonomy, dan batch lama; detail backfill masih menjadi TODO P1.
+- [x] Buat skenario penerimaan untuk role, tenant boundary, keamanan data, dan jalur UI/API.
 
 ### P1 — akses sederhana tanpa kehilangan isolasi
 
