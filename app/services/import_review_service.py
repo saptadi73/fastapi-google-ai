@@ -382,16 +382,21 @@ class ImportReviewService:
         source = await self.repo.get(DataSource, review.source_id, lock=True)
         config = await self.repo.get(Configuration, review.dependencies["configuration_id"], lock=True)
         await self.session.refresh(config)
+        owner_managed = (
+            get_settings().etl_owner_workflow_enabled
+            and (config.review_state or {}).get("owner_managed") is True
+        )
         if (
             config.status != "ACTIVE" or sheet.active_configuration_id != config.id
             or config.revision_no != review.dependencies["configuration_revision"]
-            or not config.approved_by or config.approved_by == config.created_by
+            or (not owner_managed and (not config.approved_by or config.approved_by == config.created_by))
             or source.unlinked_at is not None or source.paused
             or source.access_status != "POLICY_APPROVED"
             or config.configuration_json.get("load_strategy") == "FULL_REFRESH"
         ):
-            raise AppError("IMPORT_ACTIVE_APPROVAL_REQUIRED", "Sync langsung memerlukan konfigurasi aktif dengan approval terpisah dan akses sumber aktif.", 409)
-        require_release_ready(config, source)
+            raise AppError("IMPORT_ACTIVE_APPROVAL_REQUIRED", "Sync langsung memerlukan konfigurasi aktif yang valid, akses sumber aktif, dan load strategy incremental.", 409)
+        if not owner_managed:
+            require_release_ready(config, source)
         if not await self.is_current(review):
             raise AppError("IMPORT_STALE_REVIEW", "Snapshot atau konfigurasi berubah; buat batch sesuai sumber terbaru.", 409)
         return config

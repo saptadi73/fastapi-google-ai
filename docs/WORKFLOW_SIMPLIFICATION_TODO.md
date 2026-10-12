@@ -54,6 +54,7 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [x] Tambahkan mode submit konfigurasi sebagai validasi + bukti pemeriksaan pemilik di balik `ETL_OWNER_WORKFLOW_ENABLED` (default OFF).
 - [x] Pertahankan snapshot freshness, dry-run penuh, schema plan, checklist, collision check, audit, dan idempotency.
 - [x] Izinkan pemilik men-deploy konfigurasi yang lolos; rollback masih membutuhkan role reviewer.
+- [x] Izinkan sync incremental langsung untuk konfigurasi owner-managed aktif tanpa release approval kedua; akses sumber dan freshness tetap diperiksa.
 - [ ] Hapus release groups dan UI inbox approval setelah kompatibilitas konfigurasi lama dan test rollout siap.
 - [ ] Verifikasi ulang deploy hanya bila snapshot terbaru lulus; perbaiki error agar menjelaskan field/baris/tahap.
 - [ ] Hapus UI inbox/assignment approval konfigurasi setelah endpoint dan data lama memiliki jalur kompatibilitas.

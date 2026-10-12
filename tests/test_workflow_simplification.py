@@ -408,13 +408,13 @@ async def test_auto_load_reuses_active_approval_only_after_all_data_checks(monke
     assert service.apply.await_args.args[1].revision_no == review.revision_no
 
 
-@pytest.mark.parametrize("case", ["valid", "master", "inactive", "self-approved", "revoked", "paused", "full-refresh", "revision", "stale", "release"])
+@pytest.mark.parametrize("case", ["valid", "owner-managed", "master", "inactive", "self-approved", "revoked", "paused", "full-refresh", "revision", "stale", "release"])
 async def test_auto_load_requires_current_active_configuration_and_valid_release(monkeypatch, case):
     from app.services import import_review_service
 
     sheet = SimpleNamespace(active_configuration_id="config")
     source = SimpleNamespace(unlinked_at=None, paused=False, access_status="POLICY_APPROVED")
-    config = SimpleNamespace(id="config", status="ACTIVE", revision_no=4, approved_by="reviewer", created_by="maker", configuration_json={"load_strategy": "UPSERT"})
+    config = SimpleNamespace(id="config", status="ACTIVE", revision_no=4, approved_by="reviewer", created_by="maker", configuration_json={"load_strategy": "UPSERT"}, review_state={})
     review = SimpleNamespace(id="batch", source_id="source", source_sheet_id="sheet", dependencies={"dataset_kind": "NON_MASTER", "configuration_id": "config", "configuration_revision": 4})
     if case == "master":
         review.dependencies["dataset_kind"] = "MASTER"
@@ -422,6 +422,9 @@ async def test_auto_load_requires_current_active_configuration_and_valid_release
         config.status = "APPROVED"
     if case == "self-approved":
         config.approved_by = config.created_by
+    if case == "owner-managed":
+        config.approved_by = config.created_by
+        config.review_state["owner_managed"] = True
     if case == "revoked":
         source.access_status = "ACCESS_POLICY_REQUIRED"
     if case == "paused":
@@ -437,12 +440,18 @@ async def test_auto_load_requires_current_active_configuration_and_valid_release
     service.is_current = AsyncMock(return_value=case != "stale")
     release = Mock(side_effect=AppError("RELEASE_APPROVAL_REQUIRED", "Pending", 409) if case == "release" else None)
     monkeypatch.setattr(import_review_service, "require_release_ready", release)
-    if case != "valid":
+    monkeypatch.setattr(import_review_service, "get_settings", lambda: SimpleNamespace(
+        etl_owner_workflow_enabled=case == "owner-managed",
+    ))
+    if case not in ("valid", "owner-managed"):
         with pytest.raises(AppError):
             await service.active_load_configuration(review)
     else:
         assert await service.active_load_configuration(review) is config
-        release.assert_called_once_with(config, source)
+        if case == "owner-managed":
+            release.assert_not_called()
+        else:
+            release.assert_called_once_with(config, source)
 
 
 @pytest.mark.parametrize("case", ["valid", "decided", "technical"])
