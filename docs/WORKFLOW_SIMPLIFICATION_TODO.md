@@ -44,8 +44,8 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ### P2 — satu review saat registrasi
 
-- [ ] Gabungkan review metadata dan klasifikasi tab ke satu keputusan registrasi.
-- [ ] Simpan fingerprint spreadsheet/tab dan invalidasi keputusan hanya ketika sumber berubah.
+- [x] Perluas konteks review sumber agar approver dapat melihat semua tab yang ditemukan (termasuk tab hilang/nonaktif), klasifikasi, status profiling, jumlah baris, serta nama/tipe/indikasi PII kolom tanpa nilai contoh.
+- [x] Kirim fingerprint bukti tab pada keputusan review dan tolak keputusan bila tab/profil berubah setelah approver membuka konteks. Perubahan inventory, klasifikasi, pengaturan tab, atau schema profil setelah approval mengembalikan sumber ke status perlu review.
 - [ ] Pertahankan pemeriksaan kepemilikan sumber, akses Google Sheet, dan audit.
 - [ ] Sediakan migrasi kompatibilitas untuk sumber lama yang telah melewati sebagian workflow.
 

@@ -78,6 +78,22 @@ def source_code_base(name: str) -> str:
     return code[:63].rstrip("_")
 
 
+def invalidate_registration_review(session, user, source, reason):
+    if not get_settings().unit_domain_default_access_enabled or source.access_review_status != "APPROVED":
+        return False
+    source.access_review_status = "PENDING"
+    source.access_reviewed_by = None
+    source.access_reviewed_at = None
+    source.access_review_reason = ""
+    source.access_status = "ACCESS_POLICY_REQUIRED"
+    source.access_revision += 1
+    audit(
+        session, user, "source.registration_review_invalidated", source.id,
+        revision_no=source.access_revision, reason=reason,
+    )
+    return True
+
+
 class SourceService:
     def __init__(self, session, user, google=None):
         self.session, self.user = session, user
@@ -521,6 +537,38 @@ class SourceService:
             raise AppError("SOURCE_METADATA_ALREADY_REVIEWED", "Metadata sudah diputuskan; muat ulang sumber.", 409)
         if not source.access_metadata or not source.access_metadata_editor_id:
             raise AppError("SOURCE_METADATA_INCOMPLETE", "Metadata perlu diisi ulang oleh editor.", 409)
+        review_evidence = await self._source_review_evidence(source)
+        if get_settings().unit_domain_default_access_enabled and data.decision == "APPROVE":
+            if not review_evidence["tabs"]:
+                raise AppError(
+                    "SOURCE_REVIEW_TABS_REQUIRED",
+                    "Temukan tab Google Sheet sebelum approver menyetujui registrasi sumber.",
+                    409,
+                )
+            incomplete = [
+                tab for tab in review_evidence["tabs"]
+                if tab["enabled"] and tab["present"]
+                and (tab["profile_status"] != "SUCCEEDED" or tab["classification_status"] != "CONFIRMED")
+            ]
+            if incomplete:
+                raise AppError(
+                    "SOURCE_REVIEW_TABS_INCOMPLETE",
+                    "Setiap tab yang akan diproses harus selesai profiling dan klasifikasi; kecualikan tab yang tidak dipakai.",
+                    409,
+                )
+        if get_settings().unit_domain_default_access_enabled:
+            if not data.review_fingerprint:
+                raise AppError(
+                    "SOURCE_REVIEW_SNAPSHOT_REQUIRED",
+                    "Muat ulang bukti tab sumber sebelum memberikan keputusan review.",
+                    422,
+                )
+            if data.review_fingerprint != review_evidence["fingerprint"]:
+                raise AppError(
+                    "SOURCE_REVIEW_STALE",
+                    "Tab atau hasil profiling berubah sejak review dibuka. Periksa bukti terbaru.",
+                    409,
+                )
         if source.access_metadata_editor_id == self.user.id:
             raise AppError("SOURCE_METADATA_SELF_REVIEW", "Editor metadata tidak boleh menjadi reviewer.", 403)
         if data.decision == "APPROVE":
@@ -545,8 +593,51 @@ class SourceService:
             revision_no=source.access_revision,
             decision=data.decision,
             reason_code=data.reason,
+            review_fingerprint=review_evidence["fingerprint"],
         )
         return record(source)
+
+    async def _source_review_evidence(self, source):
+        sheets = list((await self.session.scalars(
+            self.repo.query(SourceSheet)
+            .where(SourceSheet.source_id == source.id)
+            .order_by(SourceSheet.sheet_id, SourceSheet.id)
+        )).all())
+        tabs = []
+        for sheet in sheets:
+            profile = await self.repo.latest_profile(sheet.id)
+            profile_json = profile.profile_json if profile else None
+            tabs.append({
+                "source_sheet_id": sheet.id,
+                "sheet_id": sheet.sheet_id,
+                "sheet_name": sheet.sheet_name,
+                "enabled": sheet.enabled,
+                "present": sheet.is_present,
+                "range_a1": sheet.range_a1,
+                "header_row": sheet.header_row,
+                "data_start_row": sheet.data_start_row,
+                "dataset_kind": sheet.dataset_kind,
+                "classification_status": sheet.classification_status,
+                "classification_revision": sheet.classification_revision,
+                "profile_status": profile.status if profile else "NOT_PROFILED",
+                "profile_fingerprint": profile.fingerprint if profile else None,
+                "row_count": profile_json.get("row_count") if profile_json else None,
+                "columns": [
+                    {
+                        "source_column": column.get("source_column"),
+                        "normalized_name": column.get("normalized_name"),
+                        "inferred_type": column.get("inferred_type"),
+                        "pii_suspected": column.get("pii_suspected", False),
+                    }
+                    for column in (profile_json or {}).get("columns", [])
+                ],
+            })
+        fingerprint = digest({
+            "source_id": source.id,
+            "access_revision": source.access_revision,
+            "tabs": tabs,
+        })
+        return {"fingerprint": fingerprint, "tabs": tabs}
 
     async def metadata_review_context(self, source_id, *, workflow="metadata_review"):
         source = await self.repo.get(DataSource, source_id)
@@ -570,8 +661,11 @@ class SourceService:
                     self.repo.query(User).where(User.id.in_(user_ids))
                 )).all()
             }
+        review_evidence = await self._source_review_evidence(source)
         return {
             "source_id": source.id,
+            "spreadsheet_id": source.spreadsheet_id,
+            "registration_review_mode": get_settings().unit_domain_default_access_enabled,
             "can_decide": source.approval_assignees is None or self.user.id in source.approval_assignees.get(workflow, []),
             "source_code": source.source_code,
             "access_revision": source.access_revision,
@@ -593,6 +687,8 @@ class SourceService:
             "sensitivity": metadata.get("sensitivity"),
             "editor_id": source.access_metadata_editor_id,
             "reviewer_is_editor": source.access_metadata_editor_id == self.user.id,
+            "review_fingerprint": review_evidence["fingerprint"],
+            "tabs": review_evidence["tabs"],
         }
 
     async def activate_source_access(self, source_id, data):
@@ -704,26 +800,32 @@ class SourceService:
         existing = {s.sheet_id: s for s in await self.repo.sheets(source.id)}
         discovered = []
         discovered_ids = set()
+        inventory_changed = False
         for tab in metadata.get("sheets", []):
             props = tab["properties"]
             if props.get("sheetType", "GRID") != "GRID":
                 continue
             discovered_ids.add(props["sheetId"])
             if props["sheetId"] not in existing:
+                inventory_changed = True
                 sheet = await self.repo.add(
                     SourceSheet, source_id=source.id, sheet_id=props["sheetId"], sheet_name=props["title"]
                 )
             else:
                 sheet = existing[props["sheetId"]]
+                inventory_changed = inventory_changed or not sheet.is_present or sheet.sheet_name != props["title"]
                 sheet.sheet_name = props["title"]
                 sheet.is_present = True
             discovered.append({"id": sheet.id, "sheet_id": sheet.sheet_id, "sheet_name": sheet.sheet_name})
         missing = []
         for sheet_id, sheet in existing.items():
             if sheet_id not in discovered_ids and sheet.is_present:
+                inventory_changed = True
                 sheet.is_present = False
                 sheet.enabled = False
                 missing.append({"source_sheet_id": sheet.id, "sheet_id": sheet.sheet_id, "sheet_name": sheet.sheet_name})
+        if inventory_changed:
+            invalidate_registration_review(self.session, self.user, source, "TAB_INVENTORY_CHANGED")
         audit(
             self.session,
             self.user,
@@ -798,6 +900,8 @@ class SourceService:
             results.append(
                 {"profiling_run_id": run.id, "source_sheet_id": sheet.id, "snapshot_id": snapshot.id}
             )
+        if drift:
+            invalidate_registration_review(self.session, self.user, source, "PROFILE_SCHEMA_CHANGED")
         source.status = (
             "CHANGE_DETECTED"
             if drift
@@ -844,6 +948,7 @@ class SourceService:
 
     async def update_sheet(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
+        previous = {name: getattr(sheet, name) for name in data.model_dump(exclude_none=True)}
         if data.enabled is True and not sheet.is_present:
             raise AppError(
                 "SOURCE_TAB_MISSING",
@@ -854,11 +959,15 @@ class SourceService:
             raise AppError(
                 "CONFIGURATION_CONFLICT", "Range/header tab aktif tidak dapat diubah langsung.", 409
             )
-        for name, value in data.model_dump(exclude_none=True).items():
+        updates = data.model_dump(exclude_none=True)
+        for name, value in updates.items():
             setattr(sheet, name, value)
         if sheet.data_start_row <= sheet.header_row:
             raise AppError("INVALID_RANGE", "data_start_row harus setelah header_row.")
         sheet.last_fingerprint = None
+        if any(previous[name] != value for name, value in updates.items()):
+            source = await self.repo.get(DataSource, sheet.source_id, lock=True)
+            invalidate_registration_review(self.session, self.user, source, "TAB_SETTINGS_CHANGED")
         audit(self.session, self.user, "sheet.updated", sheet.id)
         return record(sheet)
 

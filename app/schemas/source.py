@@ -40,6 +40,7 @@ class SourceMetadataReview(StrictModel):
     revision_no: int = Field(ge=1)
     decision: Literal["APPROVE", "REJECT"]
     reason: Literal["METADATA_VERIFIED", "SCOPE_MISMATCH", "OWNER_UNCONFIRMED", "OTHER"]
+    review_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
     @model_validator(mode="after")
     def reason_matches_decision(self):

@@ -31,12 +31,13 @@ from app.models.etl import Job, Snapshot
 from app.models.import_review import ImportReview
 from app.models.master import MasterDefinition
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
-from app.models.source import DataSource, SourceSheet
+from app.models.source import DataSource, ProfilingRun, SourceSheet
 from app.schemas.access import AccessEvaluationRequest
 from app.services.access_service import AccessService
 from app.services.configuration_service import ConfigurationService
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.release_approval_service import require_release_ready
+from app.repositories.semantic_repository import SemanticRepository
 from app.workers.runner import run_pending, schedule_sources
 
 pytestmark = pytest.mark.integration
@@ -194,6 +195,7 @@ async def context(monkeypatch, tmp_path, sheet_values):
                 tokens=tokens,
                 values=current_values,
                 tenant_id=tenant.id,
+                outsider_tenant_id=outsider.id,
                 tenant_code=tenant.code,
             )
         finally:
@@ -559,7 +561,22 @@ async def test_unit_domain_default_access_is_flagged_scoped_and_never_exports(co
         )
         session.add_all([same_domain_source, other_source])
         await session.flush()
+        product_sheet = SourceSheet(
+            tenant_id=ctx.tenant_id, source_id=same_domain_source.id, sheet_id=406042217,
+            sheet_name="Business data",
+        )
+        session.add(product_sheet)
+        await session.flush()
+        product = DataProduct(
+            tenant_id=ctx.tenant_id, source_sheet_id=product_sheet.id,
+            code="unit_domain_product_" + uuid4().hex[:8], name="Business data",
+            view_name="unit_domain_view", allowed_roles=["ANALYST"], columns=[],
+            dimensions=[], metrics=[], status="ACTIVE",
+        )
+        session.add(product)
+        await session.flush()
         same_source_code, other_source_code = same_domain_source.source_code, other_source.source_code
+        product_code = product.code
         viewer_id = viewer.id
         admin_id = users["admin"].id
 
@@ -579,6 +596,10 @@ async def test_unit_domain_default_access_is_flagged_scoped_and_never_exports(co
         assert query_access["reason_code"] == "DEFAULT_UNIT_DOMAIN"
         assert export_access["allowed"] is False
         assert wrong_domain_access["allowed"] is False
+        product = await SemanticRepository(session, ctx.tenant_id).product(
+            product_code, viewer, action="QUERY"
+        )
+        assert product.allowed_roles == ["ANALYST"]
 
     async with SessionFactory() as session, session.begin():
         deny = AccessPolicy(
@@ -601,6 +622,80 @@ async def test_unit_domain_default_access_is_flagged_scoped_and_never_exports(co
         ))
         assert decision["allowed"] is False
         assert decision["reason_code"] == "EXPLICIT_DENY"
+
+
+async def test_unit_domain_default_requires_current_unit_assignment_and_tenant(context, monkeypatch):
+    ctx = context
+    monkeypatch.setattr(get_settings(), "unit_domain_default_access_enabled", True)
+    metadata = await source_access_metadata(ctx)
+    now = datetime.now(timezone.utc)
+    async with SessionFactory() as session, session.begin():
+        users = {user.username: user for user in (await session.scalars(
+            select(User).where(User.tenant_id == ctx.tenant_id)
+        )).all()}
+        viewer = users["viewer"]
+        admin = users["admin"]
+        expired_unit = AccessAttribute(
+            tenant_id=ctx.tenant_id, kind="DEPARTMENT", code="EXPIRED_" + uuid4().hex,
+            label="Expired unit",
+        )
+        revoked_unit = AccessAttribute(
+            tenant_id=ctx.tenant_id, kind="DEPARTMENT", code="REVOKED_" + uuid4().hex,
+            label="Revoked unit",
+        )
+        session.add_all([expired_unit, revoked_unit])
+        await session.flush()
+        session.add_all([
+            UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer.id, attribute_id=expired_unit.id,
+                granted_by=admin.id, valid_from=now - timedelta(days=3),
+                valid_to=now - timedelta(days=1),
+            ),
+            UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer.id, attribute_id=revoked_unit.id,
+                granted_by=admin.id, valid_from=now - timedelta(days=1), status="REVOKED",
+                revoked_by=admin.id, revoked_at=now,
+            ),
+        ])
+        expired_source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="expired_unit_scope_" + uuid4().hex[:8],
+            name="Expired assignment", spreadsheet_id="expired_" + uuid4().hex,
+            owner_user_id=admin.id, status="ACTIVE", access_status="POLICY_APPROVED",
+            access_review_status="APPROVED",
+            access_metadata={**metadata, "owner_unit_id": expired_unit.id},
+        )
+        revoked_source = DataSource(
+            tenant_id=ctx.tenant_id, source_code="revoked_unit_scope_" + uuid4().hex[:8],
+            name="Revoked assignment", spreadsheet_id="revoked_" + uuid4().hex,
+            owner_user_id=admin.id, status="ACTIVE", access_status="POLICY_APPROVED",
+            access_review_status="APPROVED",
+            access_metadata={**metadata, "owner_unit_id": revoked_unit.id},
+        )
+        session.add_all([expired_source, revoked_source])
+        await session.flush()
+        expired_code, revoked_code, viewer_id = expired_source.source_code, revoked_source.source_code, viewer.id
+        foreign_admin = await session.scalar(select(User).where(
+            User.tenant_id == ctx.outsider_tenant_id, User.username == "admin"
+        ))
+        outsider_source = DataSource(
+            tenant_id=ctx.outsider_tenant_id,
+            source_code="foreign_default_" + uuid4().hex[:8], name="Foreign source",
+            spreadsheet_id="foreign_" + uuid4().hex, owner_user_id=foreign_admin.id,
+            status="ACTIVE", access_status="POLICY_APPROVED", access_review_status="APPROVED",
+            access_metadata=metadata,
+        )
+        session.add(outsider_source)
+        await session.flush()
+        foreign_code = outsider_source.source_code
+
+    async with SessionFactory() as session, session.begin():
+        viewer = await session.get(User, viewer_id)
+        service = AccessService(session, viewer)
+        for code in (expired_code, revoked_code, foreign_code):
+            decision = await service.evaluate(AccessEvaluationRequest(
+                action="QUERY", resource_type="SOURCE", resource_id=code,
+            ))
+            assert decision["allowed"] is False
 
 
 async def test_unit_domain_default_access_is_disabled_by_default(context, monkeypatch):
@@ -656,11 +751,41 @@ async def test_reviewed_source_access_metadata_can_be_owner_managed_without_reap
         )
         session.add(source)
         await session.flush()
+        sheet = SourceSheet(
+            tenant_id=ctx.tenant_id, source_id=source.id, sheet_id=1, sheet_name="First tab",
+            dataset_kind="NON_MASTER", classification_status="CONFIRMED",
+            classification_confirmed_by=users["admin"].id, classification_confirmed_at=datetime.now(timezone.utc),
+        )
+        session.add(sheet)
+        await session.flush()
+        session.add(ProfilingRun(
+            tenant_id=ctx.tenant_id, source_id=source.id, source_sheet_id=sheet.id,
+            fingerprint="a" * 64, profile_json={"row_count": 1, "columns": []}, status="SUCCEEDED",
+        ))
         source_id, approver_id = source.id, users["approver"].id
+
+    review_context = (await request(
+        ctx, "GET", f"/sources/{source_id}/access-review-context", who="approver",
+    ))["data"]
+    assert [tab["sheet_name"] for tab in review_context["tabs"]] == ["First tab"]
+    async with SessionFactory() as session, session.begin():
+        session.add(SourceSheet(
+            tenant_id=ctx.tenant_id, source_id=source_id, sheet_id=2, sheet_name="New tab", enabled=False,
+        ))
 
     reviewed = await request(
         ctx, "POST", f"/sources/{source_id}/access-review", who="approver",
-        data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED"},
+        expected=409,
+        data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED",
+              "review_fingerprint": review_context["review_fingerprint"]},
+    )
+    review_context = (await request(
+        ctx, "GET", f"/sources/{source_id}/access-review-context", who="approver",
+    ))["data"]
+    reviewed = await request(
+        ctx, "POST", f"/sources/{source_id}/access-review", who="approver",
+        data={"revision_no": 1, "decision": "APPROVE", "reason": "METADATA_VERIFIED",
+              "review_fingerprint": review_context["review_fingerprint"]},
     )
     assert reviewed["data"]["access_review_status"] == "APPROVED"
     assert reviewed["data"]["access_status"] == "POLICY_APPROVED"
@@ -673,6 +798,17 @@ async def test_reviewed_source_access_metadata_can_be_owner_managed_without_reap
     assert changed["data"]["access_status"] == "POLICY_APPROVED"
     assert changed["data"]["access_reviewed_by"] == approver_id
     assert changed["data"]["access_revision"] == 3
+
+    from app.services.source_service import SourceService
+
+    async with SessionFactory() as session, session.begin():
+        owner = await session.scalar(select(User).where(
+            User.tenant_id == ctx.tenant_id, User.username == "admin"
+        ))
+        await SourceService(session, owner).discover(source_id)
+        source = await session.get(DataSource, source_id)
+        assert source.access_review_status == "PENDING"
+        assert source.access_status == "ACCESS_POLICY_REQUIRED"
 
 
 async def test_new_unit_assignment_appears_for_source_registrant(context):

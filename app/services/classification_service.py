@@ -94,11 +94,15 @@ class ClassificationService:
                 409,
             )
         before = classification_record(sheet)
+        source = await self.repo.get(DataSource, sheet.source_id, lock=True)
         sheet.dataset_kind = kind
         sheet.classification_status = "CONFIRMED"
         sheet.classification_revision += 1
         sheet.classification_confirmed_by = self.user.id
         sheet.classification_confirmed_at = now()
+        from app.services.source_service import invalidate_registration_review
+
+        invalidate_registration_review(self.session, self.user, source, "TAB_CLASSIFICATION_CHANGED")
         audit(
             self.session,
             self.user,
