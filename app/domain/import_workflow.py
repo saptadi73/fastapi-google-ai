@@ -38,6 +38,7 @@ class ImportAction(str, Enum):
     CANCEL = "CANCEL"
     RECHECK_ACTIVE = "RECHECK_ACTIVE"
     AUTO_APPROVE = "AUTO_APPROVE"
+    OWNER_APPROVE = "OWNER_APPROVE"
 
 
 # Actions without a role entry are reserved for the worker, never a public role.
@@ -50,6 +51,7 @@ USER_ACTION_ROLES = {
     ImportAction.APPROVE: REVIEW_ROLES,
     ImportAction.REJECT: REVIEW_ROLES,
     ImportAction.APPLY: EDIT_ROLES,
+    ImportAction.OWNER_APPROVE: EDIT_ROLES,
 }
 S = ImportStatus
 A = ImportAction
@@ -66,6 +68,7 @@ TRANSITIONS = {
     (S.READY_FOR_APPROVAL, A.AUTO_APPROVE): S.APPROVED,
     (S.READY_FOR_APPROVAL, A.REQUEST_INPUT): S.NEEDS_INPUT,
     (S.READY_FOR_APPROVAL, A.APPROVE): S.APPROVED,
+    (S.READY_FOR_APPROVAL, A.OWNER_APPROVE): S.APPROVED,
     (S.READY_FOR_APPROVAL, A.REJECT): S.NEEDS_INPUT,
     (S.APPROVED, A.APPLY): S.APPLYING,
     (S.APPLYING, A.COMPLETE): S.SUCCEEDED,

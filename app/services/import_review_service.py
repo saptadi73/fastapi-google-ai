@@ -331,6 +331,7 @@ class ImportReviewService:
             finding_count=len(review.findings),
             execution_ready=review.status in ("APPROVED", "APPLYING"),
             attention=ImportReviewService.attention(review),
+            owner_workflow_enabled=get_settings().etl_owner_workflow_enabled,
         )
         return data
 
@@ -1200,11 +1201,43 @@ class ImportReviewService:
     async def apply(self, review_id, data):
         self.role(edit=True)
         review, config, rows = await self._preview_context(review_id, data.revision_no)
-        if review.status != "APPROVED":
-            raise AppError("IMPORT_APPROVAL_REQUIRED", "Batch harus approved sebelum apply.", 409)
+        owner_apply = review.status == "READY_FOR_APPROVAL" and get_settings().etl_owner_workflow_enabled
+        if review.status != "APPROVED" and not owner_apply:
+            raise AppError("IMPORT_APPROVAL_REQUIRED", "Batch harus disetujui atau memenuhi validasi pemilik sebelum apply.", 409)
         claims = decode(data.preview_token, "import-review-preview")
         if any(claims.get(k) != v for k, v in {"review_id": str(review.id), "tenant_id": str(review.tenant_id), "revision_no": review.checkpoint.get("preview_revision"), "preview_hash": review.checkpoint.get("preview_hash")}.items()):
             raise AppError("IMPORT_PREVIEW_STALE", "Preview tidak sesuai dengan batch terbaru; jalankan preview ulang.", 409)
+        if owner_apply:
+            if review.checkpoint.get("blocking_codes"):
+                raise AppError("IMPORT_INPUT_PENDING", "Selesaikan pertanyaan dan blocker sebelum apply.", 409)
+            if not review.checkpoint.get("preview_hash") or data.preview_hash != review.checkpoint["preview_hash"]:
+                raise AppError("IMPORT_PREVIEW_REQUIRED", "Konfirmasi hash preview terbaru sebelum apply.", 409)
+            current_preview = await self.read_preview(review_id)
+            if current_preview["blocking_codes"] or not current_preview["can_approve"]:
+                raise AppError("IMPORT_PREVIEW_CONFLICT", "Preview memiliki konflik atau baris bermasalah; selesaikan sebelum apply.", 409)
+            if current_preview["requires_source_confirmation"]:
+                if not data.accept_source_conflicts or not data.approval_comment.strip():
+                    raise AppError("IMPORT_SOURCE_CONFIRMATION_REQUIRED", "Tinjau konflik sumber, centang konfirmasi, dan tulis alasan sebelum apply.", 409)
+                review.checkpoint = {**review.checkpoint, "source_conflicts_approved_hash": current_preview["preview_hash"]}
+                audit(self.session, self.user, "import.source_conflicts_owner_confirmed", review.id,
+                      preview_hash=current_preview["preview_hash"], conflicts=current_preview["source_conflicts"],
+                      reason=data.approval_comment.strip())
+            open_question = await self.session.scalar(
+                self.repo.query(ImportQuestion).where(
+                    ImportQuestion.import_review_id == review.id,
+                    ImportQuestion.status.in_(["OPEN", "PENDING_APPROVAL"]),
+                ).limit(1)
+            )
+            if open_question:
+                raise AppError("IMPORT_INPUT_PENDING", "Masih ada pertanyaan yang belum diselesaikan.", 409)
+            self.move(review, ImportAction.OWNER_APPROVE)
+            review.checkpoint = {
+                **review.checkpoint,
+                "approved_by": str(self.user.id),
+                "approval_mode": "OWNER_VALIDATED",
+                "approval_comment": data.approval_comment.strip(),
+                "approved_preview_hash": current_preview["preview_hash"],
+            }
         lock_key = review.dependencies.get("master_id") or review.source_sheet_id
         await self.session.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),

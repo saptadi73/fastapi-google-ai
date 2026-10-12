@@ -32,6 +32,9 @@ class ImportReviewApproveRequest(StrictModel):
 class ImportReviewApplyRequest(StrictModel):
     revision_no: int = Field(ge=1)
     preview_token: str
+    preview_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    accept_source_conflicts: bool = False
+    approval_comment: str = Field(default="", max_length=2000)
 
 
 class ImportReferenceResolveRequest(StrictModel):

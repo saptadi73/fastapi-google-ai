@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.exceptions import AppError
+from app.domain.import_workflow import ImportAction, ImportStatus, next_import_status
 from app.models.source import DataSource
 from app.schemas.access import AccessRequestBatchDecision
 from app.schemas.auth import UserCreate
@@ -26,6 +27,21 @@ def test_onboarding_contract_requires_unique_explicit_targets():
         UserCreate(username="new_reader", password="test-password-123", initial_access={
             "attribute_ids": [target, target], "business_reason": "Akses laporan unit bisnis.",
         })
+
+
+def test_owner_batch_apply_uses_explicit_role_checked_transition():
+    assert next_import_status(
+        ImportStatus.READY_FOR_APPROVAL,
+        ImportAction.OWNER_APPROVE,
+        role="SOURCE_OWNER",
+    ) is ImportStatus.APPROVED
+    with pytest.raises(AppError) as error:
+        next_import_status(
+            ImportStatus.READY_FOR_APPROVAL,
+            ImportAction.OWNER_APPROVE,
+            role="TECHNICAL_APPROVER",
+        )
+    assert error.value.code == "IMPORT_ACTION_FORBIDDEN"
     with pytest.raises(ValidationError):
         UserCreate(username="new_reader", password="test-password-123", initial_access={
             "business_reason": "Akses laporan unit bisnis.",

@@ -66,7 +66,8 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [ ] Satukan runtime/pipeline master dan non-master pada validator, job, apply, audit, dan tracking yang sama.
 - [ ] Tambahkan pemetaan relasi master opsional pada konfigurasi non-master dan pemeriksaan not-found/ambiguous.
 - [ ] Pertahankan keputusan eksplisit untuk konflik master, perubahan key, deactivation, dan delete-restricted.
-- [ ] Hapus approval batch rutin untuk batch bersih; konflik, usulan insert, ambiguous reference, dan source conflict tetap memerlukan resolusi steward.
+- [x] Hapus approval reviewer rutin untuk batch bersih pada owner workflow; pemilik Apply mengikat preview token/hash dan menjalankan validasi ulang.
+- [~] Konflik sumber membutuhkan konfirmasi + alasan pemilik; duplicate/key conflict, usulan insert yang perlu policy review, pertanyaan terbuka, dan ambiguous reference tetap menjadi blocker sampai ditangani.
 - [ ] Hilangkan blocker `MASTER_RUNTIME_PENDING` setelah master memiliki jalur preview/apply yang setara dan sudah diuji end-to-end.
 
 ### P5 — frontend, dokumentasi, rollout

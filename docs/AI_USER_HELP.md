@@ -2,13 +2,13 @@
 
 ## Arah penyederhanaan workflow ETL (rancangan; belum aktif di production)
 
-Workflow saat ini masih dapat meminta review metadata sumber, review konfigurasi, approval rilis IT/unit, approval batch, dan lifecycle master/binding. Jangan menyimpulkan bahwa approval tersebut sudah dihapus hanya dari rancangan ini. Rencana perubahan dan checklist rollout tercatat di [WORKFLOW_SIMPLIFICATION_TODO.md](WORKFLOW_SIMPLIFICATION_TODO.md).
+Penyederhanaan workflow dikirim bertahap di balik feature flag `ETL_OWNER_WORKFLOW_ENABLED` (default OFF). Saat flag OFF atau pada data lama yang belum owner-managed, gate review/approval lama tetap berlaku. Checklist implementasi dan rollout tercatat di [WORKFLOW_SIMPLIFICATION_TODO.md](WORKFLOW_SIMPLIFICATION_TODO.md); jangan menganggap production sudah berubah sebelum flag diaktifkan dan diverifikasi.
 
 Targetnya adalah satu pemeriksaan saat registrasi/klasifikasi tab, lalu pemilik data menyelesaikan validasi konfigurasi dan deploy tanpa approval rutin. Pemeriksaan snapshot terbaru, dry-run, integritas business key, keamanan tenant, pembatasan akses, serta audit tetap wajib. Hak akses default yang direncanakan mengikuti domain dan business unit; pembatas yurisdiksi/department dapat ditambahkan oleh pemilik. Perilaku lama tetap berlaku sampai perubahan backend, frontend, migrasi, dan rollout dinyatakan selesai.
 
 Pada workflow target, approver sumber melihat seluruh inventory tab yang ditemukan, termasuk klasifikasi, status profiling, dan ringkasan kolom tanpa nilai data. Keputusan mengirim fingerprint bukti; perubahan tab/profil saat review terbuka membuat keputusan perlu dimuat ulang. Mode konfigurasi oleh pemilik dikendalikan `ETL_OWNER_WORKFLOW_ENABLED` (default OFF); jika diaktifkan, validasi lengkap mengesahkan konfigurasi dan pemilik dapat men-deploy tanpa approval rutin. Snapshot, dry-run, checklist, schema plan, klasifikasi, tenant checks, dan audit tetap wajib; rollback tetap memerlukan reviewer. Aktivasi flag menunggu uji integrasi serta rollout terpisah.
 
-Dalam mode pemilik yang sama, definisi master, binding tab, binding kolom referensi, dan deploy storage memakai validasi business key/schema, snapshot, versi master, normalisasi, referential checks, serta konfirmasi storage. Sync incremental langsung untuk konfigurasi owner-managed aktif tidak meminta release approval kedua; akses sumber harus tetap aktif dan `FULL_REFRESH` tetap memakai batch review. Import record master masih memakai halaman Batch import dan jalur apply tersendiri. Jangan anggap `MASTER_RUNTIME_PENDING` sudah teratasi hanya karena definisi/binding disahkan; blocker baru hilang setelah preview dan apply master selesai diimplementasikan dan diuji.
+Dalam mode pemilik yang sama, definisi master, binding tab, binding kolom referensi, dan deploy storage memakai validasi business key/schema, snapshot, versi master, normalisasi, referential checks, serta konfirmasi storage. Batch import yang bersih dapat langsung di-Apply oleh pemilik setelah preview token/hash terbaru diperiksa. Konflik sumber memerlukan konfirmasi dan alasan; duplicate/key conflict, pertanyaan terbuka, referensi ambigu, atau baris invalid tetap menghentikan apply. Sync incremental langsung untuk konfigurasi owner-managed aktif tidak meminta release approval kedua; akses sumber harus tetap aktif dan `FULL_REFRESH` tetap memakai batch review. Jalur batch master memakai pipeline apply bersama ini, tetapi belum membuat konfigurasi/master registry menjadi runtime ETL biasa; blocker `MASTER_RUNTIME_PENDING` pada konfigurasi ETL umum tetap perlu dihilangkan terpisah.
 
 Setelah sumber lolos pemeriksaan awal, pemilik data dapat memperbarui metadata akses tanpa meminta approver lagi pada workflow target. Backend tetap memeriksa bahwa domain/unit yang dipilih aktif dan merupakan assignment pemilik, membatasi fallback ke DISCOVER/READ/QUERY, serta mencatat perubahan. Untuk produk dari sumber bermetadata yang sudah direview, role tidak harus tercantum di `allowed_roles` bila evaluator memberi role tersebut aksi DISCOVER/READ/QUERY dan assignment domain serta unitnya cocok. EXPORT tetap tidak termasuk. Feature flag backend `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED` masih OFF secara default; migrasi metadata lama dan uji isolasi tenant/end-to-end tetap harus selesai sebelum flag boleh diaktifkan.
 
@@ -39,15 +39,7 @@ deploy-storage tersendiri. Label periode text seperti `w1` atau `january` perlu 
 grain, dan kalender bisnis; jangan menjanjikan konversi tanggal atau analisis overlap otomatis.
 Lihat [panduan perubahan sumber dan waktu](PANDUAN_REVIEW_ETL.md#perubahan-sumber-kolom-dan-periode-waktu).
 
-Artikel akses menjelaskan pilihan beberapa unit secara eksplisit dan penunjukan approver
-per sumber untuk review metadata, konfigurasi ETL, dan batch import. Asisten harus
-menegaskan bahwa unit induk tidak otomatis membuka unit bawahan dan penunjukan approver
-tidak otomatis memberi akses membaca data.
-
-Artikel akses, alur awal, operasi ETL, dan pemecahan masalah menerangkan gate siap tayang: admin menunjuk pemeriksa IT dan
-approver bernama pada setiap unit terkait; satu keputusan IT serta satu keputusan dari
-setiap unit diperlukan pada revisi konfigurasi yang sama sebelum deploy. Asisten harus
-membedakan ini dari reviewer konfigurasi awal, approval batch import, dan assignment untuk membaca data. Jawaban tentang deploy yang tertahan perlu mengarahkan pengguna ke status **Persetujuan tayang**, serta menjelaskan bahwa perubahan revisi/snapshot/aturan atau penolakan memerlukan tindak lanjut sebelum mencoba lagi.
+Dalam workflow target, pemeriksaan manusia hanya dilakukan saat registrasi sumber untuk memeriksa inventory seluruh tab dan klasifikasinya. Sesudah itu pemilik/steward melakukan metadata, konfigurasi, preview, validasi, deploy, dan sync. Untuk flag OFF atau konfigurasi lama, UI dapat tetap menampilkan gate lama; bantu pengguna melihat status backend dan jangan menyuruh mereka menganggap review tersebut sudah dihapus.
 
 Contoh isian bisnis terdapat pada [Contoh pengisian aplikasi](CONTOH_ISIAN_APLIKASI.md) dan
 artikel `08` sampai `11` dalam `docs/knowledge`. Isinya mencakup taxonomy/term, atribut
@@ -58,9 +50,7 @@ registry yang sudah ada pada tenant pengguna.
 Panduan kontekstual pada halaman **Binding kolom referensi master** dan artikel knowledge
 `master-dan-taxonomy`/`contoh-isian-master-dan-analitik` menjelaskan cara memilih header sumber,
 master approved, serta field master unik (biasanya business key). Jawaban harus menegaskan bahwa
-UUID internal dibuat/dipakai sistem, nilai tidak ditemukan atau ambigu diselesaikan pada review
-batch, binding hanya mencari satu field master, dan perubahan binding memerlukan approval serta
-batch import baru.
+UUID internal dibuat/dipakai sistem, nilai tidak ditemukan atau ambigu harus diselesaikan sebelum apply. Pada owner workflow, binding yang tervalidasi tidak memerlukan approver kedua; perubahan tetap memerlukan preview/validasi terbaru dan audit.
 
 ## API
 

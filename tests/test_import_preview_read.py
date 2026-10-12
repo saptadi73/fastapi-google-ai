@@ -7,6 +7,7 @@ from test_import_reviews import create, non_master
 from test_integration import context as context
 from test_integration import request
 
+from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.models.configuration import Configuration
 from app.models.import_review import ImportReview, ImportReviewRow
@@ -105,6 +106,26 @@ async def test_reviewer_reads_same_hash_masked_without_mutation_then_approves(co
         values = (await session.execute(select(table).order_by(table.c.transaction_id))).mappings().all()
         assert len(values) == 3 and values[0]["net_amount"] == 100
         assert values[0]["transaction_date"].isoformat() == "2026-09-01"
+
+
+async def test_owner_applies_clean_preview_without_second_approver(context, config_data, monkeypatch):
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    review, table = await staged(context, config_data)
+    path = f"/import-reviews/{review['id']}"
+    preview = (await request(context, "POST", path + "/preview", data={"revision_no": 1}))["data"]
+
+    result = (await request(context, "POST", path + "/apply", data={
+        "revision_no": 1,
+        "preview_token": preview["preview_token"],
+        "preview_hash": preview["preview_hash"],
+    }))["data"]
+
+    assert result["status"] == "SUCCEEDED"
+    assert result["review"]["checkpoint"]["approval_mode"] == "OWNER_VALIDATED"
+    assert result["review"]["checkpoint"]["approved_by"]
+    async with SessionFactory() as session:
+        values = (await session.execute(select(table).order_by(table.c.transaction_id))).mappings().all()
+        assert len(values) == 3
 
 
 @pytest.mark.parametrize("change", ["target", "staging", "dependency", "revision"])
