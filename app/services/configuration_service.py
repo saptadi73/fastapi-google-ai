@@ -58,7 +58,8 @@ class ConfigurationService:
             REVIEW_SECTIONS
         ):
             raise AppError("REVIEW_INCOMPLETE", "Periksa seluruh kolom dan bagian konfigurasi.")
-        config.status = "NEEDS_REVIEW"
+        owner_managed = get_settings().etl_owner_workflow_enabled
+        config.status = "APPROVED" if owner_managed else "NEEDS_REVIEW"
         config.revision_no += 1
         config.review_state = {
             "answers": (config.review_state or {}).get("answers", {}),
@@ -72,8 +73,16 @@ class ConfigurationService:
             "classification_revision": sheet.classification_revision,
             "dataset_kind": sheet.dataset_kind,
             "schema_migration": validation["deployment_plan"]["migration"],
+            "owner_managed": owner_managed,
         }
-        audit(self.session, self.user, "configuration.review_requested", config.id)
+        if owner_managed:
+            config.approved_by = self.user.id
+            config.approved_at = now()
+            await self.artifacts.create(config)
+            audit(self.session, self.user, "configuration.owner_validated", config.id,
+                  revision=config.revision_no, snapshot_hash=validation["snapshot_hash"])
+        else:
+            audit(self.session, self.user, "configuration.review_requested", config.id)
         return config
 
     async def queue_deployment(self, config_id, rollback=False):
@@ -82,7 +91,8 @@ class ConfigurationService:
         if config.status != expected:
             raise AppError("APPROVAL_REQUIRED", f"Konfigurasi harus berstatus {expected}.", 409)
         source = await self.repo.get(DataSource, config.source_id)
-        require_release_ready(config, source)
+        if not (get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")):
+            require_release_ready(config, source)
         sheet = await self.repo.get(SourceSheet, config.source_sheet_id)
         self.require_classification_evidence(config, sheet)
         return await enqueue(
@@ -333,7 +343,8 @@ class ConfigurationService:
                 "APPROVAL_REQUIRED", "Konfigurasi belum disetujui atau tidak dapat diaktifkan.", 409
             )
         source = await self.repo.get(DataSource, config.source_id, lock=True)
-        require_release_ready(config, source)
+        if not (get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")):
+            require_release_ready(config, source)
         sheet = await ClassificationService(self.session, self.user).locked_sheet(config.source_sheet_id)
         self.require_classification_evidence(config, sheet)
         artifact = await self.session.scalar(

@@ -4,6 +4,7 @@ from fastapi import Depends, Query
 from fastapi.responses import Response
 
 from app.api.dependencies import CurrentUser, Session, require_roles
+from app.core.config import get_settings
 from app.core.exceptions import AppError, success
 from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
@@ -34,6 +35,13 @@ router = APIRouter(
 )
 edit = [Depends(require_roles(*EDIT_ROLES))]
 review = [Depends(require_roles(*REVIEW_ROLES))]
+
+
+async def deploy_actor(user: CurrentUser):
+    permitted = (*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
+    if user.role not in permitted:
+        raise AppError("FORBIDDEN", "Role tidak memiliki izin untuk deploy.", 403)
+    return user
 
 
 @router.get("/{config_id}/access-review", dependencies=review)
@@ -199,8 +207,8 @@ async def clone(config_id: UUID, session: Session, user: CurrentUser):
     return success(record(await ConfigurationService(session, user).clone(config_id)))
 
 
-@router.post("/{config_id}/deploy", status_code=202, dependencies=review)
-@router.post("/{config_id}/activate", status_code=202, dependencies=review)
+@router.post("/{config_id}/deploy", status_code=202, dependencies=[Depends(deploy_actor)])
+@router.post("/{config_id}/activate", status_code=202, dependencies=[Depends(deploy_actor)])
 async def deploy(config_id: UUID, session: Session, user: CurrentUser):
     return success(await ConfigurationService(session, user).queue_deployment(config_id))
 

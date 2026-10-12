@@ -96,7 +96,9 @@ def configuration_context(monkeypatch):
     service.artifacts.create = AsyncMock()
     monkeypatch.setattr(configuration_service, "require_source_approver", AsyncMock())
     monkeypatch.setattr(configuration_service, "ClassificationService", Mock(return_value=SimpleNamespace(locked_sheet=AsyncMock())))
-    monkeypatch.setattr(configuration_service, "get_settings", lambda: SimpleNamespace(require_separate_approver=False))
+    monkeypatch.setattr(configuration_service, "get_settings", lambda: SimpleNamespace(
+        require_separate_approver=False, etl_owner_workflow_enabled=False,
+    ))
     monkeypatch.setattr(configuration_service, "audit", Mock())
 
     async def review(*args, **kwargs):
@@ -110,6 +112,66 @@ def configuration_context(monkeypatch):
     access = SimpleNamespace(review_access_metadata=AsyncMock(side_effect=review), activate_source_access=AsyncMock(side_effect=activate))
     monkeypatch.setattr(source_service, "SourceService", Mock(return_value=access))
     return service, config, source, access
+
+
+async def test_owner_workflow_self_validates_only_after_complete_review(monkeypatch):
+    actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
+    service = configuration_service.ConfigurationService(Mock(), actor)
+    config = SimpleNamespace(
+        id="config", source_id="source", source_sheet_id="sheet", status="AI_DRAFT",
+        revision_no=4, configuration_json={"columns": [{"target_column": "code"}]},
+        review_state={"answers": {"grain": "one row per code"}},
+    )
+    sheet = SimpleNamespace(classification_revision=3, classification_status="CONFIRMED", dataset_kind="NON_MASTER")
+    service.repo.get = AsyncMock(return_value=config)
+    service.artifacts.create = AsyncMock()
+    service.validate = AsyncMock(return_value={
+        "valid": True, "snapshot_hash": "snapshot-hash", "snapshot_id": "snapshot-id",
+        "deployment_plan": {"migration": {"fingerprint": "schema", "operations": [{"action": "CREATE_TABLE"}]}},
+    })
+    monkeypatch.setattr(configuration_service, "get_settings", lambda: SimpleNamespace(etl_owner_workflow_enabled=True))
+    monkeypatch.setattr(configuration_service, "ClassificationService", Mock(return_value=SimpleNamespace(
+        locked_sheet=AsyncMock(return_value=sheet),
+    )))
+    audit = Mock()
+    monkeypatch.setattr(configuration_service, "audit", audit)
+    submission = SimpleNamespace(
+        revision_no=4, snapshot_hash="snapshot-hash", reviewed_columns=["code"],
+        reviewed_sections=configuration_service.REVIEW_SECTIONS, reviewed_schema_fingerprint=None,
+    )
+
+    result = await service.submit_review("config", submission)
+
+    assert result.status == "APPROVED"
+    assert result.approved_by == "owner"
+    assert result.review_state["owner_managed"] is True
+    assert result.review_state["snapshot_id"] == "snapshot-id"
+    audit.assert_called_once()
+    assert audit.call_args.args[2] == "configuration.owner_validated"
+    service.artifacts.create.assert_awaited_once_with(config)
+
+
+async def test_owner_workflow_does_not_skip_invalid_config_or_incomplete_checklist(monkeypatch):
+    actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
+    service = configuration_service.ConfigurationService(Mock(), actor)
+    config = SimpleNamespace(
+        id="config", source_id="source", source_sheet_id="sheet", status="AI_DRAFT",
+        revision_no=4, configuration_json={"columns": [{"target_column": "code"}]}, review_state={},
+    )
+    service.repo.get = AsyncMock(return_value=config)
+    service.validate = AsyncMock(return_value={
+        "valid": False, "snapshot_hash": "snapshot-hash", "deployment_plan": {"migration": {"operations": []}},
+    })
+    monkeypatch.setattr(configuration_service, "get_settings", lambda: SimpleNamespace(etl_owner_workflow_enabled=True))
+    monkeypatch.setattr(configuration_service, "ClassificationService", Mock(return_value=SimpleNamespace(
+        locked_sheet=AsyncMock(return_value=SimpleNamespace(
+            classification_status="CONFIRMED", classification_revision=3, dataset_kind="NON_MASTER",
+        )),
+    )))
+    with pytest.raises(AppError) as error:
+        await service.submit_review("config", SimpleNamespace(revision_no=4, snapshot_hash="snapshot-hash"))
+    assert error.value.code == "CONFIGURATION_INVALID"
+    assert config.status == "AI_DRAFT"
 
 
 async def test_combined_approval_uses_configuration_reviewer_and_explicit_policy(monkeypatch):

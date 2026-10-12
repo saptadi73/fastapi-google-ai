@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     artifact_storage_path: Path = ROOT / "storage/configs"
     require_separate_approver: bool = True
     unit_domain_default_access_enabled: bool = False
+    etl_owner_workflow_enabled: bool = False
     test_database_url: SecretStr = SecretStr("")
 
     @model_validator(mode="after")

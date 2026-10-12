@@ -3,6 +3,7 @@
 import asyncio
 from types import SimpleNamespace
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
@@ -76,6 +77,7 @@ class ConfigurationReviewService(ConfigurationService):
             "profile": profile.profile_json if profile else None,
             "validation": validation,
             "capabilities": CAPABILITIES,
+            "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
         }
 
     async def preview(self, config_id, data):
