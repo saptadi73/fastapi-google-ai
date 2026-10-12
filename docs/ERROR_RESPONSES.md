@@ -76,4 +76,15 @@ Cari kode pada pesan error atau monitor job; catat ID job, sumber/tab dan versi 
 | `DATABASE_UNAVAILABLE` | Operasi database gagal; respons umum tidak menjelaskan penyebab rinci. | Catat request ID/job ID. Admin memeriksa log dan health database untuk membedakan koneksi, izin, constraint atau kegagalan query; retry setelah diperbaiki. |
 | `INTERNAL_ERROR` | Aplikasi mengalami kegagalan yang tidak tertangani secara spesifik. | Catat request ID, halaman, waktu dan tindakan terakhir; admin memeriksa log API/worker. Periksa status job sebelum mengulangi tindakan agar tidak membuat proses ganda. |
 
+## Formula analitik dan aturan action plan
+
+| Kode / respons | Kemungkinan penyebab | Tindakan yang dilakukan |
+| --- | --- | --- |
+| `ANALYTICS_RULES_INVALID` | Header, kode formula atau metrik numerik tidak sesuai kontrak. | Sesuaikan tab kontrol dengan template dan kode metrik produk aktif; impor ulang. |
+| `ANALYTICS_PERIOD_REQUIRED` | Query aturan tidak memiliki periode between yang valid. | Pilih dimension waktu dan batas awal/akhir eksplisit, lalu buat draft baru. |
+| `ANALYTICS_SELF_APPROVAL` | Pembuat mencoba menyetujui aturan sendiri. | Reviewer konfigurasi sumber yang berbeda memeriksa preview dan memutuskan. |
+| `ANALYTICS_APPROVAL_REQUIRED` | Aturan masih DRAFT atau REJECTED. | Preview lalu minta approval; aturan ditolak perlu dibuat ulang. |
+| `ANALYTICS_RULES_STALE` | Tab kontrol atau semantic berubah, sumber paused/unlinked, hash/status tidak cocok. | Muat ulang status, aktifkan sumber yang sah bila perlu; impor/buat draft dan review ulang. |
+| `ANALYTICS_RESULT_TRUNCATED` | Hasil mencapai batas query/server sehingga dapat terpotong. | Persempit periode atau kelompok dimension; review draft baru sebelum evaluasi. |
+
 Di aplikasi, buka **Bantuan > Tabel error response**, atau **Panduan lengkap > Tabel error response**. Cari kode, penyebab atau tindakan. Tombol **Temukan tab** di Workspace menjalankan discovery ulang; tunggu SUCCEEDED sebelum **Profiling ulang**. Tombol ini memerlukan SOURCE_OWNER, DATA_STEWARD atau PLATFORM_ADMIN.

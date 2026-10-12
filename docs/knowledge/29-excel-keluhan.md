@@ -22,6 +22,7 @@ Tanggal: date + parse_date_id + TEXT + %Y-%m-%d. Timestamp: timestamptz. Key con
 Rasio/rekap utama memakai formula tertaut dan cache. Setelah raw/target diubah atau ditambah, recalculasi di Excel/Sheets dan validasi penyebut, cakupan dan key sebelum memakainya. CSV berisi nilai hasil, bukan formula.
 Waktu kejadian/pengukuran dan period_start/end berbeda dari collected_at/data_as_of_at. Jangan mengganti periode bisnis dengan tanggal sync.
 Action_Plan merujuk source_sheet/source_record_id, periode, baseline, owner dan tenggat. Cause_status UNVERIFIED: hipotesis perlu bukti. Followup_value kosong/NOT_EVALUATED bukan hasil 0.
-Action plan bukan engine penetapan tindakan otomatis. Verifikasi sampel/metode/causal evidence dan target dengan pemilik bisnis sebelum dijalankan.
+Formula_Analitik dan Aturan_Action_Plan Dikecualikan dari ETL. Backend menerima dua tab melalui POST /api/v1/analytics-rules/import-sheet: source_id, name, product_code dan query; contoh JSON tersedia dalam ZIP rules/. Preview, approval reviewer berbeda dengan expected_hash, lalu evaluate menghasilkan usulan PROPOSED dengan bukti angka. Lihat PANDUAN_ATURAN_ANALITIK.md.
+50% = 0.50 untuk RATIO. Formula memakai kode metrik dan + - * /, bukan =Excel atau SQL. Periode query wajib eksplisit. Formula NULL/penyebut nol memberikan blocker, bukan tindakan. Perubahan tab kontrol/semantic memerlukan draft dan review ulang. Verifikasi sampel, hipotesis dan target sebelum menjalankan tindakan bisnis.
 Batas interpretasi: Keluhan berulang bukan akar penyebab pasti. Pisahkan keluhan OPEN dari RESOLVED; jangan menghitung detail dan rekap bersama.
 Pertanyaan contoh: Berapa keluhan dan pelanggaran SLA per produk bulan Januari 2026? Bagaimana perubahan waktu respons antara Januari dan Februari?

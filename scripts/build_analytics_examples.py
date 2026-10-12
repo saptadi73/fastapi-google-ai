@@ -1327,6 +1327,108 @@ def sheet_collection(scenario):
     return [masters[name] for name in master_names] + facts
 
 
+def analytics_definition(scenario, sheets):
+    choices = {
+        "keluhan": (
+            "Keluhan_Data",
+            "sla_breach_ratio",
+            "m_response_breach_count_sum / m_complaint_count_sum",
+            "RATIO",
+            "gt",
+            "0.10",
+            "TEAM-CS",
+            "Verifikasi antrean dan shift; usulkan perbaikan SLA setelah bukti diperiksa.",
+        ),
+        "marketing": (
+            "Marketing_Data",
+            "cost_qualified_lead",
+            "m_spend_idr_sum / m_qualified_leads_count_sum",
+            "IDR_PER_LEAD",
+            "gt",
+            "150000",
+            "TEAM-MKT",
+            "Review biaya dan atribusi BTL sebelum mengusulkan penyesuaian campaign.",
+        ),
+        "kepuasan": (
+            "CSAT_Rekap",
+            "csat_ratio",
+            "m_satisfied_count_sum / m_valid_response_count_sum",
+            "RATIO",
+            "lt",
+            "0.50",
+            "TEAM-CS",
+            "Periksa sampel dan komentar; usulkan tindak lanjut kepuasan produk.",
+        ),
+        "competitiveness": (
+            "Competitive_Survey",
+            "competitive_score",
+            "m_weighted_score_avg",
+            "SCORE_1_5",
+            "lt",
+            "3.5",
+            "TEAM-MKT",
+            "Verifikasi keterbandingan survei dan bobot sebelum usulan peningkatan layanan.",
+        ),
+        "kpi": (
+            "KPI_Result",
+            "revenue_achievement",
+            "m_revenue_actual_value / m_revenue_target_value",
+            "RATIO",
+            "gt",
+            "0.50",
+            "TEAM-MKT",
+            "Capaian pendapatan di atas 50%: review pipeline untuk mengejar target penuh; bukan berarti target tercapai.",
+        ),
+    }
+    name, code, expression, unit, operator, threshold, team, action_text = choices[scenario["id"]]
+    spec = next(s for s in sheets if s.name == name)
+    config = spec.config(scenario["id"])
+    import ast
+
+    metrics = sorted({node.id for node in ast.walk(ast.parse(expression)) if isinstance(node, ast.Name)})
+    dimensions = ["product_code"]
+    filters = [dict(field="period_start", operator="between", value=["2026-01-01", "2026-01-31"])]
+    if scenario["id"] == "marketing":
+        dimensions += ["channel_code", "area_code", "attribution_model"]
+        filters.append(dict(field="marketing_type", operator="eq", value="BTL"))
+    elif scenario["id"] == "kepuasan":
+        dimensions += ["area_code", "survey_version"]
+    elif scenario["id"] == "competitiveness":
+        dimensions += ["competitor_code", "area_code", "survey_version"]
+    elif scenario["id"] == "kpi":
+        dimensions = ["plan_id", "unit_code", "indicator_code"]
+        filters.append(dict(field="indicator_code", operator="eq", value="REVENUE"))
+    definition = dict(
+        name="CONTOH FIKTIF " + scenario["title"],
+        product_code=config["semantic"]["code"],
+        query=dict(metrics=metrics, dimensions=dimensions, filters=filters, limit=1000),
+        formulas=[
+            dict(
+                formula_code=code,
+                expression=expression,
+                output_unit=unit,
+                description="Ambang dan formula contoh; verifikasi unit, metode, grain dan target dengan pemilik bisnis.",
+            )
+        ],
+        rules=[
+            dict(
+                rule_code="review_" + code,
+                formula_code=code,
+                operator=operator,
+                threshold=threshold,
+                threshold_upper=None,
+                action_description=action_text,
+                owner_team_code=team,
+                priority="MEDIUM",
+                due_days=7,
+            )
+        ],
+    )
+    from app.schemas.analytics_rules import AnalyticsRuleDefinition
+
+    return AnalyticsRuleDefinition.model_validate(definition).model_dump(mode="json")
+
+
 def deterministic_zip(entries):
     stream = io.BytesIO()
     # Stored entries avoid zlib-version differences between Windows and Linux builds.
@@ -1373,7 +1475,7 @@ def workbook_bytes(scenario, sheets):
         ),
         (
             "Klasifikasi",
-            "Master_* = MASTER. Tab data/rekap/Action_Plan = NON_MASTER. BACA_DULU, Kamus_Data, Rencana_ETL = petunjuk, Dikecualikan dari ETL.",
+            "Master_* = MASTER. Tab data/rekap/Action_Plan = NON_MASTER. BACA_DULU, Kamus_Data, Rencana_ETL, Formula_Analitik, Aturan_Action_Plan = Dikecualikan dari ETL. Dua tab kontrol diimpor melalui API analytics-rules.",
         ),
         (
             "Action plan",
@@ -1389,6 +1491,43 @@ def workbook_bytes(scenario, sheets):
     dictionary.append(["sheet", "column", "type", "nullable", "business_key", "meaning", "example"])
     plan = wb.create_sheet("Rencana_ETL")
     plan.append(["sheet", "classification", "grain", "business_key", "load", "metrics", "notes"])
+    definition = analytics_definition(scenario, sheets)
+    from app.services.analytics_rules_service import FORMULA_HEADERS, RULE_HEADERS
+
+    for tab, headers, rows in (
+        ("Formula_Analitik", FORMULA_HEADERS, definition["formulas"]),
+        ("Aturan_Action_Plan", RULE_HEADERS, definition["rules"]),
+    ):
+        control = wb.create_sheet(tab)
+        control.append(headers)
+        for row in rows:
+            control.append([row.get(header) for header in headers])
+        control.sheet_properties.tabColor = "D97706"
+        plan.append(
+            [
+                tab,
+                "EXCLUDED",
+                "Satu baris per kode kontrol",
+                headers[0],
+                "API analytics-rules",
+                "Review terpisah sebelum evaluate",
+                "Tidak di-load sebagai tabel bisnis; jangan ubah header.",
+            ]
+        )
+    guide.append(
+        [
+            "Formula dan aturan",
+            "Angka persentase memakai 0..1: 50% = 0.50. Formula memakai kode metrik aplikasi, tanpa =Excel, SQL, script atau fungsi bebas. Formula dependency harus diletakkan setelah formula acuannya.",
+        ]
+    )
+    guide.append(
+        [
+            "Impor aturan API",
+            "POST /api/v1/analytics-rules/import-sheet memakai source_id, name, product_code dan query. Lihat rules/*.json dalam ZIP atau docs/PANDUAN_ATURAN_ANALITIK.md. Preview, reviewer berbeda menyetujui expected_hash, lalu evaluate.",
+        ]
+    )
+    guide.append(["Produk aturan", definition["product_code"]])
+    guide.append(["Query aturan (JSON)", json.dumps(definition["query"], ensure_ascii=False)])
     formula_cache = defaultdict(dict)
     for master in sheets:
         if master.role == "MASTER":
@@ -1585,6 +1724,10 @@ def build_documents():
         sheets = sheet_collection(scenario)
         data = workbook_bytes(scenario, sheets)
         result[OUTPUT / scenario["filename"]] = data
+        definition = analytics_definition(scenario, sheets)
+        result[OUTPUT / "rules" / f"{scenario['id']}.json"] = (
+            json.dumps(definition, ensure_ascii=False, indent=2) + "\n"
+        ).encode()
         for spec in sheets:
             result[OUTPUT / "csv" / scenario["id"] / f"{spec.name}.csv"] = csv_bytes(spec)
             if spec.role == "NON_MASTER":
@@ -1630,7 +1773,8 @@ def build_documents():
             "Rasio/rekap utama memakai formula tertaut dan cache. Setelah raw/target diubah atau ditambah, recalculasi di Excel/Sheets dan validasi penyebut, cakupan dan key sebelum memakainya. CSV berisi nilai hasil, bukan formula.",
             "Waktu kejadian/pengukuran dan period_start/end berbeda dari collected_at/data_as_of_at. Jangan mengganti periode bisnis dengan tanggal sync.",
             "Action_Plan merujuk source_sheet/source_record_id, periode, baseline, owner dan tenggat. Cause_status UNVERIFIED: hipotesis perlu bukti. Followup_value kosong/NOT_EVALUATED bukan hasil 0.",
-            "Action plan bukan engine penetapan tindakan otomatis. Verifikasi sampel/metode/causal evidence dan target dengan pemilik bisnis sebelum dijalankan.",
+            "Formula_Analitik dan Aturan_Action_Plan Dikecualikan dari ETL. Backend menerima dua tab melalui POST /api/v1/analytics-rules/import-sheet: source_id, name, product_code dan query; contoh JSON tersedia dalam ZIP rules/. Preview, approval reviewer berbeda dengan expected_hash, lalu evaluate menghasilkan usulan PROPOSED dengan bukti angka. Lihat PANDUAN_ATURAN_ANALITIK.md.",
+            "50% = 0.50 untuk RATIO. Formula memakai kode metrik dan + - * /, bukan =Excel atau SQL. Periode query wajib eksplisit. Formula NULL/penyebut nol memberikan blocker, bukan tindakan. Perubahan tab kontrol/semantic memerlukan draft dan review ulang. Verifikasi sampel, hipotesis dan target sebelum menjalankan tindakan bisnis.",
             "Batas interpretasi: " + scenario["caution"],
             "Pertanyaan contoh: " + " ".join(scenario["questions"]),
         ]
@@ -1672,6 +1816,8 @@ def build_documents():
         "",
         "## Prinsip evaluasi",
         "",
+        "Formula_Analitik dan Aturan_Action_Plan adalah tab kontrol, Dikecualikan dari ETL. Impor melalui API analytics-rules/import-sheet setelah produk datanya aktif. JSON rules/ di ZIP memuat produk, metrik, dimension dan periode contoh. Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) untuk preview, approval dan evaluate. Evaluasi memberi usulan PROPOSED dengan bukti; tindakan bisnis tetap diverifikasi manusia.",
+        "",
         "Jangan menjumlahkan detail dan rekap bersama, reach antar-channel, persen, nilai KPI berbeda satuan atau beberapa revisi dari record yang sama. Jangan AVG rasio tanpa bobot penyebut yang benar. Skor kepuasan tidak otomatis menjadi NPS; harga kemasan berbeda harus dinormalisasi. Sampel kecil/opt-in tidak membuktikan representasi populasi atau efek kausal tindakan.",
         "",
         "Data periodik memuat batas awal/akhir; event/survei memuat waktu bisnis; collected_at/data_as_of_at memberikan konteks pengambilan/kondisi data. Sel kosong berarti belum terukur/tidak berlaku, bukan nol.",
@@ -1682,6 +1828,9 @@ def build_documents():
     ]
     result[ROOT / "docs/CONTOH_DATA_ANALITIK.md"] = ("\n".join(doc) + "\n").encode()
     result[OUTPUT / "BACA_DULU.md"] = result[ROOT / "docs/CONTOH_DATA_ANALITIK.md"]
+    result[OUTPUT / "PANDUAN_ATURAN_ANALITIK.md"] = (
+        (ROOT / "docs/PANDUAN_ATURAN_ANALITIK.md").read_text(encoding="utf-8").encode()
+    )
     result[ROOT / "docs/analytics-examples.json"] = (
         json.dumps(
             dict(examples=catalog, bundle_url="/examples/analytics/Paket_5_Contoh_Analitik.zip"),
@@ -1706,6 +1855,9 @@ def main():
     args = parser.parse_args()
     outputs = build_documents()
     if args.frontend_root:
+        outputs[args.frontend_root / "docs/PANDUAN_ATURAN_ANALITIK.md"] = outputs[
+            OUTPUT / "PANDUAN_ATURAN_ANALITIK.md"
+        ]
         outputs[args.frontend_root / "docs/CONTOH_DATA_ANALITIK.md"] = outputs[
             ROOT / "docs/CONTOH_DATA_ANALITIK.md"
         ]
@@ -1713,7 +1865,7 @@ def main():
             ROOT / "docs/analytics-examples.json"
         ]
         for path, content in list(outputs.items()):
-            if path.parent == OUTPUT and path.suffix in (".xlsx", ".zip"):
+            if path.parent == OUTPUT and path.suffix in (".xlsx", ".zip", ".md"):
                 outputs[args.frontend_root / "public/examples/analytics" / path.name] = content
     for path, content in outputs.items():
         if args.check:

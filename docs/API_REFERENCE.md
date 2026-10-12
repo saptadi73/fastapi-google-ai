@@ -1948,3 +1948,16 @@ Sync manual pada konfigurasi NON_MASTER aktif yang telah disetujui dapat memerik
 ### Tabel error response
 
 Lihat [Error response: kemungkinan penyebab dan tindakan](ERROR_RESPONSES.md). Tabel mencakup error sumber, review/deploy schema, validasi/import, akses katalog serta layanan database/AI. Di aplikasi: **Bantuan > Tabel error response** atau **Panduan lengkap > Tabel error response**; gunakan pencarian kode. Alasan keputusan akses dan blocker batch dibedakan dari error HTTP.
+
+### Formula analitik dan aturan action plan
+
+Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md). Draft immutable menyimpan definition, semantic_hash, sheet_hash (impor Sheet), review_hash, created_by, status, approved_by dan decision_reason. Reviewer konfigurasi sumber berbeda pembuat menyetujui hash yang diperiksa. Akses query/kolom/row scope selalu diperiksa saat preview/evaluate; metadata query dan hasil di-audit. Angka Decimal dikirim sebagai string. Evaluasi mengembalikan usulan PROPOSED dan evidence_metrics, bukan menjalankan tindakan bisnis. Wizard ETL/chat AI belum menjalankan workflow aturan otomatis.
+
+| Method | Endpoint | Perilaku |
+| --- | --- | --- |
+| POST | `/analytics-rules` | Membuat draft dari AnalyticsRuleDefinition JSON; EDIT_ROLES dan akses produk diperlukan. |
+| POST | `/analytics-rules/import-sheet` | Membaca Formula_Analitik dan Aturan_Action_Plan sumber terdaftar yang sama dengan produk; membuat draft, bukan approval. |
+| GET | `/analytics-rules/{bundle_id}` | Membaca definition/status/hash draft dengan akses query yang sesuai. |
+| POST | `/analytics-rules/{bundle_id}/preview` | EDIT_ROLES/REVIEW_ROLES; hasil PREVIEW sebelum approval, formula/blocker/usulan dapat diperiksa. |
+| POST | `/analytics-rules/{bundle_id}/decision` | Reviewer konfigurasi sumber berbeda pembuat; expected_hash, APPROVE/REJECT/REVOKE, reason; REVOKE menghentikan aturan APPROVED. |
+| POST | `/analytics-rules/{bundle_id}/evaluate` | Hanya aturan APPROVED dan hash semantic/tab kontrol saat ini; hasil berbasis query yang direview. |

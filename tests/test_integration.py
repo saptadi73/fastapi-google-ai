@@ -40,6 +40,87 @@ from app.workers.runner import run_pending, schedule_sources
 pytestmark = pytest.mark.integration
 
 
+async def test_analytics_rules_real_api_review_query_scope_and_stale_contract(context, monkeypatch):
+    from app.models.analytics_rules import AnalyticsRuleBundle
+
+    async with SessionFactory() as session, session.begin():
+        users = {u.username: u for u in (await session.scalars(
+            select(User).where(User.tenant_id == context.tenant_id))).all()}
+        users["viewer"].row_scope = {"SALES": {"unit": ["U1"]}}
+        source = DataSource(tenant_id=context.tenant_id, source_code="rules_test", name="Rules test",
+                            spreadsheet_id="synthetic_rules_test", owner_user_id=users["admin"].id,
+                            approval_assignees={"configuration": [users["admin"].id, users["approver"].id]})
+        session.add(source)
+        await session.flush()
+        sheet = SourceSheet(tenant_id=context.tenant_id, source_id=source.id, sheet_id=1, sheet_name="Sales")
+        session.add(sheet)
+        await session.flush()
+        view_name = "v_" + sheet.id.replace("-", "")
+        product = DataProduct(tenant_id=context.tenant_id, source_sheet_id=sheet.id, code="SALES", name="Sales",
+                              view_name=view_name, allowed_roles=["PLATFORM_ADMIN", "TECHNICAL_APPROVER", "VIEWER"],
+                              columns=[{"target_column": "period", "target_type": "date"},
+                                       {"target_column": "unit", "target_type": "text"},
+                                       {"target_column": "amount", "target_type": "numeric"},
+                                       {"target_column": "target", "target_type": "numeric"}],
+                              dimensions=["period", "unit"],
+                              metrics=[{"code": "actual", "column": "amount", "aggregation": "sum"},
+                                       {"code": "target", "column": "target", "aggregation": "sum"}])
+        session.add(product)
+        # These SQL literals contain only fixture-generated UUIDs and synthetic data.
+        await session.execute(text(f"CREATE VIEW semantic.{view_name} AS SELECT '{context.tenant_id}'::uuid AS _tenant_id, "
+                                   "'2026-01-01'::date AS period, 'U1'::text AS unit, "
+                                   "60.000000000000000001::numeric AS amount, 100::numeric AS target "
+                                   f"UNION ALL SELECT '{context.tenant_id}'::uuid, '2026-01-01'::date, 'U2', 40, 100"))
+    from tests.test_analytics_rules import definition
+
+    payload = definition().model_dump(mode="json")
+    await request(context, "POST", "/analytics-rules", who="viewer", expected=403, data=payload)
+    created = (await request(context, "POST", "/analytics-rules", data=payload))["data"]
+    bundle_id = created["id"]
+    await request(context, "GET", f"/analytics-rules/{bundle_id}", who="outsider", expected=404)
+    await request(context, "POST", f"/analytics-rules/{bundle_id}/evaluate", expected=409)
+    preview = (await request(context, "POST", f"/analytics-rules/{bundle_id}/preview"))["data"]
+    assert len(preview["rows"]) == 2 and preview["mode"] == "PREVIEW"
+    decision = {"expected_hash": created["review_hash"], "decision": "APPROVE", "reason": "Verified synthetic evidence"}
+    await request(context, "POST", f"/analytics-rules/{bundle_id}/decision", expected=403, data=decision)
+    await request(context, "POST", f"/analytics-rules/{bundle_id}/decision", who="approver", data=decision)
+    result = (await request(context, "POST", f"/analytics-rules/{bundle_id}/evaluate", who="viewer"))["data"]
+    assert len(result["rows"]) == 1 and result["rows"][0]["dimensions"] == {"unit": "U1"}
+    assert result["rows"][0]["evidence_metrics"]["actual"] == "60.000000000000000001"
+    assert result["rows"][0]["action_plans"][0]["observed_value"] == "0.60000000000000000001"
+    from app.services.analytics_rules_service import FORMULA_HEADERS, RULE_HEADERS
+
+    tables = [[headers, *[[item.get(field) for field in headers] for item in payload[key]]]
+              for headers, key in ((FORMULA_HEADERS, "formulas"), (RULE_HEADERS, "rules"))]
+
+    async def controls_metadata(self, spreadsheet_id):
+        return {"sheets": [{"properties": {"title": name, "sheetType": "GRID", "gridProperties": {"columnCount": 26}}}
+                            for name in ("Formula_Analitik", "Aturan_Action_Plan")]}
+
+    async def controls_read(self, spreadsheet_id, sheets):
+        assert [s.range_a1 for s in sheets] == ["A:Z", "A:Z"]
+        return [list(map(list, table)) for table in tables]
+
+    monkeypatch.setattr(GoogleSheetsService, "metadata", controls_metadata)
+    monkeypatch.setattr(GoogleSheetsService, "read_sheets", controls_read)
+    sheet_request = {key: payload[key] for key in ("name", "product_code", "query")}
+    sheet_request["source_id"] = source.id
+    imported = (await request(context, "POST", "/analytics-rules/import-sheet", data=sheet_request))["data"]
+    assert imported["sheet_hash"] and imported["status"] == "DRAFT"
+    decision["expected_hash"] = imported["review_hash"]
+    await request(context, "POST", f"/analytics-rules/{imported['id']}/decision", who="approver", data=decision)
+    await request(context, "POST", f"/analytics-rules/{imported['id']}/evaluate", who="viewer")
+    tables[1][1][3] = "0.75"
+    changed = await request(context, "POST", f"/analytics-rules/{imported['id']}/evaluate", who="viewer", expected=409)
+    assert changed["errors"][0]["code"] == "ANALYTICS_RULES_STALE"
+    async with SessionFactory() as session, session.begin():
+        stored = await session.get(AnalyticsRuleBundle, bundle_id)
+        assert stored.approved_by == users["approver"].id
+        product = await session.get(DataProduct, stored.product_id)
+        product.version += 1
+    await request(context, "POST", f"/analytics-rules/{bundle_id}/evaluate", who="viewer", expected=409)
+
+
 async def test_connection_uses_dedicated_database():
     expected = make_url(get_settings().test_database_url.get_secret_value()).database
     async with SessionFactory() as session:

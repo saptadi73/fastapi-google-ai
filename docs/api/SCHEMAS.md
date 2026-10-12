@@ -26,6 +26,46 @@ Body: —.
 
 Body: [PasswordChange](#passwordchange).
 
+### POST /api/v1/analytics-rules
+
+Body: [AnalyticsRuleDefinition](#analyticsruledefinition).
+
+### POST /api/v1/analytics-rules/import-sheet
+
+Body: [AnalyticsRulesImport](#analyticsrulesimport).
+
+### GET /api/v1/analytics-rules/{bundle_id}
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `bundle_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/analytics-rules/{bundle_id}/decision
+
+Body: [AnalyticsRulesDecision](#analyticsrulesdecision).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `bundle_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/analytics-rules/{bundle_id}/preview
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `bundle_id` | path | Ya | `string (uuid)` {} |
+
+### POST /api/v1/analytics-rules/{bundle_id}/evaluate
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `bundle_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/users
 
 Body: [UserCreate](#usercreate).
@@ -2092,6 +2132,160 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 {
   "revision": 1,
   "note": "Kebutuhan akses tidak lagi berlaku"
+}
+```
+
+### ActionPlanRule
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `rule_code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `formula_code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `operator` | Ya | `enum ["gt","gte","lt","lte","eq","between"]` | — | — |
+| `threshold` | Ya | `number / string` | — | — |
+| `threshold_upper` | Tidak | `number / string / null` | — | — |
+| `action_description` | Ya | `string` | — | {"maxLength":1000,"minLength":1} |
+| `owner_team_code` | Ya | `string` | — | {"maxLength":63,"minLength":1} |
+| `priority` | Tidak | `enum ["LOW","MEDIUM","HIGH"]` | "MEDIUM" | — |
+| `due_days` | Tidak | `integer` | 7 | {"maximum":365.0,"minimum":1.0} |
+
+### AnalyticsFormula
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `formula_code` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `expression` | Ya | `string` | — | {"maxLength":500,"minLength":1} |
+| `output_unit` | Ya | `string` | — | {"maxLength":40,"minLength":1} |
+| `description` | Tidak | `string` | "" | {"maxLength":500} |
+
+### AnalyticsRuleDefinition
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `name` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `product_code` | Ya | `string` | — | {"pattern":"^[A-Za-z][A-Za-z0-9_]{0,62}$"} |
+| `query` | Ya | `QueryPlan` | — | — |
+| `formulas` | Ya | `array<AnalyticsFormula>` | — | {"maxItems":20,"minItems":1} |
+| `rules` | Ya | `array<ActionPlanRule>` | — | {"maxItems":50,"minItems":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "name": "CONTOH FIKTIF Data kepuasan pelanggan berbasis produk",
+  "product_code": "demo_kepuasan_csat_rekap",
+  "query": {
+    "join_relationships": [],
+    "metrics": [
+      "m_satisfied_count_sum",
+      "m_valid_response_count_sum"
+    ],
+    "dimensions": [
+      "product_code",
+      "area_code",
+      "survey_version"
+    ],
+    "filters": [
+      {
+        "field": "period_start",
+        "operator": "between",
+        "value": [
+          "2026-01-01",
+          "2026-01-31"
+        ]
+      }
+    ],
+    "sort": [],
+    "time_grain": "none",
+    "limit": 1000,
+    "offset": 0,
+    "visualization": null
+  },
+  "formulas": [
+    {
+      "formula_code": "csat_ratio",
+      "expression": "m_satisfied_count_sum / m_valid_response_count_sum",
+      "output_unit": "RATIO",
+      "description": "Ambang dan formula contoh; verifikasi unit, metode, grain dan target dengan pemilik bisnis."
+    }
+  ],
+  "rules": [
+    {
+      "rule_code": "review_csat_ratio",
+      "formula_code": "csat_ratio",
+      "operator": "lt",
+      "threshold": "0.50",
+      "threshold_upper": null,
+      "action_description": "Periksa sampel dan komentar; usulkan tindak lanjut kepuasan produk.",
+      "owner_team_code": "TEAM-CS",
+      "priority": "MEDIUM",
+      "due_days": 7
+    }
+  ]
+}
+```
+
+### AnalyticsRulesDecision
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `expected_hash` | Ya | `string` | — | {"pattern":"^[a-f0-9]{64}$"} |
+| `decision` | Ya | `enum ["APPROVE","REJECT","REVOKE"]` | — | — |
+| `reason` | Ya | `string` | — | {"maxLength":1000,"minLength":1} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "expected_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "decision": "APPROVE",
+  "reason": "Periode, formula dan aturan sudah diperiksa reviewer."
+}
+```
+
+### AnalyticsRulesImport
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `source_id` | Ya | `string (uuid)` | — | — |
+| `name` | Ya | `string` | — | {"maxLength":200,"minLength":1} |
+| `product_code` | Ya | `string` | — | {"pattern":"^[A-Za-z][A-Za-z0-9_]{0,62}$"} |
+| `query` | Ya | `QueryPlan` | — | — |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "name": "CONTOH FIKTIF Data kepuasan pelanggan berbasis produk",
+  "product_code": "demo_kepuasan_csat_rekap",
+  "query": {
+    "join_relationships": [],
+    "metrics": [
+      "m_satisfied_count_sum",
+      "m_valid_response_count_sum"
+    ],
+    "dimensions": [
+      "product_code",
+      "area_code",
+      "survey_version"
+    ],
+    "filters": [
+      {
+        "field": "period_start",
+        "operator": "between",
+        "value": [
+          "2026-01-01",
+          "2026-01-31"
+        ]
+      }
+    ],
+    "sort": [],
+    "time_grain": "none",
+    "limit": 1000,
+    "offset": 0,
+    "visualization": null
+  },
+  "source_id": "11111111-2222-4333-8444-555555555555"
 }
 ```
 

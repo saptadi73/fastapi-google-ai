@@ -327,5 +327,47 @@
     "kind": "error",
     "cause": "Aplikasi mengalami kegagalan yang tidak tertangani secara spesifik.",
     "action": "Catat request ID, halaman, waktu dan tindakan terakhir; admin memeriksa log API/worker. Periksa status job sebelum mengulangi tindakan agar tidak membuat proses ganda."
+  },
+  {
+    "group": "analitik",
+    "code": "ANALYTICS_RULES_INVALID",
+    "kind": "error",
+    "cause": "Header, kode formula atau metrik numerik tidak sesuai kontrak.",
+    "action": "Sesuaikan tab kontrol dengan template dan kode metrik produk aktif; impor ulang."
+  },
+  {
+    "group": "analitik",
+    "code": "ANALYTICS_PERIOD_REQUIRED",
+    "kind": "error",
+    "cause": "Query aturan tidak memiliki periode between yang valid.",
+    "action": "Pilih dimension waktu dan batas awal/akhir eksplisit, lalu buat draft baru."
+  },
+  {
+    "group": "analitik",
+    "code": "ANALYTICS_SELF_APPROVAL",
+    "kind": "error",
+    "cause": "Pembuat mencoba menyetujui aturan sendiri.",
+    "action": "Reviewer konfigurasi sumber yang berbeda memeriksa preview dan memutuskan."
+  },
+  {
+    "group": "analitik",
+    "code": "ANALYTICS_APPROVAL_REQUIRED",
+    "kind": "error",
+    "cause": "Aturan masih DRAFT atau REJECTED.",
+    "action": "Preview lalu minta approval; aturan ditolak perlu dibuat ulang."
+  },
+  {
+    "group": "analitik",
+    "code": "ANALYTICS_RULES_STALE",
+    "kind": "error",
+    "cause": "Tab kontrol atau semantic berubah, sumber paused/unlinked, hash/status tidak cocok.",
+    "action": "Muat ulang status, aktifkan sumber yang sah bila perlu; impor/buat draft dan review ulang."
+  },
+  {
+    "group": "analitik",
+    "code": "ANALYTICS_RESULT_TRUNCATED",
+    "kind": "error",
+    "cause": "Hasil mencapai batas query/server sehingga dapat terpotong.",
+    "action": "Persempit periode atau kelompok dimension; review draft baru sebelum evaluasi."
   }
 ]

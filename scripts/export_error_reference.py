@@ -11,6 +11,7 @@ GROUPS = {
     "import": ("Validasi data dan batch import", ["/import-reviews", "/import-reviews/*", "/workspace", "/quality"]),
     "akses": ("Akses pengguna dan katalog data", ["/admin", "/admin/users", "/access-requests", "/data-catalog", "/dashboard"]),
     "layanan": ("Layanan database dan AI", ["/jobs", "/system", "/dashboard", "/chat"]),
+    "analitik": ("Formula analitik dan aturan action plan", ["/guide", "/workspace", "/jobs"]),
 }
 INTRO = (
     "Cari kode pada pesan error atau monitor job; catat ID job, sumber/tab dan versi konfigurasi. "

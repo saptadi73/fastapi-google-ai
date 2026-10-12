@@ -1,3 +1,4 @@
+from app.models.analytics_rules import AnalyticsRuleBundle
 from app.models.access import (
     AccessAttribute,
     AccessPolicy,
@@ -24,6 +25,7 @@ from app.models.taxonomy import Taxonomy, TaxonomyColumnBinding, TaxonomyTerm, T
 install_tenant_constraints(Base.metadata)
 
 __all__ = [
+    "AnalyticsRuleBundle",
     "ImportReview",
     "AccessAttribute",
     "AccessPolicy",

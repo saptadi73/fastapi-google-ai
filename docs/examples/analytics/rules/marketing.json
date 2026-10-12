@@ -1,0 +1,58 @@
+{
+  "name": "CONTOH FIKTIF Data sebaran marketing ATL/BTL",
+  "product_code": "demo_marketing_marketing_data",
+  "query": {
+    "join_relationships": [],
+    "metrics": [
+      "m_qualified_leads_count_sum",
+      "m_spend_idr_sum"
+    ],
+    "dimensions": [
+      "product_code",
+      "channel_code",
+      "area_code",
+      "attribution_model"
+    ],
+    "filters": [
+      {
+        "field": "period_start",
+        "operator": "between",
+        "value": [
+          "2026-01-01",
+          "2026-01-31"
+        ]
+      },
+      {
+        "field": "marketing_type",
+        "operator": "eq",
+        "value": "BTL"
+      }
+    ],
+    "sort": [],
+    "time_grain": "none",
+    "limit": 1000,
+    "offset": 0,
+    "visualization": null
+  },
+  "formulas": [
+    {
+      "formula_code": "cost_qualified_lead",
+      "expression": "m_spend_idr_sum / m_qualified_leads_count_sum",
+      "output_unit": "IDR_PER_LEAD",
+      "description": "Ambang dan formula contoh; verifikasi unit, metode, grain dan target dengan pemilik bisnis."
+    }
+  ],
+  "rules": [
+    {
+      "rule_code": "review_cost_qualified_lead",
+      "formula_code": "cost_qualified_lead",
+      "operator": "gt",
+      "threshold": "150000",
+      "threshold_upper": null,
+      "action_description": "Review biaya dan atribusi BTL sebelum mengusulkan penyesuaian campaign.",
+      "owner_team_code": "TEAM-MKT",
+      "priority": "MEDIUM",
+      "due_days": 7
+    }
+  ]
+}

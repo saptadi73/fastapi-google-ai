@@ -25,6 +25,8 @@ Unduh paket melalui **Bantuan > Contoh Excel untuk analitik dan action plan** at
 
 ## Prinsip evaluasi
 
+Formula_Analitik dan Aturan_Action_Plan adalah tab kontrol, Dikecualikan dari ETL. Impor melalui API analytics-rules/import-sheet setelah produk datanya aktif. JSON rules/ di ZIP memuat produk, metrik, dimension dan periode contoh. Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) untuk preview, approval dan evaluate. Evaluasi memberi usulan PROPOSED dengan bukti; tindakan bisnis tetap diverifikasi manusia.
+
 Jangan menjumlahkan detail dan rekap bersama, reach antar-channel, persen, nilai KPI berbeda satuan atau beberapa revisi dari record yang sama. Jangan AVG rasio tanpa bobot penyebut yang benar. Skor kepuasan tidak otomatis menjadi NPS; harga kemasan berbeda harus dinormalisasi. Sampel kecil/opt-in tidak membuktikan representasi populasi atau efek kausal tindakan.
 
 Data periodik memuat batas awal/akhir; event/survei memuat waktu bisnis; collected_at/data_as_of_at memberikan konteks pengambilan/kondisi data. Sel kosong berarti belum terukur/tidak berlaku, bukan nol.

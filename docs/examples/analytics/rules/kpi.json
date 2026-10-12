@@ -1,0 +1,57 @@
+{
+  "name": "CONTOH FIKTIF Data plan, goal dan pencapaian KPI",
+  "product_code": "demo_kpi_kpi_result",
+  "query": {
+    "join_relationships": [],
+    "metrics": [
+      "m_revenue_actual_value",
+      "m_revenue_target_value"
+    ],
+    "dimensions": [
+      "plan_id",
+      "unit_code",
+      "indicator_code"
+    ],
+    "filters": [
+      {
+        "field": "period_start",
+        "operator": "between",
+        "value": [
+          "2026-01-01",
+          "2026-01-31"
+        ]
+      },
+      {
+        "field": "indicator_code",
+        "operator": "eq",
+        "value": "REVENUE"
+      }
+    ],
+    "sort": [],
+    "time_grain": "none",
+    "limit": 1000,
+    "offset": 0,
+    "visualization": null
+  },
+  "formulas": [
+    {
+      "formula_code": "revenue_achievement",
+      "expression": "m_revenue_actual_value / m_revenue_target_value",
+      "output_unit": "RATIO",
+      "description": "Ambang dan formula contoh; verifikasi unit, metode, grain dan target dengan pemilik bisnis."
+    }
+  ],
+  "rules": [
+    {
+      "rule_code": "review_revenue_achievement",
+      "formula_code": "revenue_achievement",
+      "operator": "gt",
+      "threshold": "0.50",
+      "threshold_upper": null,
+      "action_description": "Capaian pendapatan di atas 50%: review pipeline untuk mengejar target penuh; bukan berarti target tercapai.",
+      "owner_team_code": "TEAM-MKT",
+      "priority": "MEDIUM",
+      "due_days": 7
+    }
+  ]
+}

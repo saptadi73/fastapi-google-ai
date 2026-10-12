@@ -1,0 +1,52 @@
+{
+  "name": "CONTOH FIKTIF Data competitiveness harga dan layanan",
+  "product_code": "demo_competitiveness_competitive_survey",
+  "query": {
+    "join_relationships": [],
+    "metrics": [
+      "m_weighted_score_avg"
+    ],
+    "dimensions": [
+      "product_code",
+      "competitor_code",
+      "area_code",
+      "survey_version"
+    ],
+    "filters": [
+      {
+        "field": "period_start",
+        "operator": "between",
+        "value": [
+          "2026-01-01",
+          "2026-01-31"
+        ]
+      }
+    ],
+    "sort": [],
+    "time_grain": "none",
+    "limit": 1000,
+    "offset": 0,
+    "visualization": null
+  },
+  "formulas": [
+    {
+      "formula_code": "competitive_score",
+      "expression": "m_weighted_score_avg",
+      "output_unit": "SCORE_1_5",
+      "description": "Ambang dan formula contoh; verifikasi unit, metode, grain dan target dengan pemilik bisnis."
+    }
+  ],
+  "rules": [
+    {
+      "rule_code": "review_competitive_score",
+      "formula_code": "competitive_score",
+      "operator": "lt",
+      "threshold": "3.5",
+      "threshold_upper": null,
+      "action_description": "Verifikasi keterbandingan survei dan bobot sebelum usulan peningkatan layanan.",
+      "owner_team_code": "TEAM-MKT",
+      "priority": "MEDIUM",
+      "due_days": 7
+    }
+  ]
+}

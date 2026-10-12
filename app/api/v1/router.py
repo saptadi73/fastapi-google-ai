@@ -1,5 +1,6 @@
 from app.api.v1 import (
     access,
+    analytics_rules,
     admin_ai_usage,
     ai_policies,
     auth,
@@ -34,6 +35,7 @@ router = APIRouter(
 )
 for child in (
     auth.router,
+    analytics_rules.router,
     auth.users_router,
     access.router,
     sources.router,

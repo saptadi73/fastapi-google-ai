@@ -2,6 +2,7 @@ import hashlib
 import json
 import time
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
@@ -535,7 +536,7 @@ class QueryExecutionService:
             resolve_default_period(root, plan, today),
         )
 
-    async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL", action="QUERY"):
+    async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL", action="QUERY", preserve_numeric=False):
         today = datetime.now(timezone.utc).date()
         product, joined, relationships, stmt, default_period = await self.compile(
             product_code, plan, today=today, action=action
@@ -559,6 +560,8 @@ class QueryExecutionService:
             relationships,
             self.repo.authorization_revisions,
         )
+        if preserve_numeric:
+            key += ":decimal-v1"
         redis = Redis.from_url(s.redis_url.get_secret_value(), socket_connect_timeout=0.3, socket_timeout=0.3)
         try:
             cached = await redis.get(key)
@@ -589,7 +592,8 @@ class QueryExecutionService:
                         )
                     result = await conn.execute(stmt)
                     rows = jsonable_encoder(
-                        [dict(row) for row in result.mappings().fetchmany(s.nl2sql_max_rows)]
+                        [dict(row) for row in result.mappings().fetchmany(s.nl2sql_max_rows)],
+                        custom_encoder={Decimal: str} if preserve_numeric else None,
                     )
             finally:
                 await engine.dispose()
