@@ -8,6 +8,8 @@ source: docs/PANDUAN_REVIEW_ETL.md
 ---
 Konfigurasi ETL menetapkan mapping, tipe, transformasi, DQ, key, strategi load dan semantic. Tetapkan periode/watermark sesuai sumber dan validasi sampai tanpa blocker.
 
+Jika deploy gagal dengan CONFIGURATION_INVALID, gunakan lokasi baris, field, dan kode masalah pada pesan job untuk memperbaiki sumber atau mapping. Aturan kualitas yang menghentikan batch menunjukkan rule/field/baris; threshold menunjukkan persentase dan batas. Pesan sengaja tidak menampilkan nilai sel. Jalankan Dry-run lagi setelah perbaikan; jangan mengulang deploy pada snapshot yang sama tanpa mengatasi blocker.
+
 Tambah/rename kolom di Google Sheets, lalu profiling ulang sumber/tab yang sama. Workspace tidak menulis data ke Sheet. APPROVED/ACTIVE/REJECTED immutable: clone jika header lama ada, atau buat draft terkini. Fingerprint berubah membuat draft lama stale. Langkah Validasi & persetujuan menampilkan Preview perubahan schema: schema lama/baru (kolom, tipe, nullability, key), view/dependency, operasi, record lama, contoh tanggal dan blocker. Centang konfirmasi schema sebelum submit; approval mengikat fingerprint schema/data. Worker memigrasikan perubahan aman saat deploy, bukan saat review. Jangan hapus tabel/registrasi ulang.
 
 Label bulan/minggu memerlukan tahun/kalender, bukan perubahan tipe saja. Jangan menebak tanggal dari bulan/minggu. Gunakan tanggal kejadian atau periode mulai dan selesai sesuai grain; uji parser dan dimensi waktu.
@@ -34,5 +36,7 @@ NEEDS_INPUT = Menunggu tindakan, bukan worker berjalan. Lihat detail berikon mat
 Temuan AI_REVIEW, termasuk batch lama, dapat dijawab KEEP_ORIGINAL dengan alasan verifikasi yang diaudit. Dugaan PII/salah mapping perlu pemilik data; error teknis tidak bisa dilewati. CORRECT_SOURCE meminta perbaikan Sheet dan snapshot baru. Setelah semua jawaban, AI COMPLETE dan validasi selesai tanpa blocker, batch siap. Sync manual kembali dapat memuat batch NON_MASTER siap berdasarkan approval konfigurasi aktif; batch biasa/master tetap preview, approval, Apply. Jawaban saja tidak memuat record.
 
 DDL, view, konversi, hash, aktivasi dan audit/status sukses satu transaksi; gagal mempertahankan kondisi lama. Alasan UI/audit dicatat setelah rollback; retry memeriksa fingerprint.
+
+Pada konfigurasi owner-managed, data owner/steward terdaftar atau PLATFORM_ADMIN dapat deploy dan rollback versi yang sudah divalidasi setelah konfirmasi. Backend memverifikasi identitas pelaku dan snapshot ulang. Konfigurasi legacy tetap memerlukan reviewer serta release approval yang berlaku.
 
 Text/varchar: trim otomatis sebelum DQ/AI/load; spasi tengah dan nol depan tetap. Duplikat AI diverifikasi dari data asli; lihat panduan cleansing text.

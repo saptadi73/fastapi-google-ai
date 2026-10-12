@@ -1006,6 +1006,14 @@ Body: [ImportQuestionDecision](#importquestiondecision).
 | `review_id` | path | Ya | `string (uuid)` {} |
 | `question_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/import-reviews/{review_id}/dismiss-ai-suggestions
+
+Body: [ImportAISuggestionsDismissRequest](#importaisuggestionsdismissrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `review_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal
 
 Body: [ImportProposalResolution](#importproposalresolution).
@@ -2734,6 +2742,22 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 }
 ```
 
+### ImportAISuggestionsDismissRequest
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
+| `reason` | Ya | `string` | — | {"maxLength":2000,"minLength":10} |
+
+Contoh payload valid secara schema (ID harus diganti dengan ID backend):
+
+```json
+{
+  "revision_no": 1,
+  "reason": "Temuan nilai hanya saran; pemeriksaan kualitas deterministik sudah ditinjau."
+}
+```
+
 ### ImportProposalResolution
 
 | Field | Wajib | Tipe | Default | Batas |
@@ -2818,6 +2842,9 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 |---|---|---|---|---|
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `preview_token` | Ya | `string` | — | — |
+| `preview_hash` | Tidak | `string / null` | — | — |
+| `accept_source_conflicts` | Tidak | `boolean` | false | — |
+| `approval_comment` | Tidak | `string` | "" | {"maxLength":2000} |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 
@@ -3833,6 +3860,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `revision_no` | Ya | `integer` | — | {"minimum":1.0} |
 | `decision` | Ya | `enum ["APPROVE","REJECT"]` | — | — |
 | `reason` | Ya | `enum ["METADATA_VERIFIED","SCOPE_MISMATCH","OWNER_UNCONFIRMED","OTHER"]` | — | — |
+| `review_fingerprint` | Tidak | `string / null` | — | — |
 
 Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 

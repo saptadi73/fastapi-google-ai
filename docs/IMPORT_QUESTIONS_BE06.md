@@ -25,6 +25,7 @@ Semua menggunakan prefix `/api/v1`. E = `PLATFORM_ADMIN`, `SOURCE_OWNER`, atau `
 |---|---|---|---|
 | GET | `/import-reviews/{review_id}/questions` | S | List pertanyaan |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/answer` | E | Simpan satu keputusan baris/scope |
+| POST | `/import-reviews/{review_id}/dismiss-ai-suggestions` | E | Tandai VALUE_ISSUE AI lama sebagai ditinjau, dengan alasan dan audit; tidak menutup duplicate/privasi |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal` | R | Tutup proposal setelah master registry approved |
 
 List parameter: `status=OPEN|ANSWERED|PENDING_APPROVAL|CANCELLED`, `category`, `offset>=0`, `limit=1..100` (default 50). Respons memakai envelope standar dan `data.items`, `data.has_more`. `meta.offset` dan `meta.limit` tersedia.
@@ -94,7 +95,7 @@ Sebelum menyimpan jawaban, server memeriksa snapshot/config/binding/master/polic
 
 Tidak ada keputusan yang disimpan. Frontend harus memuat ulang, lalu membuat batch baru untuk snapshot/dependency baru. Status ini dibuat dalam transaksi yang sama agar tidak hilang karena rollback respons error.
 
-Saat semua pertanyaan wajib OPEN sudah dijawab, blocker `DATA_QUALITY_ISSUES` dihapus dari checkpoint. Hal ini tidak berarti batch siap apply: blocker AI BE-05 (`AI_REVIEW_NOT_IMPLEMENTED`), proposal master pending, pertanyaan lain, serta gate tahap berikutnya masih tetap menahan resume. Jangan retry atau resume secara berulang dari frontend.
+Saat semua pertanyaan wajib OPEN sudah dijawab, blocker `DATA_QUALITY_ISSUES` dihapus dari checkpoint. Saran AI `VALUE_ISSUE` dapat ditandai bersama sebagai telah ditinjau menggunakan endpoint di atas; tindakan memerlukan alasan dan tidak mengubah nilai. Exact duplicate yang terbukti, `PRIVACY_RISK`, proposal master pending, pertanyaan kualitas wajib, dan gate tahap berikutnya tetap menahan batch. Review AI yang tidak tersedia atau coverage parsial tidak lagi menjadi blocker.
 
 ## Data dan keamanan
 

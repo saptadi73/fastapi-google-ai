@@ -56,14 +56,15 @@ async def test_worker_trims_text_verifies_masked_duplicates_and_counts_questions
     await run_pending(ctx.tenant_id)
     await run_pending(ctx.tenant_id)
     result = await detail(ctx, review)
-    assert result["status"] == ("NEEDS_INPUT" if genuine_issue else "READY_FOR_APPROVAL")
-    assert result["checkpoint"]["open_question_count"] == int(genuine_issue)
+    assert result["status"] == "READY_FOR_APPROVAL"
+    assert result["checkpoint"]["open_question_count"] == 0
+    assert result["checkpoint"]["ai_warning_count"] == int(genuine_issue)
     assert len(result["checkpoint"]["ai_discarded_findings"]) == 2
     async with SessionFactory() as session:
         row = await session.scalar(select(ImportReviewRow).where(ImportReviewRow.import_review_id == review["id"], ImportReviewRow.source_row == 2))
         assert row.transformed_data["branch_name"] == "Jakarta"
         questions = (await session.scalars(select(ImportQuestion).where(ImportQuestion.import_review_id == review["id"], ImportQuestion.status == "OPEN"))).all()
-        assert len(questions) == int(genuine_issue)
+        assert len(questions) == 0
 
 
 async def non_master(ctx, config_data):
@@ -100,22 +101,11 @@ async def test_import_idempotency_checkpoint_and_blocked_resume(context, config_
     assert reviewing["job_id"] != review["job_id"]
     await run_pending(ctx.tenant_id)
     waiting = await detail(ctx, review)
-    assert waiting["status"] == "NEEDS_INPUT" and waiting["checkpoint"]["ai_coverage"] == "NOT_STARTED"
-    assert waiting["checkpoint"]["blocking_codes"] == ["AI_REVIEW_NOT_IMPLEMENTED"]
+    assert waiting["status"] == "READY_FOR_APPROVAL" and waiting["checkpoint"]["ai_coverage"] == "SKIPPED"
+    assert waiting["checkpoint"]["blocking_codes"] == []
     summary = (await request(ctx, "GET", "/operations/summary"))["data"]
-    assert summary["import_reviews"]["NEEDS_INPUT"] == 1
-    assert summary["unacknowledged_notifications"] == 1
-    notifications = (await request(ctx, "GET", "/notifications?limit=10"))["data"]
-    notification = notifications[0]
-    assert notification["kind"] == "IMPORT_NEEDS_INPUT"
-    assert notification["resource_id"] == review["id"]
-    assert "raw_data" not in str(notification)
-    await request(
-        ctx, "POST", f"/notifications/{notification['id']}/acknowledge"
-    )
-    await request(
-        ctx, "POST", f"/notifications/{notification['id']}/acknowledge"
-    )
+    assert summary["import_reviews"]["READY_FOR_APPROVAL"] == 1
+    assert summary["unacknowledged_notifications"] == 0
     assert (await request(ctx, "GET", "/notifications?limit=10"))["data"] == []
     assert (await request(ctx, "GET", "/notifications?limit=10", who="outsider"))["data"] == []
     await request(ctx, "GET", "/notifications", who="viewer", expected=403)

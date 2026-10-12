@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from app.cli import source_access_backfill_row
 from app.core.exceptions import AppError
 from app.domain.import_workflow import ImportAction, ImportStatus, next_import_status
 from app.models.source import DataSource
@@ -15,6 +16,51 @@ from app.schemas.configuration import Decision
 from app.services import auth_service, configuration_service, master_service, source_service
 from app.services.access_service import AccessService
 from app.services.semantic_catalog_service import inventory_update_state
+
+
+def test_source_access_backfill_report_never_auto_approves_legacy_sources():
+    source = SimpleNamespace(
+        tenant_id=uuid4(),
+        id=uuid4(),
+        source_code="legacy_source",
+        access_status="ACCESS_POLICY_REQUIRED",
+        access_review_status="PENDING",
+        access_metadata=None,
+    )
+    report = source_access_backfill_row(source)
+    assert report["action"] == "OWNER_METADATA_REQUIRED"
+    assert report["missing_metadata_fields"] == [
+        "owner_unit_id",
+        "business_domain_id",
+        "jurisdiction_id",
+        "purpose_id",
+        "data_owner_user_id",
+        "data_steward_user_id",
+        "sensitivity",
+    ]
+    assert "spreadsheet_id" not in report
+
+
+def test_source_access_backfill_report_distinguishes_review_and_activation():
+    source = SimpleNamespace(
+        tenant_id=uuid4(),
+        id=uuid4(),
+        source_code="legacy_source",
+        access_status="ACCESS_POLICY_REQUIRED",
+        access_review_status="APPROVED",
+        access_metadata={
+            "owner_unit_id": "unit",
+            "business_domain_id": "domain",
+            "jurisdiction_id": "jurisdiction",
+            "purpose_id": "purpose",
+            "data_owner_user_id": "owner",
+            "data_steward_user_id": "steward",
+            "sensitivity": "MEDIUM",
+        },
+    )
+    assert source_access_backfill_row(source)["action"] == "OWNER_ACCESS_ACTIVATION_REQUIRED"
+    source.access_status = "POLICY_APPROVED"
+    assert source_access_backfill_row(source)["action"] == "READY_NO_BACKFILL"
 
 
 def test_onboarding_contract_requires_unique_explicit_targets():
@@ -46,6 +92,31 @@ def test_owner_batch_apply_uses_explicit_role_checked_transition():
         UserCreate(username="new_reader", password="test-password-123", initial_access={
             "business_reason": "Akses laporan unit bisnis.",
         })
+
+
+def test_owner_managed_configuration_action_is_limited_to_owner_steward_or_platform_admin():
+    source = SimpleNamespace(
+        access_metadata={"data_owner_user_id": "owner", "data_steward_user_id": "steward"}
+    )
+    service = SimpleNamespace(user=SimpleNamespace(id="owner", role="SOURCE_OWNER"))
+    configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
+    service.user = SimpleNamespace(id="steward", role="DATA_STEWARD")
+    configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
+    service.user = SimpleNamespace(id="admin", role="PLATFORM_ADMIN")
+    configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
+    service.user = SimpleNamespace(id="other", role="SOURCE_OWNER")
+    with pytest.raises(AppError) as error:
+        configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
+    assert error.value.code == "OWNER_WORKFLOW_ACTOR_REQUIRED"
+
+
+def test_legacy_configuration_rollback_still_requires_reviewer():
+    service = SimpleNamespace(user=SimpleNamespace(role="SOURCE_OWNER"))
+    with pytest.raises(AppError) as error:
+        configuration_service.ConfigurationService.require_legacy_reviewer(service)
+    assert error.value.code == "CONFIGURATION_REVIEWER_REQUIRED"
+    service.user.role = "TECHNICAL_APPROVER"
+    configuration_service.ConfigurationService.require_legacy_reviewer(service)
 
 
 async def test_onboarding_creates_requests_for_366_days_without_granting_access(monkeypatch):
@@ -377,8 +448,8 @@ async def test_ai_confirmation_is_audited_without_bypassing_remaining_gates(monk
     assert args.kwargs["reason"] == payload.reason
     assert args.kwargs["after_data"] == {}
     assert question.status == "ANSWERED"
-    assert review.status == ("READY_FOR_APPROVAL" if case == "valid" else "NEEDS_INPUT")
-    if case in ("partial", "open"):
+    assert review.status == ("READY_FOR_APPROVAL" if case in ("valid", "partial") else "NEEDS_INPUT")
+    if case == "open":
         assert "AI_REVIEW_ISSUES" in review.checkpoint["blocking_codes"]
     if case == "source-correction":
         assert "SOURCE_CORRECTION_REQUIRED" in review.checkpoint["blocking_codes"]
@@ -409,7 +480,7 @@ async def test_auto_load_reuses_active_approval_only_after_all_data_checks(monke
     })
     service.apply = AsyncMock()
     monkeypatch.setattr(import_review_service, "audit", Mock())
-    if case != "valid":
+    if case not in ("valid", "partial"):
         with pytest.raises(AppError):
             await service.auto_load(review)
         service.apply.assert_not_awaited()
@@ -499,6 +570,53 @@ async def test_manual_sync_rechecks_old_ai_only_batches_without_erasing_user_dec
         assert review.checkpoint["ai_chunks"] == {}
         assert review.generation == 3
         service.queue.assert_awaited_once_with(review)
+
+
+@pytest.mark.parametrize("has_duplicate", [False, True])
+async def test_owner_can_dismiss_ai_value_suggestions_but_not_duplicate_blockers(monkeypatch, has_duplicate):
+    from app.schemas.import_review import ImportAISuggestionsDismissRequest
+    from app.services import import_review_service
+
+    advisory = SimpleNamespace(
+        status="OPEN", revision_no=1, mandatory=True,
+        evidence={"issue": {"issue_kind": "VALUE_ISSUE", "message": "Check label"}},
+    )
+    duplicate = SimpleNamespace(
+        status="OPEN", revision_no=1, mandatory=True,
+        evidence={"issue": {"issue_kind": "EXACT_DUPLICATE", "message": "Exact row duplicate"}},
+    )
+    review = SimpleNamespace(
+        id="batch", tenant_id="tenant", source_sheet_id="sheet", status="NEEDS_INPUT", revision_no=4,
+        checkpoint={"blocking_codes": ["AI_REVIEW_ISSUES"], "open_question_count": 2},
+    )
+    session = Mock()
+    session.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [advisory, duplicate] if has_duplicate else [advisory]))
+    session.scalar = AsyncMock(side_effect=["duplicate" if has_duplicate else None,
+                                           "duplicate" if has_duplicate else None,
+                                           1 if has_duplicate else 0])
+    service = import_review_service.ImportReviewService(
+        session, SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER"),
+    )
+    service.locked = AsyncMock(return_value=review)
+    service.is_current = AsyncMock(return_value=True)
+    service.response = Mock(return_value={"status": review.status})
+    monkeypatch.setattr(import_review_service, "audit", Mock())
+    monkeypatch.setattr(import_review_service, "add_notification", Mock())
+
+    result = await service.dismiss_ai_suggestions(
+        review.id,
+        ImportAISuggestionsDismissRequest(revision_no=4, reason="AI labels are advisory; deterministic checks passed."),
+    )
+
+    assert advisory.status == "CANCELLED"
+    assert result["dismissed_count"] == 1
+    if has_duplicate:
+        assert duplicate.status == "OPEN"
+        assert review.checkpoint["blocking_codes"] == ["AI_REVIEW_ISSUES"]
+        assert review.status == "NEEDS_INPUT"
+    else:
+        assert review.checkpoint["blocking_codes"] == []
+        assert review.status == "READY_FOR_APPROVAL"
 @pytest.mark.parametrize("auto_load", [True, False])
 async def test_new_batch_keeps_manual_auto_load_intent_after_validation(monkeypatch, config_data, auto_load):
     from app.services import import_review_service

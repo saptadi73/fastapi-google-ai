@@ -253,7 +253,9 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                         errors.append(detail)
                     elif rule.action_on_fail in ("STOP_BATCH", "REQUIRE_REVIEW"):
                         raise AppError(
-                            "DQ_" + rule.action_on_fail, "Data quality rule menghentikan batch untuk review."
+                            "DQ_" + rule.action_on_fail,
+                            f"Data quality rule {rule.rule} pada field {rule.column} menghentikan batch "
+                            f"di baris sumber {row_number}; periksa nilai dan aturan tersebut.",
                         )
                     else:
                         errors.append(detail)
@@ -276,12 +278,20 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
             row_hash = digest(result)
             if row_hash in hashes:
                 if config.append_duplicate_policy == "REJECT_IDENTICAL":
-                    raise AppError("APPEND_IDENTICAL_REJECTED", "Snapshot berisi baris APPEND identik.", 409)
+                    raise AppError(
+                        "APPEND_IDENTICAL_REJECTED",
+                        f"Baris sumber {row_number} identik dengan baris sebelumnya; periksa aturan duplikat APPEND.",
+                        409,
+                    )
                 warnings.append({"source_row": row_number, "code": "APPEND_IDENTICAL_SKIPPED"})
             hashes.add(row_hash)
     for rule_index, rule in enumerate(config.data_quality_rules):
         if rule.threshold_percent is not None and dq_seen.get(rule_index, 0):
             rate = dq_failed.get(rule_index, 0) * 100 / dq_seen[rule_index]
             if rate > rule.threshold_percent:
-                raise AppError("DQ_THRESHOLD_EXCEEDED", f"Rule {rule.rule} pada {rule.column} melebihi threshold.")
+                raise AppError(
+                    "DQ_THRESHOLD_EXCEEDED",
+                    f"Rule {rule.rule} pada field {rule.column} gagal pada {rate:.2f}% baris "
+                    f"(batas {rule.threshold_percent:.2f}%). Perbaiki data atau aturan kualitas.",
+                )
     return good, issues, warnings

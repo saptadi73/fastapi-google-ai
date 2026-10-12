@@ -45,7 +45,7 @@ Dugaan PII pada kolom non-sensitif masih temuan AI, bukan kepastian: verifikasi 
 Aktivasi versi baru membuat konfigurasi lama SUPERSEDED. Inventaris tabel retired hanya mencatat tabel yang masih ada, tidak menghapusnya. REVIEW_REQUIRED meminta pemeriksaan rollback/dependency/retensi; delete_ready tetap false sampai cleanup terkontrol tersedia.
 
 
-MASTER_RUNTIME_PENDING menolak konfigurasi/sync ETL biasa pada MASTER. Jangan ubah klasifikasi untuk melewatinya. Buka Registry master → Storage & record master, pastikan source binding approved dan storage siap, lalu buat batch dari **Sumber master terikat**. MASTER_BINDING_REQUIRED: atur/review binding. MASTER_STORAGE_REQUIRED: reviewer deploy storage approved. Batch tetap perlu preview, approval, dan apply.
+MASTER_RUNTIME_PENDING berarti tab MASTER tidak memakai konfigurasi atau sync ETL biasa. Jangan ubah klasifikasi untuk melewatinya. Buka Registry master → Storage & record master, pastikan source binding dan storage siap, lalu buat batch dari **Sumber master terikat**. Dalam owner workflow, binding yang lulus validasi dapat langsung dipakai dan pemilik meng-Apply setelah preview bersih; pada workflow legacy, ikuti status review yang ditampilkan. `GET /source-sheets/{id}/classification` membedakan `execution_path=MASTER_BATCH_IMPORT` dan `standard_etl_blocking_reason`, sehingga blocker ETL biasa tidak berarti jalur batch master juga tertutup. MASTER_BINDING_REQUIRED: atur binding. MASTER_STORAGE_REQUIRED: deploy storage setelah validasi schema. Preview tetap memeriksa snapshot, business key, konflik, dan integritas sebelum Apply.
 
 DDL/aktivasi satu transaksi; gagal mempertahankan kondisi lama. UI/audit mencatat alasan setelah rollback; retry memeriksa fingerprint.
 

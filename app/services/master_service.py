@@ -438,7 +438,14 @@ class MasterService:
             columns=attributes["columns_json"],
             revision=binding.revision_no,
         )
-        return {"binding": record(binding), "validation": validation, "execution_ready": False}
+        await self.session.flush()
+        detail = await self.binding_detail(sheet.id)
+        return {
+            "binding": record(binding),
+            "validation": validation,
+            "execution_ready": detail["execution_ready"],
+            "blocking_reason": detail["blocking_reason"],
+        }
 
     async def binding_decision(self, sheet_id, data, approve):
         self.require_role(REVIEW_ROLES)

@@ -2,6 +2,7 @@ import json
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.domain.enums import REVIEW_ROLES
 from app.models.audit import AuditEvent
 from app.models.base import now
 from app.models.configuration import Approval, Artifact, Configuration
@@ -91,7 +92,11 @@ class ConfigurationService:
         if config.status != expected:
             raise AppError("APPROVAL_REQUIRED", f"Konfigurasi harus berstatus {expected}.", 409)
         source = await self.repo.get(DataSource, config.source_id)
-        if not (get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")):
+        owner_managed = get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")
+        if owner_managed:
+            self.require_owner_managed_actor(source)
+        else:
+            self.require_legacy_reviewer()
             require_release_ready(config, source)
         sheet = await self.repo.get(SourceSheet, config.source_sheet_id)
         self.require_classification_evidence(config, sheet)
@@ -102,6 +107,26 @@ class ConfigurationService:
             config.source_id,
             configuration_id=config.id,
         )
+
+    def require_owner_managed_actor(self, source):
+        if self.user.role == "PLATFORM_ADMIN":
+            return
+        metadata = source.access_metadata or {}
+        allowed = {str(metadata.get("data_owner_user_id")), str(metadata.get("data_steward_user_id"))}
+        if str(self.user.id) not in allowed:
+            raise AppError(
+                "OWNER_WORKFLOW_ACTOR_REQUIRED",
+                "Hanya data owner, steward yang ditetapkan, atau PLATFORM_ADMIN yang dapat deploy/rollback konfigurasi ini.",
+                403,
+            )
+
+    def require_legacy_reviewer(self):
+        if self.user.role not in REVIEW_ROLES:
+            raise AppError(
+                "CONFIGURATION_REVIEWER_REQUIRED",
+                "Konfigurasi legacy tetap memerlukan reviewer yang berwenang.",
+                403,
+            )
 
     async def compare(self, config_id, against):
         current = await self.repo.get(Configuration, config_id)
@@ -343,7 +368,11 @@ class ConfigurationService:
                 "APPROVAL_REQUIRED", "Konfigurasi belum disetujui atau tidak dapat diaktifkan.", 409
             )
         source = await self.repo.get(DataSource, config.source_id, lock=True)
-        if not (get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")):
+        owner_managed = get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")
+        if owner_managed:
+            self.require_owner_managed_actor(source)
+        else:
+            self.require_legacy_reviewer()
             require_release_ready(config, source)
         sheet = await ClassificationService(self.session, self.user).locked_sheet(config.source_sheet_id)
         self.require_classification_evidence(config, sheet)
@@ -379,7 +408,25 @@ class ConfigurationService:
             taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
         await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
         if issues or parsed.unresolved_questions:
-            raise AppError("CONFIGURATION_INVALID", "Dry-run gagal; perbaiki data atau konfigurasi.")
+            locations = []
+            for issue in issues[:5]:
+                row = issue.get("source_row")
+                fields = ", ".join(
+                    f"{error.get('column', 'field')} ({error.get('code', 'INVALID')})"
+                    for error in issue.get("errors", [])[:3]
+                )
+                if row is not None:
+                    locations.append(f"baris {row}: {fields or 'validasi gagal'}")
+            remaining = max(0, len(issues) - len(locations))
+            summary = " ".join(locations)
+            if remaining:
+                summary += f" dan {remaining} baris bermasalah lainnya."
+            if parsed.unresolved_questions:
+                summary += f" Pertanyaan konfigurasi belum dijawab: {len(parsed.unresolved_questions)}."
+            message = "Dry-run gagal; perbaiki data atau konfigurasi."
+            if summary:
+                message += f" Lokasi: {summary}"
+            raise AppError("CONFIGURATION_INVALID", message)
         # Check catalog collisions before DDL.
         product = await self.session.scalar(
             self.repo.query(DataProduct).where(DataProduct.source_sheet_id == sheet.id)

@@ -44,6 +44,13 @@ async def deploy_actor(user: CurrentUser):
     return user
 
 
+async def rollback_actor(user: CurrentUser):
+    permitted = (*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
+    if user.role not in permitted:
+        raise AppError("FORBIDDEN", "Role tidak memiliki izin untuk rollback.", 403)
+    return user
+
+
 @router.get("/{config_id}/access-review", dependencies=review)
 async def configuration_access_review(config_id: UUID, session: Session, user: CurrentUser):
     return success(await ConfigurationReviewService(session, user).access_review(config_id))
@@ -213,7 +220,7 @@ async def deploy(config_id: UUID, session: Session, user: CurrentUser):
     return success(await ConfigurationService(session, user).queue_deployment(config_id))
 
 
-@router.post("/{config_id}/rollback", status_code=202, dependencies=review)
+@router.post("/{config_id}/rollback", status_code=202, dependencies=[Depends(rollback_actor)])
 async def rollback(config_id: UUID, session: Session, user: CurrentUser):
     return success(await ConfigurationService(session, user).queue_deployment(config_id, rollback=True))
 

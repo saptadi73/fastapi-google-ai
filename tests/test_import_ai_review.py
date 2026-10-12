@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.exceptions import AppError
-from app.services.import_ai_review_service import verified_ai_issues
+from app.services.import_ai_review_service import split_ai_issues, verified_ai_issues
 
 
 def finding(column="name", **kwargs):
@@ -39,3 +39,14 @@ def test_literal_redacted_in_public_column_is_not_filtered():
     issue = finding()
     accepted, discarded = verified_ai_issues([issue], {2: {"name": "[REDACTED]"}}, {"name"}, set())
     assert accepted == [issue] and not discarded
+
+
+def test_only_verified_duplicate_and_privacy_risk_remain_blockers():
+    duplicate = finding(issue_kind="EXACT_DUPLICATE", related_source_row=3)
+    privacy = finding("contact", issue_kind="PRIVACY_RISK")
+    advisory = finding("month")
+
+    blockers, warnings = split_ai_issues([duplicate, privacy, advisory])
+
+    assert blockers == [duplicate, privacy]
+    assert warnings == [{**advisory, "severity": "WARN"}]

@@ -1039,5 +1039,9 @@
     "expected_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "decision": "APPROVE",
     "reason": "Periode, formula dan aturan sudah diperiksa reviewer."
+  },
+  "ImportAISuggestionsDismissRequest": {
+    "revision_no": 1,
+    "reason": "Temuan nilai hanya saran; pemeriksaan kualitas deterministik sudah ditinjau."
   }
 }

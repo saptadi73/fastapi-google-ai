@@ -37,9 +37,9 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [~] Metadata setelah review sumber dapat diperbarui pemilik/data owner/steward tanpa review kedua; scope harus tetap assignment aktif, perubahan diaudit, dan aktivasi legacy dibatasi owner/admin saat feature flag ON.
 - [x] Tetapkan interaksi default scope dengan `DataProduct.allowed_roles`: untuk sumber bermetadata yang sudah direview, fallback hanya dapat melewati allow-list lama pada DISCOVER/READ/QUERY; evaluator tetap harus mengizinkan aksi berdasarkan assignment domain+unit dan role capability. EXPORT dan produk tanpa metadata tetap memakai allow-list lama.
 - [ ] Jadikan restriction yurisdiksi/department opsional dan eksplisit; jangan mengubah data lama menjadi terbuka otomatis.
-- [ ] Rancang migrasi/backfill yang dapat diulang dan laporan dry-run untuk metadata sumber lama.
+- [~] Sediakan laporan dry-run read-only yang dapat diulang (`python -m app.cli source-access-backfill-report`) untuk mengelompokkan metadata sumber lama. Backfill perubahan data masih harus diputuskan terpisah; laporan tidak auto-approve atau membuka akses.
 - [ ] Pastikan PLATFORM_ADMIN dapat mengelola semua scope melalui jalur administrasi yang diaudit; tindakan baca/export tetap tercatat dan tunduk pada batas tenant.
-- [ ] Tambah preview effective access yang menjelaskan allow/deny dan alasan tanpa memaparkan data lintas tenant.
+- [x] Sediakan preview effective access yang menjelaskan allow/deny, reason code, policy revision, row/column scope tanpa mengembalikan nilai data; evaluasi diaudit dan UI admin mencari resource dengan pagination.
 - [~] Tambahkan test scope role, katalog/template, DENY, dan policy yang sudah ada. Sebelum feature flag diaktifkan, masih perlu test expiry/revoke, isolasi tenant end-to-end, cache, serta migration/backfill.
 
 ### P2 — satu review saat registrasi
@@ -53,10 +53,10 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 - [x] Tambahkan mode submit konfigurasi sebagai validasi + bukti pemeriksaan pemilik di balik `ETL_OWNER_WORKFLOW_ENABLED` (default OFF).
 - [x] Pertahankan snapshot freshness, dry-run penuh, schema plan, checklist, collision check, audit, dan idempotency.
-- [x] Izinkan pemilik men-deploy konfigurasi yang lolos; rollback masih membutuhkan role reviewer.
+- [x] Izinkan data owner/steward men-deploy dan rollback konfigurasi owner-managed yang lolos; konfigurasi legacy tetap memerlukan reviewer.
 - [x] Izinkan sync incremental langsung untuk konfigurasi owner-managed aktif tanpa release approval kedua; akses sumber dan freshness tetap diperiksa.
-- [ ] Hapus release groups dan UI inbox approval setelah kompatibilitas konfigurasi lama dan test rollout siap.
-- [ ] Verifikasi ulang deploy hanya bila snapshot terbaru lulus; perbaiki error agar menjelaskan field/baris/tahap.
+- [~] Owner-managed ETL tidak lagi memanggil endpoint atau menampilkan UI release approval; konfigurasi legacy tetap memakai keduanya. Hapus release groups global/inbox hanya setelah kompatibilitas data lama dan rollout siap.
+- [~] Verifikasi ulang deploy hanya bila snapshot terbaru lulus; pesan dry-run menunjukkan baris/field/kode masalah tanpa nilai sel, dan blocker aturan kualitas menunjukkan baris serta field. Rincian validasi lain dan tahap runtime tetap perlu diperluas.
 - [ ] Hapus UI inbox/assignment approval konfigurasi setelah endpoint dan data lama memiliki jalur kompatibilitas.
 
 ### P4 — master dan import
@@ -67,14 +67,15 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [ ] Tambahkan pemetaan relasi master opsional pada konfigurasi non-master dan pemeriksaan not-found/ambiguous.
 - [ ] Pertahankan keputusan eksplisit untuk konflik master, perubahan key, deactivation, dan delete-restricted.
 - [x] Hapus approval reviewer rutin untuk batch bersih pada owner workflow; pemilik Apply mengikat preview token/hash dan menjalankan validasi ulang.
-- [~] Konflik sumber membutuhkan konfirmasi + alasan pemilik; duplicate/key conflict, usulan insert yang perlu policy review, pertanyaan terbuka, dan ambiguous reference tetap menjadi blocker sampai ditangani.
-- [ ] Hilangkan blocker `MASTER_RUNTIME_PENDING` setelah master memiliki jalur preview/apply yang setara dan sudah diuji end-to-end.
+- [~] Konflik sumber membutuhkan konfirmasi + alasan pemilik; duplicate/key conflict terverifikasi, PRIVACY_RISK, usulan insert yang perlu policy review, pertanyaan teknis, dan ambiguous reference tetap menjadi blocker sampai ditangani.
+- [x] Jadikan temuan AI VALUE_ISSUE dan coverage parsial sebagai peringatan; sediakan endpoint backend dan UI owner untuk menandai temuan lama telah ditinjau dengan alasan dan audit. Rollout production masih terbuka.
+- [~] MASTER sudah memiliki jalur Batch Import dengan snapshot, preview, business-key checks, dan apply; response klasifikasi kini membedakan kesiapan `MASTER_BATCH_IMPORT` dari blocker konfigurasi/sync ETL biasa. Auto-load MASTER tetap ditolak secara sengaja. End-to-end owner flow dari binding/storage hingga batch Apply dan tracking gabungan masih perlu diselesaikan sebelum blocker standar dihapus atau dinyatakan complete.
 
 ### P5 — frontend, dokumentasi, rollout
 
 - [ ] Tampilkan 7 langkah sebagai progres berurutan dengan status, blocker terakhir, tindakan berikutnya, dan helper per langkah.
 - [ ] Hilangkan tombol/menu approval yang tidak lagi menjadi bagian alur setelah backend dan migration siap.
-- [ ] Perbarui helper, knowledge base, glossary error, API docs, panduan admin, dan runbook operasional.
+- [~] Perbarui helper/knowledge base untuk AI review, sumber legacy, rollback owner workflow, error owner/legacy, serta alur master owner-managed versus legacy. Generator backend dan salinan helper frontend diselaraskan; helper semua 7 langkah, panduan admin lengkap, dan runbook rollout masih perlu dituntaskan.
 - [ ] Jalankan migrasi staging, dry-run data lama, regression/security tests, lalu canary terbatas.
 - [ ] Siapkan rollback feature flag dan audit sebelum rollout global.
 
@@ -84,7 +85,7 @@ Jangan melewati tenant isolation, autentikasi, validasi role admin, sumber tidak
 
 ## Risiko dan urutan rollout
 
-Perubahan default akses berisiko membuka data lama; karena itu backfill harus konservatif dan policy lama tidak boleh diam-diam dilonggarkan. Penghapusan approval berisiko mengubah state lama yang masih menunggu keputusan; jalankan mode kompatibilitas dan rekonsiliasi status terlebih dahulu. Penyatuan runtime master berisiko pada referential integrity dan migrasi schema. Implementasikan per fase di staging, bandingkan hasil effective access dan dry-run dengan perilaku lama, lalu aktifkan per tenant/feature flag. Production deployment belum dilakukan.
+Perubahan default akses berisiko membuka data lama; karena itu backfill harus konservatif dan policy lama tidak boleh diam-diam dilonggarkan. Penghapusan approval berisiko mengubah state lama yang masih menunggu keputusan; jalankan mode kompatibilitas dan rekonsiliasi status terlebih dahulu. Penyatuan runtime master berisiko pada referential integrity dan migrasi schema. Implementasikan per fase di staging, bandingkan hasil effective access dan dry-run dengan perilaku lama, lalu aktifkan per tenant/feature flag. Perubahan BE-10 dan tombol bulk review sudah tersedia lokal di backend dan frontend, tetapi belum dideploy ke production.
 
 ## Review ulang sebelum tiap fase dianggap selesai
 

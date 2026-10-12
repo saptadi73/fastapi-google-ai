@@ -566,6 +566,7 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | POST | `/import-reviews/{review_id}/resume` | E | ImportReviewAction | 200 | batch VALIDATING jika blocker sudah diselesaikan |
 | GET | `/import-reviews/{review_id}/questions` | S | status, category, offset, limit | 200 | items[], has_more |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/answer` | E | ImportQuestionDecision | 200 | question, review; stale=true jika dependency berubah |
+| POST | `/import-reviews/{review_id}/dismiss-ai-suggestions` | E | ImportAISuggestionsDismissRequest | 200 | Menandai VALUE_ISSUE lama sebagai ditinjau; duplicate/PRIVACY_RISK tetap blocker |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal` | R | ImportProposalResolution | 200 | question, review setelah master aktif-approved |
 | POST | `/import-reviews/{review_id}/preview` | E | ImportReviewPreviewRequest | 200 | target, changes[], summary, preview_hash, preview_token, can_approve |
 | GET | `/import-reviews/{review_id}/preview` | S | Tanpa body | 200 | Preview editor tervalidasi ulang, masked_fields, read_only; tanpa token apply |
@@ -619,7 +620,7 @@ Metadata master dan binding tersedia; kontrak lengkap, payload, respons, version
 | GET | `/master-definitions/reference-orphans` | S | Tidak ada | 200 | items per binding, orphan_count, orphan_values, type validation, execution_ready |
 | POST | `/master-definitions/deploy-foreign-keys` | R | Tidak ada | 200 | created constraints, execution_ready=true |
 
-Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIME_PENDING`) agar master tidak dimuat sebagai dataset mandiri. Untuk import master, buat batch review dari tab yang binding-nya approved dan storage-nya siap; kirim `source_sheet_id` tanpa `configuration_id` ke POST `/import-reviews`. GET master-binding mengembalikan `metadata_ready`, `storage_ready`, dan `execution_ready`; GET klasifikasi MASTER menyertakan ringkasan ini. GET `/master-definitions/{master_id}/source-bindings` menampilkan tab terkait beserta blocker dan kesiapan import.
+Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIME_PENDING`) agar master tidak dimuat sebagai dataset mandiri. Untuk import master, buat batch review dari tab yang binding-nya approved dan storage-nya siap; kirim `source_sheet_id` tanpa `configuration_id` ke POST `/import-reviews`. GET master-binding mengembalikan `metadata_ready`, `storage_ready`, dan `execution_ready`; GET klasifikasi MASTER menyertakan ringkasan ini, `execution_path=MASTER_BATCH_IMPORT`, dan `standard_etl_blocking_reason` yang terpisah dari kesiapan batch. `execution_ready` pada response klasifikasi berarti batch master siap, bukan izin memakai endpoint konfigurasi/sync ETL biasa. GET `/master-definitions/{master_id}/source-bindings` menampilkan tab terkait beserta blocker dan kesiapan import.
 
 ## 4. Konfigurasi ETL dan approval
 

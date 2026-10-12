@@ -6,6 +6,16 @@ from app.repositories.source_repository import SourceRepository
 from app.services.audit_service import audit
 
 
+def master_binding_message(code):
+    return {
+        "MASTER_BINDING_REQUIRED": "Atur binding kolom tab ke field master.",
+        "MASTER_BINDING_REVIEW_REQUIRED": "Binding belum disetujui atau belum valid untuk snapshot terbaru.",
+        "MASTER_VERSION_UNAVAILABLE": "Pilih versi master aktif yang tersedia.",
+        "SOURCE_TAB_MISSING": "Tab tidak ditemukan di spreadsheet; jalankan discovery ulang.",
+        "SOURCE_TAB_DISABLED": "Tab dinonaktifkan; aktifkan kembali bila akan diimpor.",
+    }.get(code, "Periksa binding master dan kesiapan storage sebelum membuat batch import.")
+
+
 def classification_blocker(sheet):
     if sheet.classification_status != "CONFIRMED" or sheet.dataset_kind is None:
         return {
@@ -76,6 +86,24 @@ class ClassificationService:
                     "blocking_reason",
                 )
             }
+            # A MASTER tab is intentionally blocked from generic ETL configuration
+            # and direct sync, but it has its own supported batch-import runtime.
+            # Report readiness for that runtime separately so tracking does not
+            # keep showing MASTER_RUNTIME_PENDING after binding and storage are ready.
+            result["execution_path"] = "MASTER_BATCH_IMPORT"
+            result["standard_etl_blocking_reason"] = {
+                "code": "MASTER_RUNTIME_PENDING",
+                "message": "Tab MASTER dimuat melalui Batch Import master, bukan konfigurasi ETL atau sync biasa.",
+            }
+            result["execution_ready"] = binding["execution_ready"]
+            result["blocking_reason"] = (
+                None
+                if binding["execution_ready"]
+                else {
+                    "code": binding["blocking_reason"],
+                    "message": master_binding_message(binding["blocking_reason"]),
+                }
+            )
         return result
 
     async def update(self, sheet_id, data):
@@ -86,7 +114,7 @@ class ClassificationService:
             raise AppError("CLASSIFICATION_CONFLICT", "Revisi klasifikasi berubah; muat ulang tab.", 409)
         kind = data.dataset_kind.value
         if sheet.classification_status == "CONFIRMED" and sheet.dataset_kind == kind:
-            return classification_record(sheet)
+            return await self.get(sheet.id)
         if sheet.active_configuration_id and kind != "NON_MASTER":
             raise AppError(
                 "CLASSIFICATION_ACTIVE_CONFLICT",
@@ -112,7 +140,7 @@ class ClassificationService:
             after={"dataset_kind": kind, "revision_no": sheet.classification_revision},
         )
         await self.session.flush()
-        return classification_record(sheet)
+        return await self.get(sheet.id)
 
     async def require_source_ready(self, source_id, *, lock=False):
         await self.repo.get(DataSource, source_id)

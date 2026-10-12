@@ -8,6 +8,7 @@ from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.domain.import_workflow import ImportAction, ImportStatus
 from app.schemas.import_review import (
+    ImportAISuggestionsDismissRequest,
     ImportProposalResolution,
     ImportQuestionDecision,
     ImportReferenceResolveRequest,
@@ -90,6 +91,16 @@ async def answer_import_question(
     user: CurrentUser,
 ):
     return success(await ImportReviewService(session, user).answer_question(review_id, question_id, data))
+
+
+@router.post("/import-reviews/{review_id}/dismiss-ai-suggestions", dependencies=edit)
+async def dismiss_import_ai_suggestions(
+    review_id: UUID,
+    data: ImportAISuggestionsDismissRequest,
+    session: Session,
+    user: CurrentUser,
+):
+    return success(await ImportReviewService(session, user).dismiss_ai_suggestions(review_id, data))
 
 
 @router.post(

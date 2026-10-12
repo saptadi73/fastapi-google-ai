@@ -22,6 +22,11 @@ class ImportReviewPreviewRequest(StrictModel):
     close_open_periods: bool = False
 
 
+class ImportAISuggestionsDismissRequest(StrictModel):
+    revision_no: int = Field(ge=1)
+    reason: str = Field(min_length=10, max_length=2000)
+
+
 class ImportReviewApproveRequest(StrictModel):
     revision_no: int = Field(ge=1)
     comment: str = Field(default="", max_length=2000)
@@ -56,7 +61,7 @@ class AIImportReviewIssue(StrictModel):
     source_row: int = Field(gt=0)
     target_column: str = Field(min_length=1, max_length=63)
     message: str = Field(min_length=1, max_length=2000)
-    issue_kind: Literal["VALUE_ISSUE", "EXACT_DUPLICATE"] = "VALUE_ISSUE"
+    issue_kind: Literal["VALUE_ISSUE", "EXACT_DUPLICATE", "PRIVACY_RISK"] = "VALUE_ISSUE"
     related_source_row: int | None = Field(default=None, gt=0)
 
 

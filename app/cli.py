@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 
 from sqlalchemy import select, text
 
@@ -7,6 +8,61 @@ from app.core.config import get_settings
 from app.core.database import SessionFactory, engine
 from app.core.security import password_hasher
 from app.models.auth import Tenant, User
+from app.models.source import DataSource
+
+SOURCE_ACCESS_METADATA_FIELDS = (
+    "owner_unit_id",
+    "business_domain_id",
+    "jurisdiction_id",
+    "purpose_id",
+    "data_owner_user_id",
+    "data_steward_user_id",
+    "sensitivity",
+)
+
+
+def source_access_backfill_row(source):
+    """Classify legacy source access state without changing or exposing metadata values."""
+    metadata = source.access_metadata or {}
+    missing = [field for field in SOURCE_ACCESS_METADATA_FIELDS if not metadata.get(field)]
+    if missing:
+        action = "OWNER_METADATA_REQUIRED"
+    elif source.access_review_status == "REJECTED":
+        action = "SOURCE_REVIEW_REJECTED"
+    elif source.access_review_status != "APPROVED":
+        action = "SOURCE_REVIEW_REQUIRED"
+    elif source.access_status != "POLICY_APPROVED":
+        action = "OWNER_ACCESS_ACTIVATION_REQUIRED"
+    else:
+        action = "READY_NO_BACKFILL"
+    return {
+        "tenant_id": str(source.tenant_id),
+        "source_id": str(source.id),
+        "source_code": source.source_code,
+        "access_status": source.access_status,
+        "review_status": source.access_review_status,
+        "action": action,
+        "missing_metadata_fields": missing,
+    }
+
+
+async def source_access_backfill_report():
+    async with SessionFactory() as session:
+        sources = list((await session.scalars(
+            select(DataSource)
+            .where(DataSource.unlinked_at.is_(None))
+            .order_by(DataSource.tenant_id, DataSource.source_code)
+        )).all())
+    rows = [source_access_backfill_row(source) for source in sources]
+    counts = {}
+    for row in rows:
+        counts[row["action"]] = counts.get(row["action"], 0) + 1
+    print(
+        json.dumps(
+            {"mode": "READ_ONLY_DRY_RUN", "total": len(rows), "counts": counts, "sources": rows},
+            indent=2,
+        )
+    )
 
 
 async def reconcile_bootstrap_admin(session, settings, *, password: str, username: str, reset_password: bool):
@@ -80,12 +136,17 @@ async def main_async(command, *, reset_existing_password: bool = False):
         from app.workers.runner import run_pending
 
         print(await run_pending())
+    elif command == "source-access-backfill-report":
+        await source_access_backfill_report()
     await engine.dispose()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["bootstrap", "check-db", "worker-once"])
+    parser.add_argument(
+        "command",
+        choices=["bootstrap", "check-db", "worker-once", "source-access-backfill-report"],
+    )
     parser.add_argument(
         "--reset-existing-password",
         action="store_true",

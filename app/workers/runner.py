@@ -108,9 +108,7 @@ async def execute_job(session, job):
         if source and source.unlinked_at is not None:
             raise AppError("SOURCE_UNLINKED", "Job sumber yang sudah di-unlink tidak dapat dijalankan.", 409)
     user = await session.get(User, job.requested_by)
-    if job.kind == "ROLLBACK":
-        roles = REVIEW_ROLES
-    elif job.kind == "DEPLOY" and not get_settings().etl_owner_workflow_enabled:
+    if job.kind in ("DEPLOY", "ROLLBACK") and not get_settings().etl_owner_workflow_enabled:
         roles = REVIEW_ROLES
     else:
         roles = EDIT_ROLES

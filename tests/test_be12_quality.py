@@ -33,6 +33,19 @@ def test_thresholds_are_per_rule_and_boundary_is_inclusive(config_data, sheet_va
     run(config_data, sheet_values, rules)
 
 
+def test_quality_blocker_reports_row_and_field_without_echoing_cell_value(config_data, sheet_values):
+    secret_value = "private customer name"
+    sheet_values[1][2] = secret_value
+    rule = {"column": "branch_name", "rule": "allowed_values", "value": ["Jakarta"],
+            "action_on_fail": "STOP_BATCH"}
+    with pytest.raises(AppError) as exc:
+        run(config_data, sheet_values, [rule])
+    assert exc.value.code == "DQ_STOP_BATCH"
+    assert "baris sumber 2" in exc.value.message
+    assert "branch_name" in exc.value.message
+    assert secret_value not in exc.value.message
+
+
 def test_default_is_cast_before_required_check_and_invalid_default_rejected(config_data, sheet_values):
     config_data["columns"][3]["nullable"] = False
     sheet_values[1][3] = ""

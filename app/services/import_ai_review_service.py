@@ -3,7 +3,7 @@
 from app.core.exceptions import AppError
 from app.services.profiling_service import digest
 
-AI_REVIEW_POLICY_VERSION = "BE10-v2-masking"
+AI_REVIEW_POLICY_VERSION = "BE10-v3-advisory-values"
 TEXT_CLEANSING_POLICY_VERSION = "text-trim-v1"
 
 
@@ -26,3 +26,14 @@ def verified_ai_issues(issues, rows, columns, masked_fields):
         else:
             accepted.append(issue)
     return accepted, discarded
+
+
+def split_ai_issues(issues):
+    """Keep verified duplicates and privacy risks actionable; other AI findings are advice."""
+    blockers, warnings = [], []
+    for issue in issues:
+        if issue.get("issue_kind") in ("EXACT_DUPLICATE", "PRIVACY_RISK"):
+            blockers.append(issue)
+        else:
+            warnings.append({**issue, "severity": "WARN"})
+    return blockers, warnings

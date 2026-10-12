@@ -78,17 +78,38 @@
   },
   {
     "group": "review",
+    "code": "CONFIGURATION_INVALID",
+    "kind": "error",
+    "cause": "Dry-run menemukan baris yang tidak lolos tipe, nullability, business key, atau pertanyaan konfigurasi belum dijawab.",
+    "action": "Baca baris, field, dan kode masalah yang ditampilkan. Perbaiki nilai/aturan pada Google Sheet atau mapping ETL, lalu jalankan Dry-run dan Deploy ulang. Pesan tidak menampilkan nilai sel."
+  },
+  {
+    "group": "review",
     "code": "APPROVAL_REQUIRED",
     "kind": "error",
     "cause": "Status konfigurasi belum memenuhi persyaratan deploy/aktivasi.",
-    "action": "Selesaikan review dan approval oleh reviewer berwenang yang berbeda dari pembuat, lalu deploy versi yang benar."
+    "action": "Konfigurasi legacy memerlukan review/approval reviewer. Konfigurasi owner-managed harus selesai validasi pemilik; periksa status dan gunakan akun data owner/steward yang tercatat."
+  },
+  {
+    "group": "review",
+    "code": "CONFIGURATION_REVIEWER_REQUIRED",
+    "kind": "error",
+    "cause": "Aksi pada konfigurasi legacy diminta oleh akun non-reviewer.",
+    "action": "Gunakan akun reviewer yang berwenang. Workflow owner hanya berlaku pada revisi yang ditandai owner-managed."
+  },
+  {
+    "group": "review",
+    "code": "OWNER_WORKFLOW_ACTOR_REQUIRED",
+    "kind": "error",
+    "cause": "Akun bukan data owner/steward yang tercatat pada sumber owner-managed.",
+    "action": "Minta data owner atau steward yang tercatat menjalankan deploy/rollback; PLATFORM_ADMIN dapat membantu. Pemeriksaan snapshot dan klasifikasi tetap berlaku."
   },
   {
     "group": "review",
     "code": "RELEASE_APPROVAL_REQUIRED",
     "kind": "error",
     "cause": "Keputusan IT/unit pada Persetujuan tayang belum lengkap atau sudah tidak berlaku.",
-    "action": "Lengkapi checklist dan semua kelompok pada revisi/snapshot sama; perubahan membatalkan keputusan lama. Approval rilis tidak memberi akses baca."
+    "action": "Konfigurasi legacy memerlukan checklist IT dan kelompok unit pada revisi/snapshot sama. Konfigurasi owner-managed tervalidasi tidak memakai approval rilis kedua. Perubahan membatalkan keputusan lama; approval rilis tidak memberi akses baca."
   },
   {
     "group": "review",

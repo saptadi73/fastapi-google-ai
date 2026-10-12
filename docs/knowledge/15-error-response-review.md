@@ -1,7 +1,7 @@
 ---
 id: error-response-review
 title: Error response - Review konfigurasi dan deploy schema
-summary: Tabel penyebab dan tindakan untuk REVIEW_STALE, CONFIGURATION_CONFLICT, APPROVAL_REQUIRED, RELEASE_APPROVAL_REQUIRED, SCHEMA_REVIEW_REQUIRED, SCHEMA_MIGRATION_STALE, SCHEMA_MIGRATION_BLOCKED, SEMANTIC_SCHEMA_MIGRATION_REQUIRED, SCHEMA_CHANGE_UNSAFE, ARTIFACT_MISSING, ARTIFACT_HASH_MISMATCH, VALIDATION_ERROR, RESOURCE_CONFLICT.
+summary: Tabel penyebab dan tindakan untuk REVIEW_STALE, CONFIGURATION_CONFLICT, CONFIGURATION_INVALID, APPROVAL_REQUIRED, CONFIGURATION_REVIEWER_REQUIRED, OWNER_WORKFLOW_ACTOR_REQUIRED, RELEASE_APPROVAL_REQUIRED, SCHEMA_REVIEW_REQUIRED, SCHEMA_MIGRATION_STALE, SCHEMA_MIGRATION_BLOCKED, SEMANTIC_SCHEMA_MIGRATION_REQUIRED, SCHEMA_CHANGE_UNSAFE, ARTIFACT_MISSING, ARTIFACT_HASH_MISMATCH, VALIDATION_ERROR, RESOURCE_CONFLICT.
 routes: ["/etl-review/*", "/configurations/*", "/release-approvals", "/jobs", "/guide"]
 audiences: ["*"]
 source: docs/ERROR_RESPONSES.md
@@ -12,8 +12,11 @@ Cari kode pada pesan error atau monitor job; catat ID job, sumber/tab dan versi 
 | --- | --- | --- |
 | `REVIEW_STALE` | Isi atau header Sheet saat deploy berbeda dari snapshot review; formula juga dapat berubah. | Profiling ulang, buat draft terbaru, perbaiki mapping header, Dry-run, review/approval ulang lalu Deploy. Retry versi approved lama tidak memperbarui bukti. |
 | `CONFIGURATION_CONFLICT` | Kolom/fingerprint sumber tidak sesuai mapping yang direview. | Temukan tab jika nama tab berubah, lalu Profiling ulang. Clone bila header lama masih ada; jika hilang, buat draft dari profil terbaru dan ajukan ulang. |
-| `APPROVAL_REQUIRED` | Status konfigurasi belum memenuhi persyaratan deploy/aktivasi. | Selesaikan review dan approval oleh reviewer berwenang yang berbeda dari pembuat, lalu deploy versi yang benar. |
-| `RELEASE_APPROVAL_REQUIRED` | Keputusan IT/unit pada Persetujuan tayang belum lengkap atau sudah tidak berlaku. | Lengkapi checklist dan semua kelompok pada revisi/snapshot sama; perubahan membatalkan keputusan lama. Approval rilis tidak memberi akses baca. |
+| `CONFIGURATION_INVALID` | Dry-run menemukan baris yang tidak lolos tipe, nullability, business key, atau pertanyaan konfigurasi belum dijawab. | Baca baris, field, dan kode masalah yang ditampilkan. Perbaiki nilai/aturan pada Google Sheet atau mapping ETL, lalu jalankan Dry-run dan Deploy ulang. Pesan tidak menampilkan nilai sel. |
+| `APPROVAL_REQUIRED` | Status konfigurasi belum memenuhi persyaratan deploy/aktivasi. | Konfigurasi legacy memerlukan review/approval reviewer. Konfigurasi owner-managed harus selesai validasi pemilik; periksa status dan gunakan akun data owner/steward yang tercatat. |
+| `CONFIGURATION_REVIEWER_REQUIRED` | Aksi pada konfigurasi legacy diminta oleh akun non-reviewer. | Gunakan akun reviewer yang berwenang. Workflow owner hanya berlaku pada revisi yang ditandai owner-managed. |
+| `OWNER_WORKFLOW_ACTOR_REQUIRED` | Akun bukan data owner/steward yang tercatat pada sumber owner-managed. | Minta data owner atau steward yang tercatat menjalankan deploy/rollback; PLATFORM_ADMIN dapat membantu. Pemeriksaan snapshot dan klasifikasi tetap berlaku. |
+| `RELEASE_APPROVAL_REQUIRED` | Keputusan IT/unit pada Persetujuan tayang belum lengkap atau sudah tidak berlaku. | Konfigurasi legacy memerlukan checklist IT dan kelompok unit pada revisi/snapshot sama. Konfigurasi owner-managed tervalidasi tidak memakai approval rilis kedua. Perubahan membatalkan keputusan lama; approval rilis tidak memberi akses baca. |
 | `SCHEMA_REVIEW_REQUIRED` | Versi konfigurasi belum memiliki bukti review schema yang diwajibkan. | Buat/clone draft, lihat Preview perubahan schema di langkah 7, konfirmasi, lalu submit dan approval ulang. |
 | `SCHEMA_MIGRATION_STALE` | Schema/data target berubah setelah preview schema disetujui. | Muat ulang preview dan review draft terbaru. Jangan mengulangi deploy dengan bukti lama. |
 | `SCHEMA_MIGRATION_BLOCKED` | Perubahan schema tidak aman atau bukti konversi tidak cukup. | Baca blocker preview. Bigint ke date wajib Serial Google Sheets hanya jika terbukti serial; periksa contoh/nilai gagal. Rename/drop/key/dependency tidak aman memerlukan rencana migrasi yang direview. |

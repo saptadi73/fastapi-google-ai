@@ -25,7 +25,7 @@ Persetujuan orang kedua tidak diperlukan dalam alur target. Validasi, preview, p
 | Taxonomy/versi/binding | Endpoint reviewer dan pemeriksaan editor terpisah | Koreksi referensi memicu pergantian akun | Simpan/aktifkan hasil validasi dengan versi dan audit |
 | Formula/action plan | `AnalyticsRulesService.decide`: assignment reviewer, self-approval selalu ditolak | Aturan bisnis tidak dapat dipakai langsung oleh pengelola | Preview dan aktifkan aturan valid; evaluasi tetap memeriksa akses dan versi |
 | Join semantic | Endpoint approve join terpisah | Setup hubungan data membutuhkan langkah tambahan | Pengelola yang berhak atas kedua sumber dapat mengaktifkan join valid |
-| Temuan AI | Setiap VALUE_ISSUE AI menghasilkan pertanyaan wajib/AI_REVIEW_ISSUES | Singkatan sah menghentikan batch meskipun seluruh baris lolos validasi | Saran penamaan/istilah menjadi peringatan; ambiguitas identitas dan konflik data tetap blocker |
+| Temuan AI | Dulu setiap VALUE_ISSUE AI menghasilkan pertanyaan wajib/AI_REVIEW_ISSUES; sekarang VALUE_ISSUE hanya peringatan, blocker terbatas pada duplikat terverifikasi dan risiko privasi | Singkatan sah menahan batch meskipun baris lolos validasi | Saran nilai dan coverage AI parsial tidak menahan batch; keputusan data integrity tetap wajib |
 | Status UI | Ringkasan sumber mencampur konfigurasi/tab dan status import | MASTER siap tetapi sumber terlihat IN_PROGRESS/PENDING_IT_APPROVAL | Kesiapan ditampilkan per tab, dengan satu langkah berikutnya yang tepat |
 | Hasil master | Master memiliki storage/record kanonis, berbeda dari data product NON_MASTER | Pengguna mengira master harus ada dalam katalog analitik biasa | Jelaskan output dan berikan tautan record master/produk data yang terkait |
 

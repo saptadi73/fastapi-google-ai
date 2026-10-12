@@ -186,7 +186,10 @@ async def test_question_stale_and_proposed_master_stay_blocked(context, config_d
     assert resumed["data"]["status"] == "VALIDATING"
     await run_pending(ctx.tenant_id)
     await run_pending(ctx.tenant_id)
-    assert (await detail(ctx, review))["checkpoint"]["blocking_codes"] == ["AI_REVIEW_NOT_IMPLEMENTED"]
+    result = await detail(ctx, review)
+    assert result["status"] == "READY_FOR_APPROVAL"
+    assert result["checkpoint"]["blocking_codes"] == []
+    assert result["checkpoint"]["ai_coverage"] == "SKIPPED"
 
 
 async def test_question_correct_source_requires_reason_and_preserves_raw(context, config_data):

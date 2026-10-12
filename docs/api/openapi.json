@@ -13671,6 +13671,112 @@
         }
       }
     },
+    "/api/v1/import-reviews/{review_id}/dismiss-ai-suggestions": {
+      "post": {
+        "tags": [
+          "Import reviews"
+        ],
+        "summary": "Dismiss Import Ai Suggestions",
+        "operationId": "dismiss_import_ai_suggestions_api_v1_import_reviews__review_id__dismiss_ai_suggestions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportAISuggestionsDismissRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal": {
       "post": {
         "tags": [
@@ -26054,6 +26160,28 @@
         ],
         "title": "HelpQuestion"
       },
+      "ImportAISuggestionsDismissRequest": {
+        "properties": {
+          "revision_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision No"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision_no",
+          "reason"
+        ],
+        "title": "ImportAISuggestionsDismissRequest"
+      },
       "ImportProposalResolution": {
         "properties": {
           "revision_no": {
@@ -26233,6 +26361,29 @@
           "preview_token": {
             "type": "string",
             "title": "Preview Token"
+          },
+          "preview_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Hash"
+          },
+          "accept_source_conflicts": {
+            "type": "boolean",
+            "title": "Accept Source Conflicts",
+            "default": false
+          },
+          "approval_comment": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Approval Comment",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -28528,6 +28679,18 @@
               "OTHER"
             ],
             "title": "Reason"
+          },
+          "review_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Fingerprint"
           }
         },
         "additionalProperties": false,

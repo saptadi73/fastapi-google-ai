@@ -154,6 +154,12 @@ async def test_two_tabs_bind_one_approved_master_without_loading(context, config
     assert error["errors"][0]["code"] == "MASTER_RUNTIME_PENDING"
     classification = (await request(ctx, "GET", f"/source-sheets/{sheet}/classification"))["data"]
     assert classification["master_binding"]["metadata_ready"] and not classification["execution_ready"]
+    assert classification["execution_path"] == "MASTER_BATCH_IMPORT"
+    assert classification["standard_etl_blocking_reason"]["code"] == "MASTER_RUNTIME_PENDING"
+    assert classification["blocking_reason"]["code"] in {
+        "MASTER_BINDING_REVIEW_REQUIRED",
+        "MASTER_STORAGE_REQUIRED",
+    }
 
 
 async def test_binding_version_classification_snapshot_and_inactive_master(context, config_data):
