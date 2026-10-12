@@ -1,6 +1,6 @@
 # Penyederhanaan workflow ETL — TODO dan review risiko
 
-Status dokumen: implementasi lokal parsial; belum menjadi perubahan production. Audit ulang terakhir: 13 Oktober 2026.
+Status dokumen: sebagian perubahan terpasang di production pada 13 Oktober 2026 (backend `12c39b0`, frontend `b6dc662`); TODO yang belum dicentang tetap belum dianggap selesai. Audit ulang terakhir: 13 Oktober 2026.
 
 ## Temuan dari implementasi saat ini
 
@@ -16,6 +16,7 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - Submit konfigurasi owner-managed sebelumnya mewajibkan checklist kolom/bagian. Checklist kini opsional di owner-managed dan tetap ada untuk workflow reviewer legacy.
 - Sync aktif sebelumnya menolak `FULL_REFRESH`. Owner-managed kini boleh langsung sync penuh setelah pemeriksaan status, freshness, akses, preview konflik, dan validasi baris.
 - Monitor perubahan Drive lokal mendeteksi perubahan melalui polling dan mengantre discovery/profiling. Production bergantung pada migration, Drive API/permission, worker dan Beat; pelaku edit eksternal tidak dapat dipastikan hanya dari `modifiedTime`.
+- Pada production, workflow owner-managed, fallback domain+unit, dan monitor aktif; `REQUIRE_SEPARATE_APPROVER=false` sudah disetel dan service API/worker/Beat aktif. Probe metadata Drive read-only pada 13 Oktober 2026 mengidentifikasi `403 accessNotConfigured`: Google Drive API belum diaktifkan pada project Cloud Service Account. Kode lokal kini membedakan kondisi tersebut dari izin file, tetapi belum dideploy; aktivasi API masih memerlukan admin project Google Cloud.
 
 ## Target workflow
 
@@ -34,7 +35,7 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [x] Tetapkan default scope business domain + unit pemilik; yurisdiksi/department menjadi pembatas opsional.
 - [x] Petakan state approval, policy, binding master/taxonomy, dan batch lama; detail backfill masih menjadi TODO P1.
 - [x] Buat skenario penerimaan untuk role, tenant boundary, keamanan data, dan jalur UI/API.
-- [x] Audit ulang default flag, checklist submit, jalur FULL_REFRESH, dan deteksi perubahan sumber; mismatch runtime production tetap perlu diverifikasi.
+- [x] Audit ulang default flag, checklist submit, jalur FULL_REFRESH, dan deteksi perubahan sumber; production owner workflow, domain+unit fallback, dan monitor aktif; `REQUIRE_SEPARATE_APPROVER=false` disetel pada 13 Oktober 2026.
 
 ### P1 — akses sederhana tanpa kehilangan isolasi
 
@@ -80,13 +81,13 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ### P5 — frontend, dokumentasi, rollout
 
-- [~] Tampilkan 7 langkah sebagai progres berurutan: checklist ditinjau/kedaluwarsa, status validasi/deploy, job gagal, dan tindakan berikutnya; helper per tahap tetap tersedia. Status tiap tahap hanya mencerminkan bukti UI yang ada dan tidak menggantikan validasi backend. Helper tracking menjelaskan approval IT awal; batch import dan Persetujuan tayang telah diperjelas untuk owner-managed versus legacy. Masih perlu menuntaskan keselarasan navigasi/panduan admin dan review semua teks workflow lama.
+- [~] Tampilkan 7 langkah sebagai progres berurutan: checklist ditinjau/kedaluwarsa, status validasi/deploy, job gagal, dan tindakan berikutnya; helper per tahap tetap tersedia. Status tiap tahap hanya mencerminkan bukti UI yang ada dan tidak menggantikan validasi backend. Helper tracking menjelaskan approval IT awal; batch import dan Persetujuan tayang telah diperjelas untuk owner-managed versus legacy. Helper tujuh langkah kini ringkas dan menjelaskan jalur owner-managed/legacy secara terpisah; masih perlu menuntaskan keselarasan navigasi/panduan admin dan review semua teks workflow lama.
 - [ ] Hilangkan tombol/menu approval yang tidak lagi menjadi bagian alur setelah backend dan migration siap.
-- [~] Perbarui helper/knowledge base untuk AI review, sumber legacy, rollback owner workflow, error owner/legacy, serta alur master owner-managed versus legacy. Generator backend dan salinan helper frontend diselaraskan; helper semua 7 langkah, panduan admin lengkap, dan runbook rollout masih perlu dituntaskan.
-- [ ] Jalankan migrasi staging, dry-run data lama, regression/security tests, lalu canary terbatas.
+- [~] Perbarui helper/knowledge base untuk AI review, sumber legacy, rollback owner workflow, error owner/legacy, serta alur master owner-managed versus legacy. Generator backend dan salinan helper frontend diselaraskan; ringkasan alur dan helper tujuh langkah telah disederhanakan; panduan admin lengkap dan review teks lama masih perlu dituntaskan.
+- [~] Jalankan migrasi staging, dry-run data lama, regression/security tests, lalu canary terbatas. Migration source-change monitor `a7q0w3e6r9t2` telah diterapkan di production; 84 tes backend workflow/monitor lulus sebelum deploy. Dry-run akses legacy, regression/security penuh, dan canary bertahap masih terbuka.
 - [ ] Siapkan rollback feature flag dan audit sebelum rollout global.
-- [ ] Verifikasi `.env` production: `ETL_OWNER_WORKFLOW_ENABLED=true`, `REQUIRE_SEPARATE_APPROVER=false`, `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED=true`; pastikan worker/Beat berjalan dan Drive metadata permission tersedia untuk deteksi otomatis.
-- [ ] Samakan frontend dengan owner-managed default: CTA “Validasi & siapkan deploy”, hilangkan approval rutin, dan jelaskan FULL_REFRESH sebagai penggantian isi tabel setelah validasi.
+- [~] Verifikasi `.env` production dan worker/Beat: owner workflow serta domain+unit fallback aktif dari default; `REQUIRE_SEPARATE_APPROVER=false` tersimpan; worker/Beat aktif. Drive metadata belum tersedia karena Google Drive API project Service Account belum aktif (`accessNotConfigured`); setelah diaktifkan, verifikasi ulang izin metadata dan tunggu poll monitor.
+- [x] Samakan frontend dengan owner-managed default: CTA “Validasi & siapkan deploy”, tanpa approval rutin pada konfigurasi owner-managed, dan FULL_REFRESH dijelaskan sebagai penggantian isi tabel setelah validasi. Jalur review tetap tersedia untuk konfigurasi legacy.
 
 ## Blocker yang jangan dihapus
 

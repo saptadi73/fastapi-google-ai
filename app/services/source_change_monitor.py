@@ -67,18 +67,30 @@ async def monitor_source_changes(google=None):
             current_modified = _parse_google_time(await google.modified_time(spreadsheet_id))
         except AppError as exc:
             # Inform the steward once; never block ordinary ETL or flood the notification center.
+            guidance = (
+                "Aktifkan Google Drive API pada project Google Cloud Service Account."
+                if exc.code == "DRIVE_API_NOT_ENABLED"
+                else "Periksa Drive API dan izin metadata Drive untuk Service Account."
+            )
             async with transaction() as session:
                 event_key = f"source-monitor-unavailable:{source_id}"
-                exists = await session.scalar(select(OperationalNotification.id).where(
+                existing_notice = await session.scalar(select(OperationalNotification).where(
                     OperationalNotification.tenant_id == tenant_id,
                     OperationalNotification.event_key == event_key,
                 ))
-                if not exists:
+                message = f"Sistem belum dapat membaca metadata perubahan Google Drive. {guidance} Discovery dan profiling manual tetap dapat digunakan."
+                if existing_notice:
+                    # Keep an open warning actionable when diagnosis becomes more specific
+                    # after an API/permission fix or a server upgrade.
+                    if existing_notice.acknowledged_at is None:
+                        existing_notice.message = message
+                        existing_notice.details = {**(existing_notice.details or {}), "error_code": exc.code}
+                else:
                     session.add(OperationalNotification(
                         tenant_id=tenant_id, event_key=event_key, kind="SOURCE_MONITOR_UNAVAILABLE",
                         severity="WARN", resource_type="SOURCE", resource_id=source_id,
                         title="Pemantauan perubahan belum aktif",
-                        message="Sistem belum dapat membaca metadata perubahan Google Drive. Aktifkan Drive API dan izin metadata untuk Service Account; discovery dan profiling manual tetap dapat digunakan.",
+                        message=message,
                         details={"error_code": exc.code}, recipient_user_id=owner_id,
                     ))
                     system_audit(session, tenant_id, "source.change_monitor_unavailable", source_id,

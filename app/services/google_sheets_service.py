@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from pathlib import Path
 
@@ -19,6 +20,16 @@ class TemporaryGoogleError(Exception):
 
 
 class GoogleSheetsService:
+    @staticmethod
+    def _google_error_reason(exc):
+        """Return Google's structured reason without exposing request details."""
+        try:
+            payload = json.loads(exc.content.decode("utf-8"))
+            errors = payload.get("error", {}).get("errors", [])
+            return next((item.get("reason") for item in errors if item.get("reason")), None)
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            return None
+
     def _client(self):
         s = get_settings()
         path = Path(s.google_service_account_file)
@@ -110,6 +121,12 @@ class GoogleSheetsService:
         except HttpError as exc:
             status = exc.resp.status
             if status == 403:
+                if self._google_error_reason(exc) == "accessNotConfigured":
+                    raise AppError(
+                        "DRIVE_API_NOT_ENABLED",
+                        "Aktifkan Google Drive API pada project Google Cloud milik Service Account. Setelah aktif, sistem akan melanjutkan pemantauan otomatis.",
+                        503,
+                    ) from None
                 raise AppError(
                     "SOURCE_CHANGE_CHECK_DENIED",
                     "Pemeriksaan otomatis perlu Drive API aktif dan izin metadata Drive untuk Service Account.",

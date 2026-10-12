@@ -23,6 +23,8 @@ Gunakan urutan berikut agar data dapat dipakai dengan aman:
 
 Master dan taxonomy hanya diperlukan bila dataset membutuhkan rujukan atau kategori baku. Dataset transaksi sederhana tetap melalui klasifikasi, konfigurasi, validasi, pemuatan, dan kontrol akses.
 
+Di halaman konfigurasi, gunakan ikon tanda tanya pada tiap langkah untuk petunjuk singkat. Untuk konfigurasi owner-managed, pemilik menyelesaikan validasi lalu deploy tanpa approval konfigurasi rutin; konfigurasi lama masih menampilkan jalur review jika memang diperlukan. Pada strategi pemuatan, APPEND menambah baris, UPSERT memperbarui berdasarkan key, dan FULL_REFRESH mengganti seluruh isi tabel setelah semua data lolos validasi.
+
 Gunakan menu **Sumber & tracking** sebagai daftar utama untuk mencari sumber dengan pencarian dan pagination, melihat status tiap tahap, serta mengetahui Data Owner dan Data Steward yang bertanggung jawab. Pilih **Buka sumber** untuk melanjutkan proses di Workspace ETL. Dropdown Workspace hanya untuk memilih konteks kerja dan tidak memuat seluruh daftar sumber.
 
 Menunggu tindakan (NEEDS_INPUT) berarti pemuatan berhenti pada temuan, bukan masih berjalan. Lihat detail berikon mata membuka modal kode, keterangan, baris asli Sheet dan kolom. Audit trail menyimpan riwayat dan lokasi tanpa nilai mentah. Periksa hasil per tab dan Baris dimuat, bukan hanya job sync induk.
