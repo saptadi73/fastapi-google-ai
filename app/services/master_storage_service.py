@@ -84,10 +84,11 @@ class MasterStorageService(MasterService):
             "schema_policy": "IDENTICAL_OR_ADD_NULLABLE_ATTRIBUTES",
             **await self.storage_state(master),
             "execution_ready": False,
+            "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
         }
 
     async def deploy(self, master_id, request):
-        self.require_role(REVIEW_ROLES)
+        self.require_role((*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES)
         master, _, table = await self.target(master_id)
         self.check_revision(master, request.revision_no)
         settings = get_settings()

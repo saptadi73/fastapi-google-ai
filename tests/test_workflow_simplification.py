@@ -11,7 +11,7 @@ from app.models.source import DataSource
 from app.schemas.access import AccessRequestBatchDecision
 from app.schemas.auth import UserCreate
 from app.schemas.configuration import Decision
-from app.services import auth_service, configuration_service, source_service
+from app.services import auth_service, configuration_service, master_service, source_service
 from app.services.access_service import AccessService
 from app.services.semantic_catalog_service import inventory_update_state
 
@@ -172,6 +172,35 @@ async def test_owner_workflow_does_not_skip_invalid_config_or_incomplete_checkli
         await service.submit_review("config", SimpleNamespace(revision_no=4, snapshot_hash="snapshot-hash"))
     assert error.value.code == "CONFIGURATION_INVALID"
     assert config.status == "AI_DRAFT"
+
+
+async def test_owner_workflow_approves_master_only_after_definition_checks(monkeypatch):
+    actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
+    service = master_service.MasterService(Mock(), actor)
+    definition = {
+        "name": "Produk", "aliases": [],
+        "fields": [{"name": "product_code", "type": "text", "nullable": False}],
+        "business_key": ["product_code"], "label_field": "product_code",
+        "policy": {"new_record_policy": "PROPOSE_INSERT", "source_conflict_policy": "REQUIRE_REVIEW"},
+    }
+    master = SimpleNamespace(
+        id="master", revision_no=1, status="DRAFT", definition_json=definition,
+        created_by=actor.id, submitted_by=None, approved_definition_json=None,
+        approved_version=0, is_active=False,
+    )
+    service.lock_master = AsyncMock(return_value=master)
+    service.check_authority = AsyncMock()
+    monkeypatch.setattr(master_service, "get_settings", lambda: SimpleNamespace(
+        etl_owner_workflow_enabled=True, require_separate_approver=True,
+    ))
+    monkeypatch.setattr(master_service, "audit", Mock())
+
+    result = await service.action("master", SimpleNamespace(revision_no=1, comment=""), "submit-review")
+
+    assert result.status == "APPROVED" and result.is_active is True
+    assert result.approved_version == 1 and result.approved_by == actor.id
+    assert result.revision_no == 2
+    assert service.check_authority.await_count == 2
 
 
 async def test_combined_approval_uses_configuration_reviewer_and_explicit_policy(monkeypatch):

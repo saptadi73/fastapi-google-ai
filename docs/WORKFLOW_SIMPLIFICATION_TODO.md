@@ -60,11 +60,13 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ### P4 — master dan import
 
-- [ ] Satukan pipeline master/non-master pada validator, job, audit, dan tracking yang sama.
-- [ ] Hilangkan approval definisi/binding/storage rutin; validasi business key dan referential integrity sebelum apply.
+- [~] Di mode `ETL_OWNER_WORKFLOW_ENABLED`, definisi master disahkan pemilik setelah schema/business key/authority checks; source binding dan column binding tervalidasi tanpa approver kedua.
+- [~] Deploy storage dapat dilakukan pemilik setelah konfirmasi rencana schema; batas perubahan storage aman dan audit tetap berlaku.
+- [ ] Satukan runtime/pipeline master dan non-master pada validator, job, apply, audit, dan tracking yang sama.
 - [ ] Tambahkan pemetaan relasi master opsional pada konfigurasi non-master dan pemeriksaan not-found/ambiguous.
 - [ ] Pertahankan keputusan eksplisit untuk konflik master, perubahan key, deactivation, dan delete-restricted.
-- [ ] Kurangi approval batch rutin; konflik tidak aman tetap menjadi item resolusi yang harus diputus pemilik.
+- [ ] Hapus approval batch rutin untuk batch bersih; konflik, usulan insert, ambiguous reference, dan source conflict tetap memerlukan resolusi steward.
+- [ ] Hilangkan blocker `MASTER_RUNTIME_PENDING` setelah master memiliki jalur preview/apply yang setara dan sudah diuji end-to-end.
 
 ### P5 — frontend, dokumentasi, rollout
 

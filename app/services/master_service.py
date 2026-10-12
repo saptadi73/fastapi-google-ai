@@ -238,19 +238,25 @@ class MasterService:
         return master
 
     async def action(self, master_id, data, action):
-        self.require_role(EDIT_ROLES if action == "submit-review" else REVIEW_ROLES)
+        owner_workflow = get_settings().etl_owner_workflow_enabled
+        self.require_role(EDIT_ROLES if action == "submit-review" or (owner_workflow and action == "approve") else REVIEW_ROLES)
         master = await self.lock_master(master_id)
         self.check_revision(master, data.revision_no)
+        owner_approval = action == "submit-review" and owner_workflow
         if action == "submit-review":
             if master.status not in ("DRAFT", "REJECTED"):
                 raise AppError("MASTER_STATE_CONFLICT", "Master tidak berada pada draft.", 409)
-            await self.check_authority(MasterSchema.model_validate(master.definition_json))
-            master.status, master.submitted_by = "NEEDS_REVIEW", self.user.id
-        elif action in ("approve", "reject"):
-            if master.status != "NEEDS_REVIEW":
+            parsed = MasterSchema.model_validate(master.definition_json)
+            await self.check_authority(parsed)
+            if owner_approval:
+                action = "approve"
+            else:
+                master.status, master.submitted_by = "NEEDS_REVIEW", self.user.id
+        if action in ("approve", "reject") or owner_approval:
+            if master.status != "NEEDS_REVIEW" and not owner_approval:
                 raise AppError("MASTER_STATE_CONFLICT", "Ajukan master untuk review terlebih dahulu.", 409)
             if action == "approve":
-                if get_settings().require_separate_approver and self.user.id in (
+                if not owner_approval and get_settings().require_separate_approver and self.user.id in (
                     master.created_by,
                     master.submitted_by,
                 ):
@@ -292,6 +298,8 @@ class MasterService:
                 master.is_active, master.status = True, "APPROVED"
             else:
                 master.status = "REJECTED"
+        elif action == "submit-review":
+            pass
         elif action == "deactivate":
             if not master.is_active:
                 raise AppError("MASTER_STATE_CONFLICT", "Master sudah nonaktif.", 409)
@@ -302,7 +310,7 @@ class MasterService:
         audit(
             self.session,
             self.user,
-            "master." + action,
+            "master.owner_validated" if owner_approval else "master." + action,
             master.id,
             comment=data.comment,
             revision=master.revision_no,
@@ -405,10 +413,10 @@ class MasterService:
             columns_json=[c.model_dump(mode="json") for c in data.columns],
             fingerprint=profile.fingerprint,
             snapshot_hash=validation["snapshot_hash"],
-            status="DRAFT",
+            status="APPROVED" if get_settings().etl_owner_workflow_enabled else "DRAFT",
             created_by=self.user.id,
-            approved_by=None,
-            approved_at=None,
+            approved_by=self.user.id if get_settings().etl_owner_workflow_enabled else None,
+            approved_at=now() if get_settings().etl_owner_workflow_enabled else None,
         )
         if binding:
             before = record(binding)
@@ -423,7 +431,7 @@ class MasterService:
         audit(
             self.session,
             self.user,
-            "master.binding_saved",
+            "master.binding_owner_validated" if get_settings().etl_owner_workflow_enabled else "master.binding_saved",
             binding.id,
             before=before,
             master_id=master.id,
@@ -489,6 +497,7 @@ class MasterService:
                 "metadata_ready": False,
                 "storage_ready": False,
                 "execution_ready": False,
+                "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
                 "blocking_reason": "MASTER_BINDING_REQUIRED",
             }
         master = await self.repo.get(MasterDefinition, binding.master_definition_id)
@@ -547,6 +556,7 @@ class MasterService:
             "execution_ready": ready,
             "blocking_reason": reason,
             "validation": validation,
+            "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
         }
 
     async def source_bindings(self, master_id):
@@ -663,14 +673,21 @@ class MasterService:
         values = data.model_dump(exclude={"revision_no", "aliases"})
         values["aliases_json"] = data.aliases
         values["created_by"] = self.user.id
-        values.update(status="DRAFT", approved_by=None, approved_at=None)
+        owner_workflow = get_settings().etl_owner_workflow_enabled
+        values.update(
+            status="APPROVED" if owner_workflow else "DRAFT",
+            approved_by=self.user.id if owner_workflow else None,
+            approved_at=now() if owner_workflow else None,
+        )
         if binding:
             for key, value in values.items():
                 setattr(binding, key, value)
             binding.revision_no += 1
         else:
             binding = await self.repo.add(MasterColumnBinding, source_sheet_id=str(sheet_id), **values)
-        audit(self.session, self.user, "master.column_binding_saved", binding.id, source_column=data.source_column)
+        audit(self.session, self.user,
+              "master.column_binding_owner_validated" if owner_workflow else "master.column_binding_saved",
+              binding.id, source_column=data.source_column)
         return record(binding)
 
     async def column_binding_decision(self, binding_id, data, approve=True):

@@ -3,7 +3,8 @@ from uuid import UUID
 from fastapi import Depends, Query
 
 from app.api.dependencies import CurrentUser, Session, require_roles
-from app.core.exceptions import success
+from app.core.config import get_settings
+from app.core.exceptions import AppError, success
 from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.master import MasterDefinition
@@ -22,6 +23,15 @@ router = APIRouter(
     tags=["Master registry"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))]
 )
 edit = [Depends(require_roles(*EDIT_ROLES))]
+
+
+async def storage_deploy_actor(user: CurrentUser):
+    permitted = (*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
+    if user.role not in permitted:
+        raise AppError("FORBIDDEN", "Role tidak memiliki izin deploy storage master.", 403)
+    return user
+
+
 review = [Depends(require_roles(*REVIEW_ROLES))]
 
 
@@ -50,7 +60,7 @@ async def master_source_bindings(master_id: UUID, session: Session, user: Curren
     return success(await MasterService(session, user).source_bindings(master_id))
 
 
-@router.post("/master-definitions/{master_id}/deploy-storage", dependencies=review)
+@router.post("/master-definitions/{master_id}/deploy-storage", dependencies=[Depends(storage_deploy_actor)])
 async def deploy_master_storage(
     master_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser
 ):
@@ -111,7 +121,10 @@ async def create_master(data: MasterDefinitionCreate, session: Session, user: Cu
 
 @router.get("/master-definitions/{master_id}")
 async def get_master(master_id: UUID, session: Session, user: CurrentUser):
-    return success(record(await MasterService(session, user).repo.get(MasterDefinition, master_id)))
+    return success({
+        **record(await MasterService(session, user).repo.get(MasterDefinition, master_id)),
+        "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
+    })
 
 
 @router.patch("/master-definitions/{master_id}", dependencies=edit)
@@ -121,7 +134,10 @@ async def patch_master(master_id: UUID, data: MasterDefinitionPatch, session: Se
 
 @router.post("/master-definitions/{master_id}/submit-review", dependencies=edit)
 async def submit_master(master_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser):
-    return success(record(await MasterService(session, user).action(master_id, data, "submit-review")))
+    return success({
+        **record(await MasterService(session, user).action(master_id, data, "submit-review")),
+        "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
+    })
 
 
 @router.post("/master-definitions/{master_id}/approve", dependencies=review)
