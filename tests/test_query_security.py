@@ -150,6 +150,32 @@ def test_be16_sensitive_column_defaults_hidden(config_data):
     assert error.value.code == "QUERY_FIELD_FORBIDDEN"
 
 
+@pytest.mark.parametrize(
+    ("enabled", "action", "has_metadata", "expected"),
+    [
+        (False, "QUERY", True, False),
+        (True, "QUERY", True, True),
+        (True, "READ", True, True),
+        (True, "DISCOVER", True, True),
+        (True, "EXPORT", True, False),
+        (True, "QUERY", False, False),
+    ],
+)
+def test_product_role_allowlist_default_is_scoped(monkeypatch, enabled, action, has_metadata, expected):
+    from app.repositories.semantic_repository import SemanticRepository
+
+    monkeypatch.setattr(
+        "app.repositories.semantic_repository.get_settings",
+        lambda: SimpleNamespace(unit_domain_default_access_enabled=enabled),
+    )
+    product = SimpleNamespace(allowed_roles=["ANALYST"])
+    source = SimpleNamespace(access_metadata={"owner_unit_id": "unit", "business_domain_id": "domain"}
+                             if has_metadata else None)
+    assert SemanticRepository.product_role_allowed(
+        product, source, SimpleNamespace(role="VIEWER"), action
+    ) is expected
+
+
 def test_be16_catalog_hides_columns_and_metrics_without_access():
     product = SimpleNamespace(
         code="SALES",

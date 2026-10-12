@@ -33,14 +33,14 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ### P1 — akses sederhana tanpa kehilangan isolasi
 
-- [~] Tambahkan jalur fallback baca/query untuk pasangan business domain + unit pemilik di belakang `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED` (default OFF). Fallback hanya berlaku untuk sumber yang sudah ditinjau, tidak memberi EXPORT, dan tidak aktif bila ada policy resource non-REVOKED.
+- [x] Tambahkan jalur fallback baca/query untuk pasangan business domain + unit pemilik di belakang `UNIT_DOMAIN_DEFAULT_ACCESS_ENABLED` (default OFF). Fallback hanya berlaku untuk sumber yang sudah ditinjau, tidak memberi EXPORT, dan tidak aktif bila ada policy resource non-REVOKED.
 - [~] Metadata setelah review sumber dapat diperbarui pemilik/data owner/steward tanpa review kedua; scope harus tetap assignment aktif, perubahan diaudit, dan aktivasi legacy dibatasi owner/admin saat feature flag ON.
-- [ ] Tetapkan bagaimana default scope berinteraksi dengan `DataProduct.allowed_roles`; role filter belum dilewati dan perlu kontrak capability role/action yang aman sebelum menjanjikan akses untuk setiap role.
+- [x] Tetapkan interaksi default scope dengan `DataProduct.allowed_roles`: untuk sumber bermetadata yang sudah direview, fallback hanya dapat melewati allow-list lama pada DISCOVER/READ/QUERY; evaluator tetap harus mengizinkan aksi berdasarkan assignment domain+unit dan role capability. EXPORT dan produk tanpa metadata tetap memakai allow-list lama.
 - [ ] Jadikan restriction yurisdiksi/department opsional dan eksplisit; jangan mengubah data lama menjadi terbuka otomatis.
 - [ ] Rancang migrasi/backfill yang dapat diulang dan laporan dry-run untuk metadata sumber lama.
 - [ ] Pastikan PLATFORM_ADMIN dapat mengelola semua scope melalui jalur administrasi yang diaudit; tindakan baca/export tetap tercatat dan tunduk pada batas tenant.
 - [ ] Tambah preview effective access yang menjelaskan allow/deny dan alasan tanpa memaparkan data lintas tenant.
-- [ ] Lengkapi test lintas katalog, query produk, cache, DENY, role, expiry/revoke, dan isolasi tenant sebelum feature flag dapat diaktifkan.
+- [~] Tambahkan test scope role, katalog/template, DENY, dan policy yang sudah ada. Sebelum feature flag diaktifkan, masih perlu test expiry/revoke, isolasi tenant end-to-end, cache, serta migration/backfill.
 
 ### P2 — satu review saat registrasi
 

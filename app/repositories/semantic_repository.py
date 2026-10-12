@@ -1,5 +1,6 @@
 from sqlalchemy import or_
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, SourceSheet
@@ -14,6 +15,16 @@ class SemanticRepository(TenantRepository):
         super().__init__(session, tenant_id)
         self.authorization_revisions = set()
         self.product_access_decisions = {}
+
+    @staticmethod
+    def product_role_allowed(product, source, user, action):
+        if user.role in product.allowed_roles:
+            return True
+        return (
+            get_settings().unit_domain_default_access_enabled
+            and source.access_metadata is not None
+            and action in {"DISCOVER", "READ", "QUERY"}
+        )
 
     def _remember_decision(self, resource_type, resource_id, action, decision):
         controls = {
@@ -71,8 +82,16 @@ class SemanticRepository(TenantRepository):
                & (DataSource.tenant_id == self.tenant_id)
         ).where(SavedQuery.status == "ACTIVE", DataProduct.status == "ACTIVE",
                 or_(DataSource.access_metadata.is_(None), DataSource.access_status == "POLICY_APPROVED"),
-                SavedQuery.examples.contains([intent]), SavedQuery.allowed_roles.contains([user.role]),
-                DataProduct.allowed_roles.contains([user.role]))
+                SavedQuery.examples.contains([intent]), SavedQuery.allowed_roles.contains([user.role]))
+        if not get_settings().unit_domain_default_access_enabled:
+            query = query.where(DataProduct.allowed_roles.contains([user.role]))
+        else:
+            # The product allow-list is a legacy default. Keep it for sources
+            # without reviewed access metadata; scoped sources are authorized
+            # below by the regular DISCOVER/QUERY policy evaluation.
+            query = query.where(
+                or_(DataSource.access_metadata.is_(None), DataProduct.allowed_roles.contains([user.role]))
+            )
         if product_code:
             query = query.where(SavedQuery.data_product_code == product_code)
         return list((await self.session.scalars(query.order_by(SavedQuery.code).limit(21))).all())
@@ -86,7 +105,7 @@ class SemanticRepository(TenantRepository):
         obj = await self.session.scalar(
             self.visible_products().where(DataProduct.code == code)
         )
-        if obj is None or user.role not in obj.allowed_roles:
+        if obj is None:
             raise AppError("DATA_PRODUCT_NOT_FOUND", "Data product tidak tersedia untuk akses Anda.", 404)
         source = await self.session.scalar(
             self.query(DataSource).join(
@@ -94,7 +113,9 @@ class SemanticRepository(TenantRepository):
                 & (SourceSheet.tenant_id == self.tenant_id)
             ).where(SourceSheet.id == obj.source_sheet_id)
         )
-        if source is None or not await self.source_allowed(source, user, action):
+        if source is None or not self.product_role_allowed(obj, source, user, action):
+            raise AppError("DATA_PRODUCT_NOT_FOUND", "Data product tidak tersedia untuk akses Anda.", 404)
+        if not await self.source_allowed(source, user, action):
             raise AppError("DATA_PRODUCT_NOT_FOUND", "Data product tidak tersedia untuk akses Anda.", 404)
         if source.access_metadata is not None:
             decision = await AccessService(self.session, user).evaluate(

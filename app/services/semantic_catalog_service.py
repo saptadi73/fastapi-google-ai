@@ -164,7 +164,7 @@ class SemanticCatalogService:
         )).all())
         result = []
         for product, source in products:
-            if self.user.role not in product.allowed_roles:
+            if not self.repo.product_role_allowed(product, source, self.user, "DISCOVER"):
                 continue
             if not await self.repo.source_allowed(source, self.user, "DISCOVER"):
                 continue
