@@ -1,0 +1,64 @@
+{
+  "title": "Panduan khusus binding master",
+  "intro": "Mulai dari Registry master, siapkan storage, hubungkan tab sumber, lalu muat record melalui Batch import. Definisi, binding dan pemuatan adalah persetujuan yang berbeda; binding APPROVED belum berarti record sudah dimuat.",
+  "prerequisites": [
+    "Sumber Google Sheets sudah terdaftar, bisa dibaca service account sebagai Viewer, discovery dan profiling terbaru berhasil.",
+    "Tab rujukan dikonfirmasi MASTER. Tab transaksi yang memakai rujukan tetap NON_MASTER.",
+    "SOURCE_OWNER, DATA_STEWARD atau PLATFORM_ADMIN menyiapkan definisi dan binding. Reviewer berwenang berbeda pembuat menyetujui definisi, binding dan batch. Deploy storage dilakukan PLATFORM_ADMIN atau TECHNICAL_APPROVER.",
+    "Gunakan master yang sudah ada jika identitas dan arti bisnisnya sesuai. Jangan membuat master duplikat hanya karena sumbernya berbeda.",
+    "Akses sumber, assignment, policy dan gate lain yang diwajibkan tetap dipenuhi; klasifikasi MASTER atau approval binding tidak memberikan izin baca otomatis."
+  ],
+  "differences": [
+    {"name": "Binding tab sumber ke master", "purpose": "Memuat atau memperbarui record rujukan dari tab MASTER ke master di Registry.", "example": "Tab Master Data berisi daftar bisnis → Master Bisnis."},
+    {"name": "Binding kolom referensi master", "purpose": "Memvalidasi kode pada tab NON_MASTER terhadap record master yang sudah tersedia.", "example": "Kolom Kode Bisnis pada data marketing → business_code di Master Bisnis."}
+  ],
+  "steps": [
+    {"title": "Periksa sumber dan klasifikasi", "where": "Sumber & tracking → Buka sumber → Workspace", "actor": "Source Owner / Data Steward / Admin", "actions": ["Pilih sumber dan tab rujukan yang benar; periksa profil, header, tipe dan key.", "Jika ada tab baru atau rename, jalankan Temukan tab lalu Profiling ulang pada sumber yang sama.", "Konfirmasi MASTER untuk tab rujukan. Buka binding master, bukan approval konfigurasi ETL biasa."], "result": "Tab MASTER terkonfirmasi dan profil terbaru tersedia."},
+    {"title": "Pilih atau buat definisi di Registry master", "where": "Registry master → Buat master baru atau buka master yang sesuai", "actor": "Source Owner / Data Steward / Admin", "actions": ["Cari berdasarkan kode/nama; periksa kandidat serupa sebelum membuat master baru.", "Tentukan kode, nama, deskripsi, field, tipe, sensitivitas, business key dan field label.", "Business key harus unik, stabil dan tidak kosong. Kolom is_active memakai boolean jika isinya TRUE/FALSE.", "Periksa policy record baru, konflik dan masa berlaku sesuai kebutuhan; jangan menebak arti field dari nama saja."], "result": "Draft definisi master dengan arti field dan identitas record yang jelas."},
+    {"title": "Ajukan dan setujui definisi", "where": "Halaman definisi / review master", "actor": "Editor mengajukan; reviewer berbeda memutuskan", "actions": ["Simpan draft dan ajukan review definisi.", "Reviewer memeriksa field, business key, label, sensitivitas dan policy, lalu approve atau reject dengan catatan.", "Gunakan versi approved terbaru dari master aktif. Definisi yang belum approved tidak dapat dipilih sebagai tujuan binding."], "result": "Definisi master aktif memiliki versi APPROVED."},
+    {"title": "Siapkan storage master", "where": "Master terpilih → Storage & record master", "actor": "Platform Admin / Technical Approver", "actions": ["Periksa storage plan dan perubahan yang akan diterapkan.", "Centang konfirmasi rencana, lalu tekan Deploy storage.", "Pastikan storage siap untuk versi approved. Pembuatan storage belum memasukkan record."], "result": "Storage siap, meskipun daftar record masih kosong."},
+    {"title": "Petakan tab sumber ke field master", "where": "Workspace → halaman binding master untuk sumber dan tab terpilih", "actor": "Source Owner / Data Steward / Admin", "actions": ["Pilih Master tujuan yang aktif dan memakai versi approved terbaru.", "Pada Mapping terhadap snapshot approved, pilih header sumber untuk setiap field yang diwajibkan, termasuk business key dan label.", "Tinjau transformasi dan kecocokan tipe; header harus cocok dengan profil terbaru.", "Tekan Simpan binding & dry-run. Binding disimpan sebagai DRAFT; tidak ada langkah submit terpisah untuk binding tab."], "result": "Binding DRAFT tersimpan dan hasil dry-run tersedia."},
+    {"title": "Periksa dry-run dan setujui binding", "where": "Binding master → Dry-run binding tersimpan → Keputusan binding", "actor": "Editor memperbaiki; reviewer berbeda menyetujui", "actions": ["Periksa baris valid/bermasalah, error dan Preview data yang sudah disamarkan.", "Jika mapping diubah, tekan Simpan binding & dry-run lagi; preview sebelumnya hanya untuk binding tersimpan.", "Reviewer memeriksa snapshot, versi master dan revisi klasifikasi, mengisi catatan, lalu menekan Setujui binding atau Tolak binding.", "Jika tombol tidak aktif, periksa perubahan belum disimpan, dry-run, reviewer sama pembuat, versi master, klasifikasi dan perubahan sumber."], "result": "Binding APPROVED dan sesuai versi/snapshot yang diperiksa; record belum dimuat."},
+    {"title": "Buat batch pemuatan master", "where": "Storage & record master → Sumber master terikat", "actor": "Source Owner / Data Steward / Admin", "actions": ["Tekan Muat ulang sumber terikat bila tab belum terlihat.", "Cari sumber/tab yang tepat dan pastikan Siap diimpor. Baca blocking_reason jika Belum siap.", "Tekan Buat batch review/import dan pantau proses melalui Batch import atau monitor job.", "Pemuatan MASTER tetap memakai alur batch, bukan jalur sync langsung NON_MASTER."], "result": "Batch master tersedia untuk pemeriksaan dan keputusan."},
+    {"title": "Review batch, approve dan Apply", "where": "Batch import → batch master yang baru dibuat", "actor": "Editor / steward; reviewer berbeda untuk approval", "actions": ["Selesaikan pertanyaan wajib, nilai tidak valid, kandidat record baru dan konflik sesuai policy.", "Jalankan Preview dan periksa record baru/update, konflik, dependency serta dampak pemuatan.", "Reviewer berbeda menyetujui preview yang diperiksa; setelah approval, editor menjalankan Apply.", "Pantau sampai SUCCEEDED dan periksa jumlah record dimuat. Jika data/snapshot berubah, gunakan review terbaru sesuai pesan blocker."], "result": "Apply sukses; record rujukan benar-benar masuk ke storage master."},
+    {"title": "Periksa record dan gunakan sebagai rujukan", "where": "Storage & record master → Record kanonis", "actor": "Editor / reviewer yang berwenang", "actions": ["Cari business key atau label yang baru dimuat; periksa field, status aktif dan jumlah record.", "Untuk dataset NON_MASTER, gunakan Binding kolom referensi master agar kode sumber merujuk record yang tersedia.", "Jika sumber atau definisi master berubah, profiling dan review binding lagi sesuai versi terbaru."], "result": "Record kanonis dapat ditemukan dan digunakan sebagai referensi yang disetujui."}
+  ],
+  "example": {
+    "title": "Contoh mapping Master Bisnis",
+    "description": "Contoh fiktif yang disarankan: Sheet mempunyai Kode Bisnis, Nama Bisnis dan is_active. Kode disimpan sebagai text agar nol depan tetap utuh. Sesuaikan header dengan Sheet nyata.",
+    "rows": [
+      {"source": "Kode Bisnis", "target": "business_code", "type": "text", "rule": "Wajib, unik, stabil; business key", "value": "BIS-001"},
+      {"source": "Nama Bisnis", "target": "business_name", "type": "text", "rule": "Wajib; field label", "value": "Unit Contoh"},
+      {"source": "is_active", "target": "is_active", "type": "boolean", "rule": "Isi sesuai status sebenarnya", "value": "TRUE"}
+    ],
+    "existing_sheet": "Jika Sheet saat ini hanya memiliki BISNIS dan is_active, petakan BISNIS ke field nama bisnis yang sesuai. Menggunakannya sebagai business key hanya layak jika nilainya unik, stabil dan tidak kosong. Jika nama dapat berubah, tambahkan kode bisnis stabil di Google Sheets, profiling ulang, lalu review definisi/binding; jangan membuat kode atau memetakan header yang belum ada."
+  },
+  "reference_steps": [
+    "Pastikan definisi master approved/aktif, storage siap dan record rujukan sudah selesai di-Apply.",
+    "Di Workspace, pilih tab NON_MASTER yang sudah diprofil, lalu Atur referensi master.",
+    "Pilih kolom sumber berisi kode, master tujuan dan satu field master yang nilainya sama serta unik. Contoh Kode Bisnis bernilai BIS-001 → business_code bernilai BIS-001.",
+    "Muat rekomendasi hanya membantu kemiripan nama; cocokkan isi sumber dengan record master sebelum memakai kandidat. UUID internal tidak perlu disalin ke Sheet.",
+    "Pilih MANY_TO_ONE bila banyak transaksi boleh merujuk satu bisnis. Centang Referensi wajib ada jika semua baris harus memiliki rujukan.",
+    "Simpan draft binding kolom dan minta reviewer menyetujuinya. Lanjutkan konfigurasi/pemuatan NON_MASTER dengan mapping referensi target UUID yang sesuai.",
+    "Nilai tidak ditemukan/ambigu dihentikan untuk review. Binding referensi tidak membuat record master baru secara otomatis. Master dengan key gabungan memerlukan satu field kode rujukan unik untuk resolver kolom."
+  ],
+  "troubleshooting": [
+    {"symptom": "MASTER_RUNTIME_PENDING pada konfigurasi ETL", "cause": "Tab MASTER sedang dibuka melalui alur ETL biasa.", "action": "Buka Registry master dan binding tab; lanjutkan melalui batch master."},
+    {"symptom": "MASTER_BINDING_REQUIRED", "cause": "Tab belum mempunyai binding sumber ke definisi master.", "action": "Pilih master approved, petakan field, Simpan binding & dry-run, lalu minta approval."},
+    {"symptom": "Master tujuan tidak dapat dipilih", "cause": "Master belum approved, tidak aktif atau versi sudah berubah.", "action": "Selesaikan review definisi; pilih versi approved terbaru dari master aktif."},
+    {"symptom": "Setujui binding tidak aktif", "cause": "Ada perubahan belum disimpan, dry-run gagal, reviewer sama pembuat, atau snapshot/versi/klasifikasi berubah.", "action": "Baca hasil validasi; simpan dry-run terbaru dan gunakan reviewer berbeda yang berwenang."},
+    {"symptom": "Sumber terikat Belum siap", "cause": "Binding, storage, metadata atau gate pemuatan belum siap.", "action": "Baca blocking_reason; siapkan versi storage/binding serta akses yang diwajibkan, lalu muat ulang sumber terikat."},
+    {"symptom": "Binding APPROVED tetapi record kosong", "cause": "Pemetaan sudah disetujui; batch belum selesai di-Apply.", "action": "Buat batch review/import, selesaikan temuan, Preview, approval, Apply; cek hasil per batch."},
+    {"symptom": "is_active menjadi text atau nilai ditolak", "cause": "Definisi/mapping tipe belum sesuai nilai TRUE/FALSE.", "action": "Siapkan boolean sejak definisi awal. Untuk storage lama, perubahan tipe memerlukan migrasi yang direview; jangan hapus/buat ulang tabel."},
+    {"symptom": "Referensi kode tidak ditemukan atau ambigu", "cause": "Record master belum dimuat atau field pencarian tidak cocok/unik.", "action": "Periksa Record kanonis, tipe/format kode dan field unik; selesaikan review tanpa memilih kecocokan secara diam-diam."},
+    {"symptom": "Perubahan field / header / versi master", "cause": "Binding lama mengacu snapshot atau definisi lama.", "action": "Profiling ulang bila header sumber berubah; pilih versi terbaru, review mapping dan approve binding lagi. Field nullable baru perlu approval definisi dan redeploy storage; perubahan tidak kompatibel perlu migrasi khusus."}
+  ],
+  "completion": [
+    "Definisi master aktif dan versi approved jelas.",
+    "Storage siap untuk versi yang disetujui.",
+    "Binding tab APPROVED dan hasil validasi sesuai snapshot terbaru.",
+    "Batch pemuatan sudah SUCCEEDED setelah Apply.",
+    "Record kanonis ditemukan dengan business key / label yang benar.",
+    "Binding kolom referensi dibuat dan disetujui bila dipakai dataset lain."
+  ]
+}

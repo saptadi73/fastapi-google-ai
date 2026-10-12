@@ -329,3 +329,8 @@ Dokumen ini tidak menjalankan migrasi, tidak memanggil AI, tidak mengubah data p
 - API menolak apply tanpa approval/pertanyaan selesai meskipun dipanggil tanpa frontend.
 - UI menampilkan progres, pertanyaan, preview, serta hasil nyata backend dan dapat melanjutkan review yang tertunda.
 - Tes mencakup concurrency dua import master, tenant isolation, FK, rollback apply, stale answers, perubahan master, dan kegagalan AI; tes provider memakai mock, tes database memakai database `_test` terpisah.
+
+
+## Panduan khusus binding master
+
+Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, approval definisi, deploy storage, mapping tab MASTER, Simpan binding & dry-run, approval binding, batch import, Preview, approval dan Apply. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
