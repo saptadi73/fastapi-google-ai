@@ -1,0 +1,194 @@
+[
+  {
+    "slide": 1,
+    "title": "Dari Google Sheets ke Analitik dan Action Plan",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Buka dengan kebutuhan bisnis: mengubah pencatatan yang tersebar menjadi informasi yang dapat dipercaya. Presentasi ini dapat digunakan untuk pelatihan 45–60 menit. Sesuaikan tempo dan sisipkan demo menggunakan data contoh, bukan sumber production aktif."
+  },
+  {
+    "slide": 2,
+    "title": "Tujuan: keputusan yang bisa dijelaskan",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Minta peserta menyebut satu keputusan yang ingin diperbaiki. Misalnya unit mana perlu perbaikan SLA. Jelaskan bahwa AI tidak menggantikan definisi indikator, data yang benar, atau review keputusan oleh pemilik bisnis."
+  },
+  {
+    "slide": 3,
+    "title": "Output yang tersedia di aplikasi",
+    "source": "PANDUAN_ATURAN_ANALITIK.md",
+    "speaker_notes": "Tabel/chart tersedia di Dashboard melalui query builder atau pertanyaan bahasa alami. Backend aturan action plan telah tersedia, tetapi impor, preview, approval dan evaluate saat ini dilakukan melalui API. Jangan menyebut adanya tombol action plan otomatis di wizard atau chat. Output action plan adalah usulan, bukan pelaksanaan."
+  },
+  {
+    "slide": 4,
+    "title": "Alur ideal: data → analitik → perbaikan",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Tekankan bahwa action plan yang baik memerlukan baseline dan follow-up dengan definisi/metode sebanding. Korelasi atau tren menurun bukan otomatis bukti bahwa tindakan tertentu menyebabkan perubahan."
+  },
+  {
+    "slide": 5,
+    "title": "Siapa melakukan apa?",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Role teknis tidak otomatis memberikan hak membaca semua data. Admin menyiapkan assignment dan policy; approver harus ditunjuk untuk sumber. Pemilik bisnis memverifikasi target dan manfaat tindakan. Gate IT serta unit berlaku jika aturan siap tayang diaktifkan."
+  },
+  {
+    "slide": 6,
+    "title": "Peta penggunaan: dari sumber sampai output",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Master dan taxonomy diperlukan bila ada rujukan atau kategori yang perlu dibakukan. Deploy menyiapkan struktur dan mengaktifkan konfigurasi; pemuatan data tetap tahap terpisah. Aturan action plan mempunyai alur approval tersendiri melalui API."
+  },
+  {
+    "slide": 7,
+    "title": "Format file dan tab: nama harus bermakna",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Contoh nama file: Keluhan Pelanggan KAN Jabung 2026. Contoh tab: Keluhan_Data. Nama yang dihasilkan tidak menggantikan deskripsi bisnis dan grain. Dua tab kontrol aturan/formula perlu dikecualikan dari ETL dan diimpor lewat API setelah produk utamanya aktif."
+  },
+  {
+    "slide": 8,
+    "title": "Satu baris = satu catatan yang jelas",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Business key complaint_id harus unik dan stabil. Contoh berikut adalah ilustrasi struktur, bukan cuplikan production. Gunakan header tunggal dan unik; hindari merged cells, judul menumpuk, baris kosong serta footer total di range data. Rekap dapat berada pada tab terpisah dengan grain berbeda."
+  },
+  {
+    "slide": 9,
+    "title": "Mengapa kolom-kolom ini perlu ada?",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Kebutuhan kolom bergantung pada grain. Jangan menambah tanggal kejadian fiktif ke data rekap. Untuk data periodik, awal/akhir periode bisnis wajib eksplisit. Identitas atau kontak pribadi harus dilindungi dan tidak dijadikan dimensi analitik sensitif."
+  },
+  {
+    "slide": 10,
+    "title": "Periode bisnis berbeda dari waktu sync",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "period_start 2026-01-01 dan period_end 2026-01-31 mencakup Januari. collected_at 2026-02-02T09:00:00+07:00 adalah waktu pengambilan. Jika source berupa teks ISO, pilih date + parse_date_id + TEXT + %Y-%m-%d. Jika native tanggal Sheets dibaca sebagai serial, pilih format Serial Google Sheets; 46023 = 2026-01-01. Bigint biasa tidak boleh diasumsikan serial tanggal."
+  },
+  {
+    "slide": 11,
+    "title": "Kode baku membuat istilah konsisten",
+    "source": "ISTILAH_TEKNIS.md",
+    "speaker_notes": "Jelaskan perbedaan master produk/unit dengan taxonomy jenis keluhan atau prioritas. Dropdown di Sheets membantu input, tetapi tidak menggantikan binding dan validasi aplikasi. Alias harus diverifikasi; AI tidak otomatis berhak memilih relasi yang ambigu."
+  },
+  {
+    "slide": 12,
+    "title": "Rumus yang benar dimulai dari basis angka",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Ilustrasi survei: A memiliki 9 puas dari 10 valid, B memiliki 9 puas dari 90 valid. Rata-rata 90% dan 10% adalah 50%, tetapi CSAT gabungan adalah 18/100 = 18%. Rumus persentase perlu pembilang dan penyebut, bukan hanya kolom persentase. Skor 1–5 dan rasio 0–1 merupakan skala yang berbeda."
+  },
+  {
+    "slide": 13,
+    "title": "Langkah 1 — Siapkan dan upload sumber",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Jika sumber masih Excel, upload ke Google Drive lalu buka atau konversi menjadi Google Sheets. Periksa hasil formula, jumlah baris dan tanggal setelah konversi. Service account backend diberi Viewer menggunakan email yang disediakan admin. Aplikasi membaca dan tidak menulis ulang Sheet. Gunakan contoh fiktif saat latihan."
+  },
+  {
+    "slide": 14,
+    "title": "Langkah 2 — Hubungkan & profiling",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Metadata sumber mencakup unit pemilik, domain bisnis, yurisdiksi, purpose, data owner/steward dan sensitivitas. Opsi unit/domain/yurisdiksi mengikuti assignment aktif pengguna. Jika kosong, hubungi admin, bukan memilih scope sembarang. Hubungkan & profiling mendaftarkan sumber dan memulai job discovery/profiling. Pantau job sampai sukses; sumber dapat tetap tercatat meskipun job gagal."
+  },
+  {
+    "slide": 15,
+    "title": "Langkah 3 — Pilih dan klasifikasikan tab",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Pilih MASTER untuk rujukan stabil dan NON_MASTER untuk kejadian, aktivitas, pengukuran atau rekap. Dikecualikan dipakai untuk petunjuk dan dua tab kontrol analitik. Setelah tab baru atau rename, jalankan Temukan tab / discovery ulang dan profiling ulang pada sumber yang sama. Profiling memberi gambaran awal, bukan jaminan seluruh record valid."
+  },
+  {
+    "slide": 16,
+    "title": "Langkah 4 — Setup config: tujuh bagian",
+    "source": "PANDUAN_REVIEW_ETL.md",
+    "speaker_notes": "Nama bagian mengikuti wizard aktual. Identitas dataset menentukan grain. Kolom dan sensitivitas menentukan mapping, tipe, nullable, key, PII dan referensi. Cleansing menentukan transformasi. Kualitas data menentukan aturan dan tindakan gagal. Pemuatan memilih target/strategi. Analitik dan akses menentukan dimensi/metrik/role. Validasi dan persetujuan menguji, meninjau perubahan schema dan menyelesaikan review."
+  },
+  {
+    "slide": 17,
+    "title": "Mapping: dari header Sheet ke field tujuan",
+    "source": "PANDUAN_REVIEW_ETL.md",
+    "speaker_notes": "Contoh mapping adalah ilustrasi. complaint_id text wajib terisi dan key. event_date date adalah tanggal bisnis. Jika input merupakan ISO text gunakan parse_date_id/TEXT/%Y-%m-%d; jika serial gunakan pilihan Serial Google Sheets. completed_at boleh kosong ketika belum selesai; jangan membuat nol/tanggal palsu. Numeric merupakan pilihan angka uang/pengukuran. Kolom identitas pribadi perlu sensitivitas dan akses yang sesuai."
+  },
+  {
+    "slide": 18,
+    "title": "Cleansing dan DQ menjaga arti data",
+    "source": "PANDUAN_REVIEW_ETL.md",
+    "speaker_notes": "Trim otomatis hanya membuang spasi awal/akhir untuk text/varchar. Spasi di tengah, huruf dan nol depan dipertahankan. Spasi saja menjadi kosong/NULL dan tetap gagal bila kolom wajib. Tambahan transformasi harus direview. DQ dapat WARN, REJECT_ROW, STOP_BATCH atau REQUIRE_REVIEW. Jangan menganggap semua pemeriksaan lintas kolom atau overlap waktu otomatis tersedia."
+  },
+  {
+    "slide": 19,
+    "title": "Strategi pemuatan: pilih sesuai sumber",
+    "source": "PANDUAN_REVIEW_ETL.md",
+    "speaker_notes": "APPEND untuk catatan baru; sync ulang kejadian lama tanpa kontrol bisa menggandakan data. UPSERT memperbarui berdasarkan business key stabil. FULL_REFRESH mengganti snapshot lengkap dan tetap menggunakan review batch, tidak jalur sync langsung NON_MASTER. Jangan menerapkan FULL_REFRESH pada sumber parsial."
+  },
+  {
+    "slide": 20,
+    "title": "Analitik dan akses: beri AI konteks yang jelas",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Draft manual dapat memiliki metrics kosong; tambahkan metrik sebelum berharap analitik angka bekerja. Contoh SUM complaint_count menghasilkan jumlah keluhan. Dimensi digunakan untuk kelompok/filter. Definisi, unit, sinonim dan periode membantu AI memilih metrik. Agregasi editor dibatasi sum/count/avg/min/max/count_distinct; formula gabungan menggunakan backend aturan atau hasil perhitungan Sheet yang direview. Kolom sensitif MEDIUM/HIGH tidak dijadikan dimensi/metrik."
+  },
+  {
+    "slide": 21,
+    "title": "Langkah 5 — Validasi, review dan approval",
+    "source": "PANDUAN_REVIEW_ETL.md",
+    "speaker_notes": "Dry-run menampilkan baris valid/bermasalah, sebelum-sesudah dan blocker. Preview schema memuat kolom tambahan, tipe, nullability, key, dampak view/dependency dan konversi tanggal. Reviewer berbeda menilai mapping dan schema pada revisi yang sama. Approval gabungan dapat menyetujui metadata dan mengaktifkan policy SOURCE yang sudah APPROVED. Gate IT/unit tetap berlaku bila diwajibkan. Perubahan schema yang didukung dieksekusi worker saat Deploy dalam transaksi; perubahan yang tidak aman diblokir."
+  },
+  {
+    "slide": 22,
+    "title": "Langkah 6 — Deploy, lalu muat data",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Deploy menyiapkan/menyesuaikan struktur target dan semantic view. Jalankan Sync manual di Workspace atau Sumber & tracking. NON_MASTER ACTIVE yang seluruh validasi/gate-nya lolos dapat dimuat langsung; master, FULL_REFRESH, jadwal/batch biasa tetap preview/approval/Apply. Job induk sukses belum berarti semua tab sukses. Muat ulang hanya membaca status, tidak menjalankan sync."
+  },
+  {
+    "slide": 23,
+    "title": "Jika proses berhenti, lihat alasan per tab",
+    "source": "ERROR_RESPONSES.md",
+    "speaker_notes": "SOURCE_READ_FAILED memiliki beberapa kemungkinan termasuk nama tab/range; SOURCE_ACCESS_DENIED berkaitan izin service account. REVIEW_STALE berarti snapshot berubah sejak review. NEEDS_INPUT adalah status menunggu tindakan, bukan worker sedang jalan. Belum muncul di katalog dapat berasal dari akses atau data belum dimuat. Muat ulang tidak memulai discovery/profiling/sync."
+  },
+  {
+    "slide": 24,
+    "title": "Langkah 7 — Pastikan produk dapat dibaca",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Konfigurasi aktif dan policy disetujui merupakan gate berbeda. Pembaca harus memiliki assignment dan policy source/product yang tepat serta role yang diizinkan. Periksa sumber/tab dan waktu dimuat di katalog atau detail hasil ETL. Versi aktif lama dapat tetap terlihat selama revisi jika akses masih sah; baca freshness dan status terbaru."
+  },
+  {
+    "slide": 25,
+    "title": "Langkah 8 — Ajukan pertanyaan yang lengkap",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Gunakan pertanyaan contoh dan pastikan metriknya sudah tersedia. Query builder memberi kontrol eksplisit dimensi, metrik, filter, sort, serta join approved. AI dapat meminta klarifikasi, misalnya untuk periode ambigu. Query hasil data mengikuti izin pembaca. Jangan menuntut chart atas metrik yang belum didefinisikan."
+  },
+  {
+    "slide": 26,
+    "title": "Chart membuat pola lebih mudah dibaca",
+    "source": "USER_GUIDE_END_TO_END.md",
+    "speaker_notes": "Dua chart ini ilustrasi editable PowerPoint, bukan screenshot atau data production. Januari 32 keluhan dan 12 pelanggaran, Februari 40 dan 8, Maret 36 dan 3. Rasio 37,5%, 20% dan 8,3%. Perubahan rasio adalah pola deskriptif; tidak membuktikan penyebab atau efek tindakan. Pilihan chart aplikasi mengikuti field/metrik hasil query."
+  },
+  {
+    "slide": 27,
+    "title": "Lima template untuk kebutuhan bisnis",
+    "source": "CONTOH_DATA_ANALITIK.md",
+    "speaker_notes": "Gunakan paket template yang tersedia di aplikasi. Seluruh data dan target fiktif. Marketing ATL tidak diberi angka atribusi palsu jika tidak terukur. CSAT bukan NPS. Competitiveness menormalkan ukuran kemasan dan membatasi keterbandingan. KPI memakai HIGHER/LOWER sesuai indikator. Master identik cukup dimuat sekali dan digunakan ulang."
+  },
+  {
+    "slide": 28,
+    "title": "Langkah 9 — Aturan action plan dan formula",
+    "source": "PANDUAN_ATURAN_ANALITIK.md",
+    "speaker_notes": "Formula_Analitik memuat formula_code, expression, output_unit, description. Aturan_Action_Plan memuat rule_code, formula_code, operator, threshold, threshold_upper, action_description, owner_team_code, priority, due_days. Header harus sesuai template. Formula menggunakan kode metrik yang tersedia dan + - * / serta kurung, tanpa awalan =Excel. Aturan mengacu formula dan angka ambang. 50% pada RATIO = 0.50. Impor dari sumber yang sama dengan produk, preview, reviewer sumber berbeda approves hash, lalu evaluate. Pengeditan tab/semantic memerlukan draft dan review baru; REVOKE menghentikan aturan approved."
+  },
+  {
+    "slide": 29,
+    "title": "Contoh output: usulan dengan bukti angka",
+    "source": "PANDUAN_ATURAN_ANALITIK.md",
+    "speaker_notes": "Ilustrasi Januari memiliki 32 keluhan dan 12 pelanggaran. Formula 12/32 = 0.375, lebih besar dari threshold 0.10. Evaluasi memberi usulan review antrean/shift, tim TEAM-CS, tenggat tujuh hari dari tanggal evaluasi UTC dan cause_status UNVERIFIED. Backend tidak menjalankan tindakan, menulis Sheet, mengirim notifikasi atau memberi hak akses berdasarkan owner_team_code. NULL atau denominator nol memberi blocker dan tidak memicu aturan terkait."
+  },
+  {
+    "slide": 30,
+    "title": "Langkah 10 — Laksanakan dan ukur ulang",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Pemilik bisnis menentukan apakah usulan masuk akal dan menambah rencana pelaksanaan yang terukur. Catat baseline, target, owner, due_date, completed_at, periode follow-up, followup_value dan evidence_ref. Bandingkan metode serta populasi yang sebanding dan catat intervensi lain. Backend aturan hanya menghitung usulan; pemantauan pelaksanaan saat ini dicatat manusia, misalnya melalui tab Action_Plan. Kosong bukan hasil nol."
+  },
+  {
+    "slide": 31,
+    "title": "Hasil ideal yang ingin dicapai",
+    "source": "PANDUAN_FORMAT_GOOGLE_SHEET.md",
+    "speaker_notes": "Jadikan checklist ini acceptance criteria untuk pilot. Hindari janji angka peningkatan yang belum diukur. Target manfaat ditetapkan bisnis dan dievaluasi pada periode follow-up. Kepercayaan analitik tidak cukup dengan job sukses; kualitas, akses, definisi dan cakupan juga harus benar."
+  },
+  {
+    "slide": 32,
+    "title": "Mulai dengan satu dataset dan satu pertanyaan",
+    "source": "CONTOH_DATA_ANALITIK.md",
+    "speaker_notes": "Demo menggunakan file Keluhan Pelanggan dalam paket. Urutan demo: cek BACA_DULU/Kamus_Data/Rencana_ETL, konversi ke Sheets, hubungkan dan profiling, klasifikasikan tab, isi tujuh bagian konfigurasi, review/deploy, sync dan validasi per tab, buka katalog dan query/chart. Demonstrasikan aturan action plan lewat API terpisah bila peserta teknis tersedia. Jangan mengubah sumber production aktif dengan data contoh. Tautan dalam slide dapat diklik. Catatan pembicara setiap slide memuat referensi dan penjelasan tambahan."
+  }
+]
