@@ -123,6 +123,7 @@ async def test_two_tabs_bind_one_approved_master_without_loading(context, config
 
     async def metadata(self, spreadsheet_id):
         return {
+            "properties": {"title": "Sales workbook"},
             "sheets": [
                 {"properties": {"sheetId": 1, "title": "Sales"}},
                 {"properties": {"sheetId": 2, "title": "Other products"}},

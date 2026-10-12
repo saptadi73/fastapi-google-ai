@@ -47,6 +47,7 @@ Halaman: **Halaman definisi / review master**. Pelaksana: Editor mengajukan; rev
 - Simpan draft dan ajukan review definisi.
 - Reviewer memeriksa field, business key, label, sensitivitas dan policy, lalu approve atau reject dengan catatan.
 - Gunakan versi approved terbaru dari master aktif. Definisi yang belum approved tidak dapat dipilih sebagai tujuan binding.
+- Sebelum storage pertama dibuat, koreksi key/tipe/field wajib dapat direview dan disetujui reviewer berbeda. Backend memeriksa storage fisik dan riwayat deployment; binding lama perlu review ulang.
 
 Hasil sebelum lanjut: **Definisi master aktif memiliki versi APPROVED.**.
 
@@ -146,9 +147,9 @@ Jika Sheet saat ini hanya memiliki BISNIS dan is_active, petakan BISNIS ke field
 | Setujui binding tidak aktif | Ada perubahan belum disimpan, dry-run gagal, reviewer sama pembuat, atau snapshot/versi/klasifikasi berubah. | Baca hasil validasi; simpan dry-run terbaru dan gunakan reviewer berbeda yang berwenang. |
 | Sumber terikat Belum siap | Binding, storage, metadata atau gate pemuatan belum siap. | Baca blocking_reason; siapkan versi storage/binding serta akses yang diwajibkan, lalu muat ulang sumber terikat. |
 | Binding APPROVED tetapi record kosong | Pemetaan sudah disetujui; batch belum selesai di-Apply. | Buat batch review/import, selesaikan temuan, Preview, approval, Apply; cek hasil per batch. |
-| is_active menjadi text atau nilai ditolak | Definisi/mapping tipe belum sesuai nilai TRUE/FALSE. | Siapkan boolean sejak definisi awal. Untuk storage lama, perubahan tipe memerlukan migrasi yang direview; jangan hapus/buat ulang tabel. |
+| is_active menjadi text atau nilai ditolak | Definisi/mapping tipe belum sesuai nilai TRUE/FALSE. | Siapkan boolean sejak definisi awal. Jika storage belum dibuat dan belum pernah dideploy, koreksi definisi melalui review/approval reviewer berbeda. Jika storage sudah ada atau pernah dideploy, perubahan tipe memerlukan migrasi yang direview; jangan hapus/buat ulang tabel. |
 | Referensi kode tidak ditemukan atau ambigu | Record master belum dimuat atau field pencarian tidak cocok/unik. | Periksa Record kanonis, tipe/format kode dan field unik; selesaikan review tanpa memilih kecocokan secara diam-diam. |
-| Perubahan field / header / versi master | Binding lama mengacu snapshot atau definisi lama. | Profiling ulang bila header sumber berubah; pilih versi terbaru, review mapping dan approve binding lagi. Field nullable baru perlu approval definisi dan redeploy storage; perubahan tidak kompatibel perlu migrasi khusus. |
+| Perubahan field / header / versi master | Binding lama mengacu snapshot atau definisi lama. | Profiling ulang bila header berubah; review mapping dan approve binding sesuai versi terbaru. Sebelum storage pertama, koreksi definisi direview. Setelah storage pernah dideploy, field nullable baru perlu approval/redeploy; perubahan tidak kompatibel perlu migrasi khusus. |
 
 ## Checklist selesai
 

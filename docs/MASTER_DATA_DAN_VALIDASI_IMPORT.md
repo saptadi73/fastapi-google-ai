@@ -334,3 +334,8 @@ Dokumen ini tidak menjalankan migrasi, tidak memanggil AI, tidak mengubah data p
 ## Panduan khusus binding master
 
 Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, approval definisi, deploy storage, mapping tab MASTER, Simpan binding & dry-run, approval binding, batch import, Preview, approval dan Apply. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
+
+
+## Koreksi sebelum storage pertama
+
+Definisi approved dapat dikoreksi sebelum storage pertama dibuat melalui revisi dan approval reviewer berbeda. Backend memeriksa bahwa tabel/relation belum ada dan audit tidak mencatat deployment storage sebelumnya. Key, tipe atau field wajib baru pada fase ini tidak memigrasikan data. Approval menyimpan versi lama dan menandai initial_schema_correction; binding versi lama perlu review ulang. Jika storage sudah ada atau pernah dideploy, perubahan tidak kompatibel tetap memerlukan migrasi yang direview, termasuk pada tabel kosong atau tabel yang pernah dihapus. Jangan hapus/buat ulang storage untuk melewati pemeriksaan.

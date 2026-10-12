@@ -176,3 +176,70 @@ async def test_storage_schema_evolution_and_tamper_detection(context, config_dat
     assert (await request(ctx, "POST", path + "/deploy-storage", data={"revision_no": 8}, expected=409))[
         "errors"
     ][0]["code"] == "MASTER_SCHEMA_MIGRATION_REQUIRED"
+
+
+async def test_reviewed_key_and_required_field_correction_before_first_storage(context, config_data):
+    from app.models.audit import AuditEvent
+
+    master = await approved_master(context, config_data)
+    path = f"/master-definitions/{master['id']}"
+    initial = (await request(context, "GET", path + "/storage-plan"))["data"]
+    assert initial["initial_definition_correction_allowed"] is True
+    assert initial["storage_exists"] is False and initial["storage_deployed_before"] is False
+    proposed = deepcopy(master["approved_definition_json"])
+    proposed["fields"].append({"name": "branch_code", "type": "text", "nullable": False})
+    proposed["business_key"] = ["branch_code"]
+    await request(context, "PATCH", path, data={"revision_no": 3, "definition": proposed})
+    await request(context, "POST", path + "/submit-review", data={"revision_no": 4})
+    # The initial exception does not remove separation of editor and reviewer.
+    await request(context, "POST", path + "/approve", data={"revision_no": 5}, expected=403)
+    corrected = (await request(context, "POST", path + "/approve", who="approver", data={"revision_no": 5}))[
+        "data"
+    ]
+    assert corrected["approved_version"] == 2
+    assert corrected["approved_definition_json"]["business_key"] == ["branch_code"]
+    async with SessionFactory() as session:
+        event = await session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.tenant_id == context.tenant_id,
+                AuditEvent.resource_id == master["id"],
+                AuditEvent.event == "master.version_approved",
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+        assert event.details["initial_schema_correction"] is True
+        assert event.details["previous"]["business_key"] == ["transaction_id"]
+    await request(context, "POST", path + "/deploy-storage", who="approver", data={"revision_no": 6})
+    state = (await request(context, "GET", path + "/storage-plan"))["data"]
+    assert state["storage_exists"] and state["storage_deployed_before"]
+    assert state["initial_definition_correction_allowed"] is False
+    assert (await request(context, "GET", path + "/records"))["data"]["items"] == []
+    # An empty but deployed table still requires a reviewed migration for key changes.
+    proposed["business_key"] = ["transaction_id"]
+    await request(context, "PATCH", path, data={"revision_no": 6, "definition": proposed})
+    await request(context, "POST", path + "/submit-review", data={"revision_no": 7})
+    failed = await request(
+        context, "POST", path + "/approve", who="approver", data={"revision_no": 8}, expected=409
+    )
+    assert failed["errors"][0]["code"] == "MASTER_SCHEMA_MIGRATION_REQUIRED"
+
+
+async def test_dropped_storage_cannot_be_treated_as_initial_correction(context, config_data):
+    _, path, table = await setup_storage(context, config_data)
+    async with SessionFactory() as session, session.begin():
+        # Only the empty table created by this test's generated master UUID is removed.
+        await session.execute(text(f'DROP TABLE trusted."{table.name}"'))
+    state = (await request(context, "GET", path + "/storage-plan"))["data"]
+    assert state["storage_exists"] is False and state["storage_deployed_before"] is True
+    assert state["initial_definition_correction_allowed"] is False
+    master = (await request(context, "GET", path))["data"]
+    proposed = deepcopy(master["approved_definition_json"])
+    proposed["fields"].append({"name": "branch_code", "type": "text", "nullable": False})
+    proposed["business_key"] = ["branch_code"]
+    await request(context, "PATCH", path, data={"revision_no": 3, "definition": proposed})
+    await request(context, "POST", path + "/submit-review", data={"revision_no": 4})
+    failed = await request(
+        context, "POST", path + "/approve", who="approver", data={"revision_no": 5}, expected=409
+    )
+    assert failed["errors"][0]["code"] == "MASTER_SCHEMA_MIGRATION_REQUIRED"

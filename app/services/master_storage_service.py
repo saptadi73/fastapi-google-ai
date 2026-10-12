@@ -82,6 +82,7 @@ class MasterStorageService(MasterService):
             "revision_no": master.revision_no,
             "ddl": str(CreateTable(table).compile(dialect=postgresql.dialect())),
             "schema_policy": "IDENTICAL_OR_ADD_NULLABLE_ATTRIBUTES",
+            **await self.storage_state(master),
             "execution_ready": False,
         }
 

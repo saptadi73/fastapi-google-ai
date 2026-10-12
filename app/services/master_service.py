@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.models.access import AccessPolicy, AccessPolicyBinding
+from app.models.audit import AuditEvent
 from app.models.base import now
 from app.models.configuration import Configuration
 from app.models.master import MasterColumnBinding, MasterDefinition, MasterSourceBinding
@@ -69,6 +70,38 @@ class MasterService:
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
             {"key": "master-registry:" + self.user.tenant_id},
         )
+
+    async def storage_state(self, master):
+        """Called while holding the master row lock, also acquired by storage deploy.
+
+        Catalog lookup needs no permission on the target table and treats any
+        existing relation as storage. A historical deployment also prevents
+        treating a dropped table as a new, safe initial definition.
+        """
+        name = "master_" + UUID(str(master.id)).hex
+        exists = await self.session.scalar(
+            text("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'trusted' AND c.relname = :name
+            )
+        """),
+            {"name": name},
+        )
+        deployed = await self.session.scalar(
+            select(AuditEvent.id)
+            .where(
+                AuditEvent.tenant_id == self.user.tenant_id,
+                AuditEvent.resource_id == str(master.id),
+                AuditEvent.event == "master.storage_deployed",
+            )
+            .limit(1)
+        )
+        return {
+            "storage_exists": bool(exists),
+            "storage_deployed_before": deployed is not None,
+            "initial_definition_correction_allowed": exists is False and deployed is None,
+        }
 
     async def list(self, search="", offset=0, limit=50):
         query = self.repo.query(MasterDefinition)
@@ -227,12 +260,21 @@ class MasterService:
                         403,
                     )
                 parsed = MasterSchema.model_validate(master.definition_json)
+                initial_schema_correction = False
                 if master.approved_definition_json:
                     from app.services.schema_compiler_service import validate_master_evolution
 
-                    validate_master_evolution(
-                        MasterSchema.model_validate(master.approved_definition_json), parsed
-                    )
+                    try:
+                        validate_master_evolution(
+                            MasterSchema.model_validate(master.approved_definition_json), parsed
+                        )
+                    except AppError as exc:
+                        if exc.code != "MASTER_SCHEMA_MIGRATION_REQUIRED":
+                            raise
+                        state = await self.storage_state(master)
+                        if not state["initial_definition_correction_allowed"]:
+                            raise
+                        initial_schema_correction = True
                 await self.check_authority(parsed)
                 audit(
                     self.session,
@@ -242,6 +284,7 @@ class MasterService:
                     previous_version=master.approved_version,
                     previous=master.approved_definition_json,
                     approved=parsed.model_dump(mode="json"),
+                    initial_schema_correction=initial_schema_correction,
                 )
                 master.approved_definition_json = parsed.model_dump(mode="json")
                 master.approved_version += 1

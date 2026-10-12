@@ -45,6 +45,7 @@ Halaman: **Halaman definisi / review master**. Pelaksana: Editor mengajukan; rev
 - Simpan draft dan ajukan review definisi.
 - Reviewer memeriksa field, business key, label, sensitivitas dan policy, lalu approve atau reject dengan catatan.
 - Gunakan versi approved terbaru dari master aktif. Definisi yang belum approved tidak dapat dipilih sebagai tujuan binding.
+- Sebelum storage pertama dibuat, koreksi key/tipe/field wajib dapat direview dan disetujui reviewer berbeda. Backend memeriksa storage fisik dan riwayat deployment; binding lama perlu review ulang.
 
 Hasil sebelum lanjut: **Definisi master aktif memiliki versi APPROVED.**.
 

@@ -1949,6 +1949,16 @@ Sync manual pada konfigurasi NON_MASTER aktif yang telah disetujui dapat memerik
 
 Lihat [Error response: kemungkinan penyebab dan tindakan](ERROR_RESPONSES.md). Tabel mencakup error sumber, review/deploy schema, validasi/import, akses katalog serta layanan database/AI. Di aplikasi: **Bantuan > Tabel error response** atau **Panduan lengkap > Tabel error response**; gunakan pencarian kode. Alasan keputusan akses dan blocker batch dibedakan dari error HTTP.
 
+### Koreksi definisi master sebelum storage pertama
+
+Storage plan master juga mengembalikan `storage_exists`, `storage_deployed_before`, dan
+`initial_definition_correction_allowed`. Sebelum storage pertama, koreksi key/tipe/field wajib
+boleh melalui revisi definisi dan approval reviewer berbeda. Backend memeriksa katalog PostgreSQL
+serta audit deployment sambil memegang lock registry master yang juga dipakai deploy storage.
+Jika storage ada atau pernah dideploy, evolusi yang tidak kompatibel tetap ditolak dengan
+`MASTER_SCHEMA_MIGRATION_REQUIRED`, termasuk ketika tabel kosong atau pernah dihapus.
+Audit approval mempertahankan versi lama dan menandai `initial_schema_correction`.
+
 ### Formula analitik dan aturan action plan
 
 Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md). Draft immutable menyimpan definition, semantic_hash, sheet_hash (impor Sheet), review_hash, created_by, status, approved_by dan decision_reason. Reviewer konfigurasi sumber berbeda pembuat menyetujui hash yang diperiksa. Akses query/kolom/row scope selalu diperiksa saat preview/evaluate; metadata query dan hasil di-audit. Angka Decimal dikirim sebagai string. Evaluasi mengembalikan usulan PROPOSED dan evidence_metrics, bukan menjalankan tindakan bisnis. Wizard ETL/chat AI belum menjalankan workflow aturan otomatis.
