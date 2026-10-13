@@ -64,7 +64,9 @@ DEPARTMENT/BUSINESS_DOMAIN/JURISDICTION/CLEARANCE/PURPOSE, assignment efektif,
 permission bundle/grant, policy/binding serta preview evaluator tersedia. Pendaftaran
 sumber baru meminta metadata bisnis; koreksi dan review metadata memiliki revision dan
 actor. Admin lain dapat mengaktifkan sumber setelah review metadata dan policy SOURCE
-ALLOW approved yang mencakup unit, domain, dan yurisdiksi sumber.
+ALLOW approved yang mencakup unit dan domain dasar sumber. Yurisdiksi/department menjadi
+pembatas tambahan hanya bila dicantumkan di policy dan tetap harus menjadi assignment aktif
+pengguna; sumber lama yang belum ditinjau tidak otomatis dibuka.
 
 Untuk sumber dengan metadata, katalog DataProduct, query, export, saved query, join,
 laporan berbasis produk, NL2SQL, dan artefak konfigurasi memeriksa SOURCE policy per

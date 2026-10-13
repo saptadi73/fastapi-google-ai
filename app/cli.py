@@ -7,42 +7,27 @@ from sqlalchemy import select, text
 from app.core.config import get_settings
 from app.core.database import SessionFactory, engine
 from app.core.security import password_hasher
+from app.domain.source_compatibility import classify_source_compatibility
 from app.models.auth import Tenant, User
 from app.models.source import DataSource
-
-SOURCE_ACCESS_METADATA_FIELDS = (
-    "owner_unit_id",
-    "business_domain_id",
-    "jurisdiction_id",
-    "purpose_id",
-    "data_owner_user_id",
-    "data_steward_user_id",
-    "sensitivity",
-)
 
 
 def source_access_backfill_row(source):
     """Classify legacy source access state without changing or exposing metadata values."""
-    metadata = source.access_metadata or {}
-    missing = [field for field in SOURCE_ACCESS_METADATA_FIELDS if not metadata.get(field)]
-    if missing:
-        action = "OWNER_METADATA_REQUIRED"
-    elif source.access_review_status == "REJECTED":
-        action = "SOURCE_REVIEW_REJECTED"
-    elif source.access_review_status != "APPROVED":
-        action = "SOURCE_REVIEW_REQUIRED"
-    elif source.access_status != "POLICY_APPROVED":
-        action = "OWNER_ACCESS_ACTIVATION_REQUIRED"
-    else:
-        action = "READY_NO_BACKFILL"
+    compatibility = classify_source_compatibility(
+        access_metadata=source.access_metadata,
+        access_status=source.access_status,
+        review_status=source.access_review_status,
+        reviewed_by=getattr(source, "access_reviewed_by", None),
+        reviewed_at=getattr(source, "access_reviewed_at", None),
+    )
     return {
         "tenant_id": str(source.tenant_id),
         "source_id": str(source.id),
         "source_code": source.source_code,
         "access_status": source.access_status,
         "review_status": source.access_review_status,
-        "action": action,
-        "missing_metadata_fields": missing,
+        **compatibility,
     }
 
 

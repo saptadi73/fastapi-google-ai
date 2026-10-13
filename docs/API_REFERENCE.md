@@ -666,7 +666,7 @@ Klasifikasi MASTER tetap ditolak pada konfigurasi/sync ETL biasa (`MASTER_RUNTIM
 - UI approval konfigurasi mengirim `source_access: {revision_no, policy_id}` dari
   ringkasan terbaru. Approver konfigurasi sumber boleh memutuskan metadata PENDING dan
   aktivasi, tetapi bukan pembuat konfigurasi/editor metadata. Policy SOURCE harus APPROVED,
-  berlaku, terikat sumber, mencakup scope unit/domain/yurisdiksi dan aksi DISCOVER/QUERY,
+  berlaku, terikat sumber, mencakup scope dasar unit/domain (yurisdiksi/department opsional bila dipilih) dan aksi DISCOVER/QUERY,
   tanpa kontrol SOURCE yang tidak didukung. Semuanya satu transaksi; error metadata/policy
   atau stale revision membatalkan approval. Tidak deploy atau apply data secara otomatis.
   Payload tanpa `source_access` tetap didukung untuk kompatibilitas API lama; UI baru

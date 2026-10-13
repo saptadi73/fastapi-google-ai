@@ -747,12 +747,13 @@ class SourceService:
                 or policy.valid_from > instant or (policy.valid_to and policy.valid_to <= instant)
                 or not {"DISCOVER", "QUERY"}.issubset(policy.actions)):
             raise AppError("SOURCE_ACCESS_POLICY_REQUIRED", "Policy SOURCE ALLOW belum approved atau tidak berlaku.", 409)
-        scope_ids = {
+        base_scope_ids = {
             source.access_metadata[field]
-            for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id")
+            for field in ("owner_unit_id", "business_domain_id")
+            if source.access_metadata.get(field)
         }
-        if not scope_ids.issubset(policy.required_attribute_ids):
-            raise AppError("SOURCE_POLICY_SCOPE_REQUIRED", "Policy wajib memuat unit, domain, dan yurisdiksi sumber.", 422)
+        if not base_scope_ids.issubset(policy.required_attribute_ids):
+            raise AppError("SOURCE_POLICY_SCOPE_REQUIRED", "Policy wajib memuat unit dan domain sumber.", 422)
         if policy.row_scope or policy.column_rules:
             raise AppError("SOURCE_POLICY_CONTROLS_UNSUPPORTED", "Aturan baris/kolom belum didukung untuk aktivasi.", 422)
         if source.access_status == "POLICY_APPROVED":
@@ -768,9 +769,10 @@ class SourceService:
     async def source_policy_options(self, source_id):
         source = await self.repo.get(DataSource, source_id)
         instant = now()
-        scope_ids = {
+        base_scope_ids = {
             source.access_metadata[field]
-            for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id")
+            for field in ("owner_unit_id", "business_domain_id")
+            if source.access_metadata.get(field)
         } if source.access_metadata else set()
         policies = (await self.session.scalars(
             self.repo.query(AccessPolicy)
@@ -794,7 +796,7 @@ class SourceService:
             {"id": policy.id, "code": policy.code, "label": policy.label,
              "actions": policy.actions, "export_allowed": policy.export_allowed}
             for policy in policies
-            if scope_ids.issubset(policy.required_attribute_ids)
+            if base_scope_ids.issubset(policy.required_attribute_ids)
         ]
 
     async def discover(self, source_id):

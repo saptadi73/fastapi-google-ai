@@ -12,6 +12,8 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - Master memiliki jalur Batch Import tersendiri; `MASTER_RUNTIME_PENDING` tetap memblokir tab MASTER pada jalur konfigurasi/sync ETL biasa, bukan seluruh pemuatan master.
 - Policy evaluator bersifat default-deny; policy sumber dan data product serta assignment memengaruhi katalog dan query.
 - Role `PLATFORM_ADMIN` sudah mempunyai aksi `ADMIN`, tetapi sejumlah alur administrasi dan resource tetap memiliki pemeriksaan policy tersendiri.
+- Scope ALLOW eksplisit kini mensyaratkan assignment unit + domain dasar; yurisdiksi dan department tambahan hanya membatasi bila dimasukkan dalam policy. Setiap atribut policy tetap wajib menjadi assignment aktif subjek.
+- Akses PLATFORM_ADMIN ke administrasi scope dibatasi tenant melalui repository/API role checks; mutasi scope dan evaluasi akses diaudit. Audit `query.executed` kini mencatat `action` QUERY/EXPORT dan identitas produk/join tanpa nilai hasil.
 - Workflow owner-managed dan fallback akses domain+unit aktif di production; default kode keduanya ON dan konfigurasi production sudah diverifikasi.
 - Submit konfigurasi owner-managed sebelumnya mewajibkan checklist kolom/bagian. Checklist kini opsional di owner-managed dan tetap ada untuk workflow reviewer legacy.
 - Sync aktif sebelumnya menolak `FULL_REFRESH`. Owner-managed kini boleh langsung sync penuh setelah pemeriksaan status, freshness, akses, preview konflik, dan validasi baris.
@@ -42,9 +44,9 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [x] Jadikan fallback baca/query bagi domain + unit pemilik default ON untuk sumber yang sudah ditinjau. Fallback tidak memberi EXPORT dan tidak aktif bila ada policy resource non-REVOKED; sumber lama tanpa review tetap memakai policy sebelumnya.
 - [~] Metadata setelah review sumber dapat diperbarui pemilik/data owner/steward tanpa review kedua; scope harus tetap assignment aktif, perubahan diaudit, dan aktivasi legacy dibatasi owner/admin saat feature flag ON.
 - [x] Tetapkan interaksi default scope dengan `DataProduct.allowed_roles`: untuk sumber bermetadata yang sudah direview, fallback hanya dapat melewati allow-list lama pada DISCOVER/READ/QUERY; evaluator tetap harus mengizinkan aksi berdasarkan assignment domain+unit dan role capability. EXPORT dan produk tanpa metadata tetap memakai allow-list lama.
-- [ ] Jadikan restriction yurisdiksi/department opsional dan eksplisit; jangan mengubah data lama menjadi terbuka otomatis.
+- [x] Jadikan restriction yurisdiksi/department opsional dan eksplisit pada policy: ALLOW memerlukan assignment unit+domain, lalu hanya atribut tambahan yang dipilih; setiap atribut terpilih tetap wajib dimiliki aktif oleh pengguna. Default hanya terbuka untuk sumber yang sudah ditinjau pada tenant/domain/unit yang sama; data lama yang belum ditinjau tetap tertutup.
 - [~] Sediakan laporan dry-run read-only yang dapat diulang (`python -m app.cli source-access-backfill-report`) untuk mengelompokkan metadata sumber lama. Backfill perubahan data masih harus diputuskan terpisah; laporan tidak auto-approve atau membuka akses.
-- [ ] Pastikan PLATFORM_ADMIN dapat mengelola semua scope melalui jalur administrasi yang diaudit; tindakan baca/export tetap tercatat dan tunduk pada batas tenant.
+- [x] Pastikan PLATFORM_ADMIN mengelola scope lewat API admin tenant-bound yang mengaudit perubahan/evaluasi; query dan EXPORT mencatat aksi eksplisit, dan otorisasi sumber/produk tetap diperiksa sebelum data diberikan. Tes tenant end-to-end, cache, expiry/revoke, dan migrasi legacy tetap dilacak pada item tes terpisah.
 - [x] Sediakan preview effective access yang menjelaskan allow/deny, reason code, policy revision, row/column scope tanpa mengembalikan nilai data; evaluasi diaudit dan UI admin mencari resource dengan pagination.
 - [~] Tambahkan test scope role, katalog/template, DENY, dan policy yang sudah ada. Sebelum feature flag diaktifkan, masih perlu test expiry/revoke, isolasi tenant end-to-end, cache, serta migration/backfill.
 
@@ -53,7 +55,7 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [x] Perluas konteks review sumber agar approver dapat melihat semua tab yang ditemukan (termasuk tab hilang/nonaktif), klasifikasi, status profiling, jumlah baris, serta nama/tipe/indikasi PII kolom tanpa nilai contoh.
 - [x] Kirim fingerprint bukti tab pada keputusan review dan tolak keputusan bila tab/profil berubah setelah approver membuka konteks. Perubahan inventory, klasifikasi, pengaturan tab, atau schema profil setelah approval mengembalikan sumber ke status perlu review.
 - [x] Pertahankan pemeriksaan kepemilikan sumber, metadata assignment, akses Google Sheet, dan audit pada registrasi/review; tes integrasi mencakup validasi assignment serta kegagalan akses discovery (`tests/test_integration.py`).
-- [ ] Sediakan migrasi kompatibilitas untuk sumber lama yang telah melewati sebagian workflow.
+- [x] Sediakan migrasi kompatibilitas untuk sumber lama yang telah melewati sebagian workflow: simpan snapshot tahap dan tindakan lanjut per sumber ke audit, pertahankan status/progress yang ada, dan minta bukti reviewer yang hilang. Tidak ada status approval, policy, assignment, atau akses yang dibuat otomatis.
 
 ### P3 — konfigurasi dan deployment
 
@@ -95,7 +97,7 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 1. **Operasional segera:** 61 notifikasi `DRIVE_API_NOT_ENABLED` masih terbuka pada pemeriksaan production 13 Oktober 2026. Admin Google Cloud perlu mengaktifkan Drive API pada project Service Account; setelah itu uji satu perubahan file dan pastikan discovery/profiling jalan serta peringatan ditutup otomatis.
 2. **Panduan pengguna:** beberapa artikel masih menyuruh semua pengguna melewati approval. Perbarui teks dan helper owner-managed versus legacy sebelum menghapus inbox atau endpoint legacy.
-3. **Akses dan data lama:** fallback default domain+unit sudah berjalan, tetapi restriction jurisdiction/department, dry-run/backfill sumber lama, pengelolaan seluruh scope oleh PLATFORM_ADMIN, dan tes tenant/cache/revoke masih perlu diverifikasi serta diselesaikan konservatif.
+3. **Akses dan data lama:** fallback domain+unit aktif hanya bagi sumber yang sudah ditinjau. Yurisdiksi/department kini opsional sebagai restriction eksplisit; tidak ada pembukaan otomatis untuk sumber lama yang belum ditinjau. Migration kompatibilitas mencatat tahap lama dan tindakan lanjut pada audit tanpa mengubah progress. PLATFORM_ADMIN mengelola scope melalui jalur yang diaudit dan tenant-bound. Dry-run/backfill perubahan status dan tes tenant/cache/revoke end-to-end masih perlu diselesaikan konservatif.
 4. **Master:** jalur Batch Import ada dan sengaja terpisah dari sync ETL biasa; penyatuan tracking/runtime serta pemetaan referensi opsional dan uji konflik tetap menjadi pekerjaan besar tersisa.
 5. **Pembersihan legacy:** inbox/gate reviewer dan migrasi kompatibilitas hanya dihapus setelah bukti sumber/config/import lama dapat dilanjutkan tanpa mengubah audit atau melemahkan tenant/policy boundary.
 

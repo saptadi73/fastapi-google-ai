@@ -2,7 +2,7 @@
 
 Tanggal: 12 Oktober 2026.
 
-Status: snapshot audit sebelum implementasi bertahap; uraian pada tabel di bawah tidak seluruhnya mencerminkan runtime terbaru. Backend `d76f897` dan frontend `6986666` sudah diterapkan di production pada 13 Oktober 2026. Keputusan akses terbaru adalah default untuk business domain **dan** unit yang sama; yurisdiksi/department menjadi pembatas tambahan yang masih perlu ditinjau. Gunakan [TODO dan status rollout terbaru](WORKFLOW_SIMPLIFICATION_TODO.md) untuk mengetahui perilaku yang sudah aktif dan pekerjaan yang masih terbuka. Dokumen ini dipertahankan sebagai baseline temuan, bukan panduan operasional saat ini.
+Status: snapshot audit sebelum implementasi bertahap; uraian pada tabel di bawah tidak seluruhnya mencerminkan runtime terbaru. Backend `d76f897` dan frontend `6986666` sudah diterapkan di production pada 13 Oktober 2026. Keputusan akses default adalah business domain **dan** unit yang sama. Perubahan lokal terbaru membuat yurisdiksi/department sebagai pembatas opsional yang hanya berlaku bila dimasukkan eksplisit ke policy; setiap atribut tersebut tetap harus dimiliki aktif oleh pengguna. Perubahan lokal ini belum dideploy. Gunakan [TODO dan status rollout terbaru](WORKFLOW_SIMPLIFICATION_TODO.md) untuk status implementasi dan rollout. Dokumen ini dipertahankan sebagai baseline temuan, bukan panduan operasional saat ini.
 
 ## Tujuan dan keputusan pengguna
 

@@ -41,6 +41,13 @@ POLICY_RESOURCES = {
 }
 
 
+def _policy_scope_matches(effect, required_source_scope, required_attribute_ids, active_attribute_ids):
+    required = set(required_attribute_ids)
+    if not required.issubset(active_attribute_ids):
+        return False
+    return effect == "DENY" or set(required_source_scope).issubset(required)
+
+
 def attribute_record(item):
     return record(item)
 
@@ -1010,7 +1017,7 @@ class AccessService:
                 .limit(1)
             ))
         active_attributes = {item["attribute_id"] for item in effective["assignments"]}
-        source_scope = set()
+        required_source_scope = set()
         source = None
         if data.resource_type in ("SOURCE", "DATA_PRODUCT"):
             source = parent_source
@@ -1019,15 +1026,23 @@ class AccessService:
                     self.repo.query(DataSource).where(DataSource.source_code == data.resource_id)
                 )
             if source is not None and source.access_metadata:
-                source_scope = {
+                # Unit and business domain form the default tenant-local scope.
+                # Jurisdiction and any additional department are opt-in restrictions:
+                # they narrow access only when explicitly included by the policy.
+                required_source_scope = {
                     source.access_metadata[field]
-                    for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id")
+                    for field in ("owner_unit_id", "business_domain_id")
+                    if source.access_metadata.get(field)
                 }
         matched = [
             policy
             for policy in policies
-            if set(policy.required_attribute_ids).issubset(active_attributes)
-            and (policy.effect == "DENY" or source_scope.issubset(policy.required_attribute_ids))
+            if _policy_scope_matches(
+                policy.effect,
+                required_source_scope,
+                policy.required_attribute_ids,
+                active_attributes,
+            )
         ]
         denied = [policy for policy in matched if policy.effect == "DENY"]
         if denied:

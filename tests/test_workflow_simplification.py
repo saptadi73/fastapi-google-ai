@@ -54,6 +54,8 @@ def test_source_access_backfill_report_distinguishes_review_and_activation():
         source_code="legacy_source",
         access_status="ACCESS_POLICY_REQUIRED",
         access_review_status="APPROVED",
+        access_reviewed_by="reviewer-id",
+        access_reviewed_at=timedelta(days=1),
         access_metadata={
             "owner_unit_id": "unit",
             "business_domain_id": "domain",
@@ -67,6 +69,28 @@ def test_source_access_backfill_report_distinguishes_review_and_activation():
     assert source_access_backfill_row(source)["action"] == "OWNER_ACCESS_ACTIVATION_REQUIRED"
     source.access_status = "POLICY_APPROVED"
     assert source_access_backfill_row(source)["action"] == "READY_NO_BACKFILL"
+
+
+def test_legacy_compatibility_report_requires_evidence_before_preserving_approval():
+    source = SimpleNamespace(
+        tenant_id=uuid4(),
+        id=uuid4(),
+        source_code="legacy_source_without_review_evidence",
+        access_status="POLICY_APPROVED",
+        access_review_status="APPROVED",
+        access_reviewed_by=None,
+        access_reviewed_at=None,
+        access_metadata={
+            "owner_unit_id": "unit",
+            "business_domain_id": "domain",
+            "jurisdiction_id": "jurisdiction",
+            "purpose_id": "purpose",
+            "data_owner_user_id": "owner",
+            "data_steward_user_id": "steward",
+            "sensitivity": "MEDIUM",
+        },
+    )
+    assert source_access_backfill_row(source)["action"] == "SOURCE_REVIEW_REQUIRED"
 
 
 def test_onboarding_contract_requires_unique_explicit_targets():

@@ -32,12 +32,12 @@ from app.models.import_review import ImportReview
 from app.models.master import MasterDefinition
 from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, ProfilingRun, SourceSheet
+from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.access import AccessEvaluationRequest
 from app.services.access_service import AccessService
 from app.services.configuration_service import ConfigurationService
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.release_approval_service import require_release_ready
-from app.repositories.semantic_repository import SemanticRepository
 from app.workers.runner import run_pending, schedule_sources
 
 pytestmark = pytest.mark.integration
@@ -600,6 +600,73 @@ async def test_unit_domain_default_access_is_flagged_scoped_and_never_exports(co
             product_code, viewer, action="QUERY"
         )
         assert product.allowed_roles == ["ANALYST"]
+
+    # An explicit ALLOW policy needs the source's baseline unit + domain.
+    # Jurisdiction and additional department restrictions are optional; when
+    # explicitly selected, each must still be assigned to the user.
+    async with SessionFactory() as session, session.begin():
+        baseline_policy = AccessPolicy(
+            tenant_id=ctx.tenant_id, code="BASELINE_ALLOW_" + uuid4().hex,
+            label="Baseline unit and domain", effect="ALLOW", actions=["QUERY"],
+            required_attribute_ids=[metadata["owner_unit_id"], metadata["business_domain_id"]],
+            status="APPROVED",
+            valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            created_by=admin_id, approved_by=admin_id,
+        )
+        session.add(baseline_policy)
+        await session.flush()
+        baseline_policy_id = baseline_policy.id
+        session.add(AccessPolicyBinding(
+            tenant_id=ctx.tenant_id, policy_id=baseline_policy.id,
+            resource_type="SOURCE", resource_id=same_source_code,
+        ))
+    async with SessionFactory() as session, session.begin():
+        viewer = await session.get(User, viewer_id)
+        decision = await AccessService(session, viewer).evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=same_source_code,
+        ))
+        assert decision["allowed"] is True
+        assert decision["reason_code"] == "POLICY_MATCH"
+
+    async with SessionFactory() as session, session.begin():
+        baseline_policy = await session.get(AccessPolicy, baseline_policy_id)
+        extra_department = AccessAttribute(
+            tenant_id=ctx.tenant_id, kind="DEPARTMENT", code="EXTRA_DEPT_" + uuid4().hex,
+            label="Optional department restriction",
+        )
+        session.add(extra_department)
+        await session.flush()
+        baseline_policy.required_attribute_ids = [
+            metadata["owner_unit_id"], metadata["business_domain_id"],
+            metadata["jurisdiction_id"], extra_department.id,
+        ]
+        optional_jurisdiction_id = metadata["jurisdiction_id"]
+        optional_department_id = extra_department.id
+    async with SessionFactory() as session, session.begin():
+        viewer = await session.get(User, viewer_id)
+        decision = await AccessService(session, viewer).evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=same_source_code,
+        ))
+        assert decision["allowed"] is False
+        assert decision["reason_code"] == "DEFAULT_DENY"
+        viewer = await session.get(User, viewer_id)
+        session.add_all([
+            UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer.id,
+                attribute_id=optional_jurisdiction_id, granted_by=admin_id,
+                valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            ),
+            UserAssignment(
+                tenant_id=ctx.tenant_id, user_id=viewer.id,
+                attribute_id=optional_department_id, granted_by=admin_id,
+                valid_from=datetime.now(timezone.utc) - timedelta(days=1),
+            ),
+        ])
+        await session.flush()
+        decision = await AccessService(session, viewer).evaluate(AccessEvaluationRequest(
+            action="QUERY", resource_type="SOURCE", resource_id=same_source_code,
+        ))
+        assert decision["allowed"] is True
 
     async with SessionFactory() as session, session.begin():
         deny = AccessPolicy(
@@ -1621,7 +1688,6 @@ async def test_source_activation_requires_live_subject_policy(context):
                 "required_attribute_ids": [
                     metadata["owner_unit_id"],
                     metadata["business_domain_id"],
-                    metadata["jurisdiction_id"],
                 ],
             },
         )
@@ -1682,7 +1748,7 @@ async def test_source_activation_requires_live_subject_policy(context):
     assert activated["access_review_status"] == "APPROVED"
     await request(ctx, "GET", "/data-products/BE16_REVIEWED", who="viewer", expected=404)
     async with SessionFactory() as session, session.begin():
-        for field in ("owner_unit_id", "business_domain_id", "jurisdiction_id"):
+        for field in ("owner_unit_id", "business_domain_id"):
             session.add(
                 UserAssignment(
                     tenant_id=ctx.tenant_id,

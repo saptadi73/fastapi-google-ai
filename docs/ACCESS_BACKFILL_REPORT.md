@@ -8,6 +8,8 @@ python -m app.cli source-access-backfill-report
 
 Perintah ini hanya membaca sumber yang belum di-unlink dan mencetak JSON berisi jumlah per kategori serta identitas tenant, UUID sumber, kode sumber, status akses/review, kategori tindakan, dan nama field metadata yang masih kosong. Nilai metadata, spreadsheet ID, dan data Sheet tidak dicetak. Menjalankan ulang laporan tidak membuat perubahan.
 
+Migration `a7q0w3e6r9t3` mencatat snapshot tahap kompatibilitas setiap sumber yang masih terhubung ke `audit.event_log` (`source.legacy_compatibility_classified`). Snapshot menyimpan status ETL/akses/review, nama field metadata yang terisi, dan tindakan lanjut—tanpa nilai metadata. Migration tidak mengubah source, konfigurasi, persetujuan, assignment, policy, atau grant. Data yang sudah melewati sebagian workflow tetap memakai statusnya; status ETL aktif sendiri tidak dianggap sebagai approval akses.
+
 Kategori laporan:
 
 - `OWNER_METADATA_REQUIRED`: owner melengkapi metadata yang kosong melalui form aplikasi.
@@ -16,8 +18,8 @@ Kategori laporan:
 - `OWNER_ACCESS_ACTIVATION_REQUIRED`: review sumber sudah approved, tetapi akses pemilik belum diaktifkan.
 - `READY_NO_BACKFILL`: status akses sudah disetujui; laporan tidak melakukan apa pun.
 
-Laporan ini tidak membuat approval, assignment, policy, ataupun grant. Ia juga tidak mengubah `access_status` atau `access_review_status`. Gunakan hasilnya untuk merencanakan perbaikan manual dan rollout bertahap. Aktivasi akses tetap bergantung pada assignment aktif dan pemeriksaan tenant oleh backend. Jangan mengubah status lama langsung di SQL.
+Laporan ini tidak membuat approval, assignment, policy, ataupun grant. Ia juga tidak mengubah `access_status` atau `access_review_status`. Status `APPROVED` tanpa reviewer dan waktu review yang tercatat diklasifikasikan sebagai `SOURCE_REVIEW_REQUIRED`, bukan dipercaya begitu saja. Gunakan hasilnya untuk melanjutkan pekerjaan pada tahap yang tepat. Aktivasi akses tetap bergantung pada assignment aktif dan pemeriksaan tenant oleh backend. Jangan mengubah status lama langsung di SQL.
 
 ## Batas rollout
 
-Ini adalah inventaris dry-run, bukan migrasi data. Sebelum membuat perintah backfill yang menulis, setiap kategori perlu aturan keputusan, bukti review yang dapat diaudit, idempotency, dukungan dry-run, backup, serta rencana rollback. Sumber tanpa bukti registrasi tidak boleh otomatis dianggap reviewed.
+Snapshot audit adalah migrasi kompatibilitas, bukan backfill atau approval. Backfill yang mengubah status masih memerlukan aturan keputusan, bukti review yang dapat diaudit, idempotency, dukungan dry-run, backup, serta rencana rollback. Sumber tanpa bukti registrasi tidak boleh otomatis dianggap reviewed.

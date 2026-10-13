@@ -219,7 +219,7 @@ DENY yang cocok. Tidak perlu restart API untuk perubahan akses yang tersimpan.
 | SOURCE_METADATA_SELF_REVIEW | Editor metadata mereview dirinya sendiri | Gunakan reviewer yang berbeda dan ditunjuk |
 | SOURCE_ACCESS_APPROVER_CONFLICT | Editor metadata mencoba aktivasi | Admin berbeda mengaktifkan |
 | SOURCE_METADATA_REVIEW_REQUIRED | Metadata belum APPROVED | Review metadata dahulu |
-| SOURCE_POLICY_SCOPE_REQUIRED | Unit/domain/yurisdiksi sumber tidak lengkap pada policy | Perbaiki DRAFT atau buat policy baru, lalu review |
+| SOURCE_POLICY_SCOPE_REQUIRED | Policy tidak memuat unit dan domain dasar sumber | Perbaiki DRAFT atau buat policy baru, lalu review; yurisdiksi/department hanya ditambahkan bila memang ingin mempersempit akses |
 | Policy tidak ada di dropdown | Salah resource/status/scope/aksi atau masa berlaku | Gunakan checklist langkah 5 |
 | ASSIGNMENT_PERIOD_OVERLAP | Assignment aktif sudah ada | Pakai assignment existing; jangan duplikasi |
 | Preview ALLOW tetapi produk tersembunyi | Gate sumber atau allowed_roles produk belum cocok | Periksa status sumber dan role produk |
