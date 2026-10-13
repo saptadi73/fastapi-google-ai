@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.common import StrictModel
 
@@ -91,6 +91,28 @@ class TransformParameter(StrictModel):
         return self
 
 
+class MasterReferenceMapping(StrictModel):
+    master_definition_id: UUID
+    master_field: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    required: bool = False
+    cardinality: Literal["MANY_TO_ONE", "ONE_TO_ONE"] = "MANY_TO_ONE"
+    normalization: Literal["TRIM_CASEFOLD"] = "TRIM_CASEFOLD"
+    aliases: dict[str, str] = Field(default_factory=dict, max_length=200)
+
+    @field_validator("aliases")
+    @classmethod
+    def valid_aliases(cls, aliases):
+        normalized = [" ".join(key.split()).casefold() for key in aliases]
+        if any(not key or len(key) > 200 for key in normalized) or len(set(normalized)) != len(normalized):
+            raise ValueError("Alias referensi harus unik setelah normalisasi dan tidak boleh kosong")
+        for record_id in aliases.values():
+            try:
+                UUID(str(record_id))
+            except (TypeError, ValueError):
+                raise ValueError("Setiap alias referensi harus menunjuk UUID master") from None
+        return aliases
+
+
 class ColumnMapping(StrictModel):
     source_column: str = Field(min_length=1, max_length=200)
     target_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
@@ -116,6 +138,7 @@ class ColumnMapping(StrictModel):
     taxonomy_id: UUID | None = None
     taxonomy_version: int | None = Field(default=None, ge=1)
     taxonomy_required: bool = False
+    master_reference: MasterReferenceMapping | None = None
 
     @model_validator(mode="after")
     def valid_numeric_scale(self):
@@ -158,6 +181,11 @@ class ColumnMapping(StrictModel):
             raise ValueError("taxonomy_version memerlukan taxonomy_id")
         if self.taxonomy_required and self.taxonomy_id is None:
             raise ValueError("taxonomy_required memerlukan taxonomy_id")
+        if self.master_reference is not None:
+            if self.target_type != "uuid" or self.is_business_key or self.is_primary_key:
+                raise ValueError("master_reference memerlukan kolom UUID non-key")
+            if self.master_reference.required and self.nullable:
+                raise ValueError("Relasi master wajib memerlukan kolom non-nullable")
         if self.taxonomy_id is not None and (self.taxonomy_version is None or self.target_type not in ("text", "varchar")):
             raise ValueError("taxonomy_id requires taxonomy_version and text/varchar target")
         if (self.numeric_precision is not None or self.numeric_scale is not None) and self.target_type != "numeric":

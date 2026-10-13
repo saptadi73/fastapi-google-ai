@@ -681,9 +681,10 @@ async def profile(source_id: UUID, session: Session, user: CurrentUser):
 
 @router.post("/sources/{source_id}/sync", status_code=202, dependencies=edit)
 async def sync(source_id: UUID, session: Session, user: CurrentUser):
-    await ClassificationService(session, user).require_source_ready(source_id)
-    job = await enqueue(session, user, "ETL", str(source_id))
-    return success({**job, "pipeline": "LEGACY_ETL", "review_required": True, "recommended_endpoint": f"/sources/{source_id}/sync-review"})
+    # Keep the compatibility URL, but send it through the reviewed batch lifecycle
+    # so mapping, reference resolution, preview, apply, and audit are consistent.
+    job = await SourceService(session, user).queue_sync_review(source_id)
+    return success({**job, "pipeline": "IMPORT_REVIEW", "review_required": False})
 
 
 @router.post("/sources/{source_id}/sync-review", status_code=202, dependencies=edit)

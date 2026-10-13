@@ -49,7 +49,7 @@ from app.services.reference_service import (
     resolve_value,
     validate_reference_rows,
 )
-from app.services.release_approval_service import require_release_ready
+from app.services.release_approval_service import owner_workflow_compatible, require_release_ready
 from app.services.source_approver_service import require_source_approver
 from app.services.taxonomy_validation_service import (
     canonicalize_rows,
@@ -385,10 +385,7 @@ class ImportReviewService:
         source = await self.repo.get(DataSource, review.source_id, lock=True)
         config = await self.repo.get(Configuration, review.dependencies["configuration_id"], lock=True)
         await self.session.refresh(config)
-        owner_managed = (
-            get_settings().etl_owner_workflow_enabled
-            and (config.review_state or {}).get("owner_managed") is True
-        )
+        owner_managed = owner_workflow_compatible(config)
         if (
             config.status != "ACTIVE" or sheet.active_configuration_id != config.id
             or config.revision_no != review.dependencies["configuration_revision"]

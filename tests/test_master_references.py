@@ -128,6 +128,38 @@ async def test_exact_resolution_preserves_raw_and_loads_uuid(reference):
         assert str(await session.scalar(select(reference.consumer.c.product_id))) == reference.record_id
 
 
+async def test_configuration_embedded_optional_reference_uses_shared_batch_lifecycle(reference):
+    async with SessionFactory() as session, session.begin():
+        config = await session.scalar(select(Configuration).where(
+            Configuration.source_sheet_id == reference.sheet_id,
+        ))
+        config_data = dict(config.configuration_json)
+        config_data["columns"] = [
+            {
+                **column,
+                **({"master_reference": {
+                    "master_definition_id": reference.master_id,
+                    "master_field": "code",
+                    "required": False,
+                }} if column["source_column"] == "Product" else {}),
+            }
+            for column in config_data["columns"]
+        ]
+        config.configuration_json = config_data
+        batch = await session.get(ImportReview, reference.batch_id)
+        batch.configuration_json = config_data
+        batch.dependencies = {
+            **batch.dependencies,
+            "configuration_id": config.id,
+            "configuration_revision": config.revision_no,
+        }
+
+    resolved = await reference.resolve("001", write=True)
+    assert resolved["status"] == "EXACT" and resolved["staging_updated"]
+    preview = await reference.preview(approve=True)
+    assert (await reference.apply(preview))["rows_applied"] == 1
+
+
 async def test_alias_is_scoped_to_batch_sheet_and_edits_revoke_approval(reference):
     await reference.bind(aliases={"local": reference.record_id})
     await reference.bind(aliases={"elsewhere": reference.record_id}, source_sheet=reference.sheets[0].id)

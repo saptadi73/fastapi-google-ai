@@ -63,19 +63,19 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [x] Hilangkan checklist kolom/bagian berulang pada submit owner-managed; workflow legacy tetap meminta bukti reviewer yang diperlukan.
 - [x] Pertahankan snapshot freshness, dry-run penuh, schema plan, checklist, collision check, audit, dan idempotency.
 - [x] Izinkan data owner/steward men-deploy dan rollback konfigurasi owner-managed yang lolos; konfigurasi legacy tetap memerlukan reviewer.
-- [x] Izinkan sync incremental maupun FULL_REFRESH langsung untuk konfigurasi owner-managed aktif tanpa release approval kedua; akses sumber dan freshness tetap diperiksa.
+- [x] Izinkan sync incremental maupun FULL_REFRESH langsung untuk konfigurasi owner-managed aktif tanpa release approval kedua; akses sumber dan freshness tetap diperiksa. Konfigurasi legacy yang sudah punya `approved_by` dan `approved_at` juga kompatibel dalam mode owner workflow, tetap dengan pemeriksaan owner/steward/platform admin; draft tanpa bukti approval tidak diloloskan otomatis.
 - [x] Pertahankan transaksi FULL_REFRESH: validasi seluruh baris sebelum mengganti data; bila ada error, rollback dan data lama tetap tersedia. DDL destruktif tetap terpisah dan diblokir.
-- [~] Owner-managed ETL tidak lagi memanggil endpoint atau menampilkan UI release approval; konfigurasi legacy tetap memakai keduanya. Hapus release groups global/inbox hanya setelah kompatibilitas data lama dan rollout siap.
+- [~] Backend memiliki jalur kompatibilitas untuk konfigurasi owner-managed dan legacy yang telah disetujui, sehingga release approval kedua tidak menghalangi deploy/sync. Endpoint lama dipertahankan untuk record dan klien lama; UI inbox, assignment configuration/import, navigasi, dan panduan frontend masih perlu dihapus.
 - [~] Verifikasi ulang deploy hanya bila snapshot terbaru lulus; pesan dry-run menunjukkan baris/field/kode masalah tanpa nilai sel, dan blocker aturan kualitas menunjukkan baris serta field. Rincian validasi lain dan tahap runtime tetap perlu diperluas.
-- [ ] Hapus UI inbox/assignment approval konfigurasi setelah endpoint dan data lama memiliki jalur kompatibilitas.
+- [~] Jalur kompatibilitas backend siap: konfigurasi legacy hanya melewati release gate bila approval lama tercatat; draft tanpa approval tetap perlu validasi/pengajuan ulang pemilik. Hapus UI inbox/assignment approval konfigurasi serta tautan panduannya di repo frontend; endpoint/API lama tetap dipertahankan sementara untuk kompatibilitas klien.
 
 ### P4 — master dan import
 
 - [~] Di mode `ETL_OWNER_WORKFLOW_ENABLED`, definisi master disahkan pemilik setelah schema/business key/authority checks; source binding dan column binding tervalidasi tanpa approver kedua.
 - [~] Deploy storage dapat dilakukan pemilik setelah konfirmasi rencana schema; batas perubahan storage aman dan audit tetap berlaku.
-- [ ] Satukan runtime/pipeline master dan non-master pada validator, job, apply, audit, dan tracking yang sama.
-- [ ] Tambahkan pemetaan relasi master opsional pada konfigurasi non-master dan pemeriksaan not-found/ambiguous.
-- [ ] Pertahankan keputusan eksplisit untuk konflik master, perubahan key, deactivation, dan delete-restricted.
+- [~] Master dan non-master berbagi ImportReview create/worker/preview/apply, job, audit (`import.applied`), dan source tracking; URL kompatibilitas `/sources/{id}/sync` kini mengantrekan pipeline ini. Validator dan target writer masih memakai adapter MASTER untuk business key, authority/effective dating, dan storage. Jalur reprocess karantina lama masih perlu direkonsiliasi sebelum seluruh runtime langsung dapat dinyatakan satu jalur.
+- [~] Pemetaan relasi master opsional tersedia pada `ColumnMapping.master_reference` untuk konfigurasi NON_MASTER dan tetap membaca `MasterColumnBinding` lama. Preview/apply memakai master aktif, alias UUID dan hash dependency; not-found/ambiguous tidak dipilih otomatis. Editor UI tersedia; uji PostgreSQL end-to-end untuk konfigurasi embedded masih menunggu test database yang sudah dimigrasikan.
+- [~] Konflik master memerlukan konfirmasi hash preview dan alasan; konflik key/duplicate memblokir apply; deactivation kini memerlukan alasan audit; foreign key menggunakan `ON DELETE RESTRICT`. Perubahan business key/schema ditolak dengan `MASTER_SCHEMA_MIGRATION_REQUIRED` sampai workflow migrasi eksplisit tersedia.
 - [x] Hapus approval reviewer rutin untuk batch bersih pada owner workflow; pemilik Apply mengikat preview token/hash dan menjalankan validasi ulang.
 - [~] Konflik sumber membutuhkan konfirmasi + alasan pemilik; duplicate/key conflict terverifikasi, PRIVACY_RISK, usulan insert yang perlu policy review, pertanyaan teknis, dan ambiguous reference tetap menjadi blocker sampai ditangani.
 - [x] Jadikan temuan AI VALUE_ISSUE dan coverage parsial sebagai peringatan; sediakan endpoint backend dan UI owner untuk menandai temuan lama telah ditinjau dengan alasan dan audit. Rollout production masih terbuka.

@@ -2,6 +2,7 @@
 
 from sqlalchemy import or_, select
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.access import AccessAttribute, UserAssignment
 from app.models.auth import User
@@ -12,6 +13,23 @@ from app.repositories.base import TenantRepository
 from app.services.audit_service import audit
 
 TECHNICAL_ROLES = {"PLATFORM_ADMIN", "TECHNICAL_APPROVER"}
+
+
+def owner_workflow_compatible(config):
+    """Return true for owner-flow configs or legacy configs already approved once.
+
+    The old approval is evidence that the config was reviewed. Owner workflow no
+    longer requires an additional release sign-off, but never auto-approves drafts.
+    """
+    if not get_settings().etl_owner_workflow_enabled:
+        return False
+    if (config.review_state or {}).get("owner_managed") is True:
+        return True
+    return (
+        config.status in ("APPROVED", "SUPERSEDED", "ACTIVE")
+        and bool(config.approved_by)
+        and bool(config.approved_at)
+    )
 
 
 def _group_key(group_type, unit_id=None):

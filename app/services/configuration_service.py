@@ -27,7 +27,7 @@ from app.services.etl_compiler_service import transform_rows
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
-from app.services.release_approval_service import require_release_ready
+from app.services.release_approval_service import owner_workflow_compatible, require_release_ready
 from app.services.schema_compiler_service import deploy_schema, preview_schema_migration, schema_plan
 from app.services.source_approver_service import require_source_approver
 from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
@@ -107,7 +107,7 @@ class ConfigurationService:
         if config.status != expected:
             raise AppError("APPROVAL_REQUIRED", f"Konfigurasi harus berstatus {expected}.", 409)
         source = await self.repo.get(DataSource, config.source_id)
-        owner_managed = get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")
+        owner_managed = owner_workflow_compatible(config)
         if owner_managed:
             self.require_owner_managed_actor(source)
         else:
@@ -383,7 +383,7 @@ class ConfigurationService:
                 "APPROVAL_REQUIRED", "Konfigurasi belum disetujui atau tidak dapat diaktifkan.", 409
             )
         source = await self.repo.get(DataSource, config.source_id, lock=True)
-        owner_managed = get_settings().etl_owner_workflow_enabled and (config.review_state or {}).get("owner_managed")
+        owner_managed = owner_workflow_compatible(config)
         if owner_managed:
             self.require_owner_managed_actor(source)
         else:

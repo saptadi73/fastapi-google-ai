@@ -16,12 +16,33 @@ master dan versi, tipe field, serta penanda business key. Business key dipriorit
 bila skornya sama.
 
 Ini hanya pencocokan nama; endpoint tidak membaca nilai baris untuk membuktikan relasi.
-Frontend tidak menyimpan binding otomatis. Editor memeriksa nilai sumber dan keunikan
-field tujuan, menyimpan draft, lalu reviewer menyetujui. Nilai yang tidak ditemukan
-atau ambigu tetap harus ditangani pada review batch. Header profil memakai field
+Frontend tidak menyimpan relasi otomatis. Pemilik memeriksa field tujuan dan memilih
+relasi pada langkah Kolom di Workspace ETL. Owner workflow melanjutkan tanpa approval
+rutin; jalur legacy mengikuti status review yang sudah ada. Nilai yang tidak ditemukan
+atau ambigu tetap harus ditangani pada batch. Header profil memakai field
 `source_column`; payload lama yang menggunakan `name` masih diterima.
 
 ## Resolver
+
+Kolom pada konfigurasi NON_MASTER kini dapat menyertakan pemetaan `master_reference`:
+
+```json
+{
+  "master_definition_id": "55555555-5555-4555-8555-555555555555",
+  "master_field": "business_code",
+  "required": false,
+  "cardinality": "MANY_TO_ONE",
+  "normalization": "TRIM_CASEFOLD",
+  "aliases": {"Kode lama": "66666666-6666-4666-8666-666666666666"}
+}
+```
+
+Letakkan objek ini pada kolom mapping yang `target_type`-nya `uuid`. Editor langkah
+Kolom Workspace ETL menyediakan pemilihan master dan field master. Relasi wajib juga
+memerlukan `nullable=false`. Pemetaan disimpan bersama revisi konfigurasi dan masuk
+ke hash preview; perubahan master atau konfigurasi membatalkan preview lama. Binding
+tab-per-kolom yang sudah tersimpan tetap dibaca untuk kompatibilitas, tetapi kolom
+yang sama tidak boleh memakai kedua bentuk sekaligus.
 
 POST `/import-reviews/{review_id}/resolve-reference` kini mewajibkan `source_column`.
 Contoh penulisan staging:

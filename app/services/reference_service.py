@@ -1,5 +1,6 @@
-"""Approved, sheet-scoped master reference resolution and dependency evidence."""
+"""Master references in current configs or legacy sheet bindings, with dependency evidence."""
 from difflib import SequenceMatcher
+from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import select
@@ -28,12 +29,39 @@ async def reference_context(session, user, sheet_id, config=None):
         MasterColumnBinding.source_sheet_id == str(sheet_id)
     ).order_by(MasterColumnBinding.master_definition_id, MasterColumnBinding.source_column)
       .with_for_update().execution_options(populate_existing=True))).all()
+    bindings_by_column = {binding.source_column: binding for binding in bindings}
+    effective_bindings = list(bindings)
+    if config:
+        for column in config.columns:
+            mapping = column.master_reference
+            if mapping is None:
+                continue
+            if column.source_column in bindings_by_column:
+                raise AppError(
+                    "REFERENCE_BINDING_CONFLICT",
+                    "Kolom memakai relasi master pada konfigurasi dan binding tab lama; sisakan satu pemetaan.",
+                    409,
+                )
+            effective_bindings.append(SimpleNamespace(
+                id=None,
+                source_sheet_id=str(sheet_id),
+                source_column=column.source_column,
+                master_definition_id=str(mapping.master_definition_id),
+                master_version=None,
+                master_field=mapping.master_field,
+                required=mapping.required,
+                normalization=mapping.normalization,
+                aliases_json=mapping.aliases,
+                cardinality=mapping.cardinality,
+                revision_no=0,
+                status="APPROVED",
+            ))
     context = {}
-    for binding in bindings:
+    for binding in effective_bindings:
         if binding.status != "APPROVED":
             raise AppError("REFERENCE_BINDING_REQUIRED", "Binding referensi harus approved sebelum digunakan.", 409)
         master, definition, table = await MasterStorageService(session, user).target(binding.master_definition_id)
-        if master.approved_version != binding.master_version:
+        if binding.master_version is not None and master.approved_version != binding.master_version:
             raise AppError("REFERENCE_BINDING_STALE", "Versi master berubah; perbarui dan approve binding.", 409)
         if binding.normalization != "TRIM_CASEFOLD":
             raise AppError("REFERENCE_NORMALIZATION_UNSUPPORTED", "Normalisasi referensi belum didukung.", 409)

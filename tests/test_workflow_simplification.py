@@ -15,6 +15,7 @@ from app.schemas.auth import UserCreate
 from app.schemas.configuration import Decision, ReviewSubmission
 from app.services import auth_service, configuration_service, master_service, source_service
 from app.services.access_service import AccessService
+from app.services.release_approval_service import owner_workflow_compatible
 from app.services.semantic_catalog_service import inventory_update_state
 
 
@@ -147,6 +148,37 @@ def test_legacy_configuration_rollback_still_requires_reviewer():
     assert error.value.code == "CONFIGURATION_REVIEWER_REQUIRED"
     service.user.role = "TECHNICAL_APPROVER"
     configuration_service.ConfigurationService.require_legacy_reviewer(service)
+
+
+@pytest.mark.parametrize("reason", [None, "", "  ", "no"])
+def test_master_deactivation_requires_auditable_reason(reason):
+    with pytest.raises(AppError) as error:
+        master_service.validate_deactivation_reason(reason)
+    assert error.value.code == "MASTER_DEACTIVATION_REASON_REQUIRED"
+
+
+def test_master_deactivation_accepts_a_nonblank_reason():
+    master_service.validate_deactivation_reason("Sumber resmi diganti")
+
+
+@pytest.mark.parametrize(
+    "config,enabled,expected",
+    [
+        (SimpleNamespace(status="AI_DRAFT", review_state={}, approved_by=None, approved_at=None), True, False),
+        (SimpleNamespace(status="NEEDS_REVIEW", review_state={}, approved_by=None, approved_at=None), True, False),
+        (SimpleNamespace(status="ACTIVE", review_state={}, approved_by="reviewer", approved_at="2026-01-01"), True, True),
+        (SimpleNamespace(status="APPROVED", review_state={"owner_managed": True}, approved_by="owner", approved_at="2026-01-01"), True, True),
+        (SimpleNamespace(status="ACTIVE", review_state={}, approved_by="reviewer", approved_at="2026-01-01"), False, False),
+        (SimpleNamespace(status="ACTIVE", review_state={}, approved_by=None, approved_at=None), True, False),
+    ],
+)
+def test_release_gate_compatibility_requires_owner_workflow_or_prior_approval(monkeypatch, config, enabled, expected):
+    from app.services import release_approval_service
+
+    monkeypatch.setattr(release_approval_service, "get_settings", lambda: SimpleNamespace(
+        etl_owner_workflow_enabled=enabled,
+    ))
+    assert owner_workflow_compatible(config) is expected
 
 
 async def test_onboarding_creates_requests_for_366_days_without_granting_access(monkeypatch):
@@ -527,7 +559,7 @@ async def test_auto_load_reuses_active_approval_only_after_all_data_checks(monke
     assert service.apply.await_args.args[1].revision_no == review.revision_no
 
 
-@pytest.mark.parametrize("case", ["valid", "owner-managed", "full-refresh-owner", "master", "inactive", "self-approved", "revoked", "paused", "revision", "stale", "release"])
+@pytest.mark.parametrize("case", ["valid", "owner-managed", "legacy-approved", "full-refresh-owner", "master", "inactive", "self-approved", "revoked", "paused", "revision", "stale", "release"])
 async def test_auto_load_requires_current_active_configuration_and_valid_release(monkeypatch, case):
     from app.services import import_review_service
 
@@ -544,6 +576,8 @@ async def test_auto_load_requires_current_active_configuration_and_valid_release
     if case in ("owner-managed", "full-refresh-owner"):
         config.approved_by = config.created_by
         config.review_state["owner_managed"] = True
+    if case == "legacy-approved":
+        config.approved_at = "2026-01-01"
     if case == "revoked":
         source.access_status = "ACCESS_POLICY_REQUIRED"
     if case == "paused":
@@ -560,14 +594,18 @@ async def test_auto_load_requires_current_active_configuration_and_valid_release
     release = Mock(side_effect=AppError("RELEASE_APPROVAL_REQUIRED", "Pending", 409) if case == "release" else None)
     monkeypatch.setattr(import_review_service, "require_release_ready", release)
     monkeypatch.setattr(import_review_service, "get_settings", lambda: SimpleNamespace(
-        etl_owner_workflow_enabled=case in ("owner-managed", "full-refresh-owner"),
+        etl_owner_workflow_enabled=case in ("owner-managed", "legacy-approved", "full-refresh-owner"),
     ))
-    if case not in ("valid", "owner-managed", "full-refresh-owner"):
+    from app.services import release_approval_service
+    monkeypatch.setattr(release_approval_service, "get_settings", lambda: SimpleNamespace(
+        etl_owner_workflow_enabled=case in ("owner-managed", "legacy-approved", "full-refresh-owner"),
+    ))
+    if case not in ("valid", "owner-managed", "legacy-approved", "full-refresh-owner"):
         with pytest.raises(AppError):
             await service.active_load_configuration(review)
     else:
         assert await service.active_load_configuration(review) is config
-        if case in ("owner-managed", "full-refresh-owner"):
+        if case in ("owner-managed", "legacy-approved", "full-refresh-owner"):
             release.assert_not_called()
         else:
             release.assert_called_once_with(config, source)

@@ -25,6 +25,15 @@ from app.services.configuration_service import ConfigurationService
 from app.services.master_recommendation import field_match_reason, field_name_similarity, source_header_name
 
 
+def validate_deactivation_reason(comment):
+    if len((comment or "").strip()) < 3:
+        raise AppError(
+            "MASTER_DEACTIVATION_REASON_REQUIRED",
+            "Tuliskan alasan minimal 3 karakter sebelum menonaktifkan master.",
+            422,
+        )
+
+
 class MasterService:
     def __init__(self, session, user):
         self.session, self.user = session, user
@@ -301,6 +310,7 @@ class MasterService:
         elif action == "submit-review":
             pass
         elif action == "deactivate":
+            validate_deactivation_reason(data.comment)
             if not master.is_active:
                 raise AppError("MASTER_STATE_CONFLICT", "Master sudah nonaktif.", 409)
             master.is_active, master.status = False, "INACTIVE"

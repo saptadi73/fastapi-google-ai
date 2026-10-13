@@ -29,4 +29,6 @@ Binding kolom referensi:
 6. Simpan binding kolom dan periksa validasinya. Owner workflow tidak memerlukan approval rutin kedua; legacy mengikuti review yang ditampilkan. Lanjutkan konfigurasi/pemuatan NON_MASTER dengan target referensi yang sesuai.
 7. Nilai tidak ditemukan/ambigu dihentikan untuk review. Binding referensi tidak membuat record master baru secara otomatis. Master dengan key gabungan memerlukan satu field kode rujukan unik untuk resolver kolom.
 
+Konfigurasi ETL non-master juga menerima `master_reference` langsung pada mapping kolom. Di Workspace ETL, langkah Kolom menyediakan pilihan master, field master, kardinalitas, dan apakah relasi wajib. Isi target sebagai UUID; bila relasi wajib target harus non-nullable. Resolver memakai record master aktif dan snapshot dependency yang sama dengan binding tab lama. Nilai tidak ditemukan/ambigu perlu ditangani pada batch dan tidak dipilih otomatis. Binding tab lama tetap didukung selama kolom tersebut tidak sekaligus memakai pemetaan konfigurasi.
+
 Panduan utuh: /guide#binding-master atau docs/PANDUAN_BINDING_MASTER.md.
