@@ -1,6 +1,13 @@
 [
   {
     "group": "sumber",
+    "code": "SOURCE_CHANGE_CHECK_DENIED",
+    "kind": "error",
+    "cause": "Pemeriksaan perubahan file Google Drive ditolak, biasanya karena API belum aktif atau service account tidak memiliki akses metadata.",
+    "action": "Periksa apakah Google Drive API aktif pada project service account. Jika sudah, pastikan service account dapat membaca metadata Drive. Jalankan Temukan tab dan Profiling ulang secara manual sementara itu."
+  },
+  {
+    "group": "sumber",
     "code": "SOURCE_READ_FAILED",
     "kind": "error",
     "cause": "Google menolak range; tab bisa hilang/berganti nama, atau permintaan tidak valid.",
@@ -12,6 +19,13 @@
     "kind": "error",
     "cause": "Service Account tidak mendapat akses atau Google menolak otorisasi.",
     "action": "Pemilik Sheet memberi Service Account akses Viewer; admin memeriksa kredensial. Coba ulang setelah akses benar."
+  },
+  {
+    "group": "sumber",
+    "code": "DRIVE_API_NOT_ENABLED",
+    "kind": "error",
+    "cause": "Google Drive API belum diaktifkan pada Google Cloud project yang dipakai service account.",
+    "action": "Minta admin project mengaktifkan Google Drive API pada project service account, lalu tunggu propagasi dan ulangi pemeriksaan. Discovery/profiling manual tetap bisa dipakai. Jangan mengganti sharing Sheet bila akses Sheets sudah benar."
   },
   {
     "group": "sumber",
@@ -67,14 +81,14 @@
     "code": "REVIEW_STALE",
     "kind": "error",
     "cause": "Isi atau header Sheet saat deploy berbeda dari snapshot review; formula juga dapat berubah.",
-    "action": "Profiling ulang, buat draft terbaru, perbaiki mapping header, Dry-run, review/approval ulang lalu Deploy. Retry versi approved lama tidak memperbarui bukti."
+    "action": "Temukan tab dan profiling ulang, perbarui mapping pada draft, lalu validasi ulang. Owner-managed dapat deploy setelah validasi; workflow legacy mengikuti review yang tampil. Versi lama dengan snapshot berbeda tidak dapat dipakai."
   },
   {
     "group": "review",
     "code": "CONFIGURATION_CONFLICT",
     "kind": "error",
     "cause": "Kolom/fingerprint sumber tidak sesuai mapping yang direview.",
-    "action": "Temukan tab jika nama tab berubah, lalu Profiling ulang. Clone bila header lama masih ada; jika hilang, buat draft dari profil terbaru dan ajukan ulang."
+    "action": "Temukan tab jika nama tab berubah, lalu profiling ulang dan perbarui draft dari schema terbaru. Validasi ulang sebelum deploy; legacy mengikuti gate review yang tampil."
   },
   {
     "group": "review",
@@ -116,7 +130,7 @@
     "code": "SCHEMA_REVIEW_REQUIRED",
     "kind": "error",
     "cause": "Versi konfigurasi belum memiliki bukti review schema yang diwajibkan.",
-    "action": "Buat/clone draft, lihat Preview perubahan schema di langkah 7, konfirmasi, lalu submit dan approval ulang."
+    "action": "Buat/perbarui draft, lihat Preview perubahan schema di langkah 7, konfirmasi, lalu validasi ulang. Owner-managed tidak memerlukan approval konfigurasi rutin; legacy mengikuti gate yang tampil."
   },
   {
     "group": "review",
@@ -193,42 +207,42 @@
     "code": "IMPORT_INPUT_PENDING",
     "kind": "error",
     "cause": "Pertanyaan, keputusan, atau blocker batch belum selesai.",
-    "action": "Buka batch dan selesaikan semua temuan wajib. Keputusan pengguna tidak dihapus oleh sync ulang; master/batch biasa tetap perlu preview, approval, Apply."
+    "action": "Buka batch dan selesaikan semua temuan wajib. Keputusan pengguna tidak dihapus oleh sync ulang. Owner workflow: Preview lalu Apply setelah validasi; legacy dapat meminta approval sebelum Apply."
   },
   {
     "group": "import",
     "code": "IMPORT_STALE_REVIEW",
     "kind": "error",
     "cause": "Snapshot, konfigurasi, atau dependency batch berubah.",
-    "action": "Perbarui profil/dependency dan buat batch sesuai sumber terbaru; jangan menerapkan preview/approval lama."
+    "action": "Perbarui profil/dependency dan buat batch dari sumber terbaru; jangan menerapkan preview lama. Owner workflow melanjutkan dengan Preview dan Apply setelah validasi; legacy mengikuti gate yang tampil."
   },
   {
     "group": "import",
     "code": "IMPORT_PREVIEW_STALE",
     "kind": "error",
     "cause": "Revisi atau rencana pemuatan berubah setelah preview/approval.",
-    "action": "Buat preview ulang pada revisi terbaru; revalidate dan approval ulang bila diperlukan, lalu Apply dengan token terbaru."
+    "action": "Buat preview ulang pada revisi terbaru dan Apply dengan token terbaru. Workflow legacy dapat meminta approval jika status batch menampilkannya."
   },
   {
     "group": "import",
     "code": "IMPORT_ACTIVE_APPROVAL_REQUIRED",
     "kind": "error",
     "cause": "Sync langsung tidak memenuhi syarat konfigurasi ACTIVE, approval terpisah, akses/rilis, atau strategi load.",
-    "action": "Pastikan deploy selesai dan akses/rilis siap. FULL_REFRESH/master memakai alur review batch yang sesuai; jangan bypass approval."
+    "action": "Pastikan konfigurasi tervalidasi/aktif dan akses siap. Owner workflow dapat menjalankan FULL_REFRESH setelah preview valid dan konfirmasi. Master memakai batch import dengan preview dan Apply; legacy mengikuti gate approval yang tampil."
   },
   {
     "group": "import",
     "code": "MASTER_BINDING_REQUIRED",
     "kind": "error",
     "cause": "Sumber master belum memiliki binding yang diwajibkan.",
-    "action": "Buka Registry master, lengkapi/review source binding pada versi/profil terbaru, lalu buat batch master."
+    "action": "Buka Registry master, lengkapi binding pada definisi/profil terbaru dan jalankan validasi. Pada owner workflow, lanjutkan ke batch master tanpa approval binding rutin; legacy mengikuti status yang tampil."
   },
   {
     "group": "import",
     "code": "MASTER_STORAGE_REQUIRED",
     "kind": "error",
     "cause": "Storage master belum tersedia atau siap.",
-    "action": "Reviewer deploy storage definisi approved melalui Registry master; periksa binding lalu ulang batch master."
+    "action": "Pemilik data deploy storage setelah meninjau rencana schema dan konfirmasi. Legacy mengikuti alur review yang tampil; periksa binding lalu ulang batch master."
   },
   {
     "group": "akses",

@@ -131,14 +131,14 @@ def test_all_knowledge_articles_fit_provider_context():
     ("question", "route", "required"),
     [
         (
-            "approval metadata sumber gabungan policy",
+            "approval awal registrasi sumber owner managed konfigurasi",
             "/configurations/config-id/review",
-            ["metadata PENDING", "approval gabungan", "tanpa approval sebagian"],
+            ["Approver memeriksa spreadsheet", "tanpa approval rutin kedua", "validasi"],
         ),
         (
-            "sync manual langsung NON_MASTER tanpa approval batch",
+            "sync manual owner workflow FULL_REFRESH master batch preview apply",
             "/workspace",
-            ["tanpa approval batch", "FULL_REFRESH", "POLICY_APPROVED"],
+            ["FULL_REFRESH", "MASTER", "Apply", "approval rutin kedua"],
         ),
         (
             "Menunggu tindakan error baris kolom audit trail modal",
@@ -160,11 +160,11 @@ def test_catalog_access_guidance_explains_separate_source_gate():
         "katalog kosong sumber ACTIVE policy assignment", "SOURCE_OWNER", "/workspace"
     )
     content = "\n".join(item.body[:6000] for item in articles)
-    assert "POLICY_APPROVED" in content
-    assert "DISCOVER/READ/QUERY" in content
-    assert "admin berbeda" in content
-    assert "AND" in content
-    assert "Policy DATA_PRODUCT saja tidak menggantikan policy SOURCE" in content
+    assert "READ/QUERY" in content
+    assert "domain bisnis dan business unit" in content
+    assert "yurisdiksi tidak diwajibkan" in content
+    assert "EXPLICIT_DENY" in content
+    assert "policy khusus" in content
 
 
 @pytest.mark.parametrize(

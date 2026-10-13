@@ -6,44 +6,32 @@ API production: https://api-google.kanjabung.web.id
 Panduan ini untuk admin yang memberikan akses baca kepada pengguna. Tidak ada password,
 token, atau API key yang perlu ditulis dalam dokumentasi atau policy.
 
-## Jalur sederhana yang disarankan
+## Jalur akses yang berlaku
 
 - Akun baru: isi rekomendasi unit/domain/yurisdiksi dan paket izin pada Registrasi.
   Permintaan berlaku 366 hari sejak pengajuan. Admin lain memilih seluruh rekomendasi
   akun tersebut pada Permintaan akses dan menyetujuinya sekaligus. Tidak perlu membuat
   policy lagi bila policy organisasi APPROVED yang sesuai sudah tersedia.
-- Sumber baru/revisi konfigurasi: approver konfigurasi membaca metadata sumber dan
-  memilih policy APPROVED pada dialog approval. Satu transaksi menyetujui konfigurasi,
-  metadata dan mengaktifkan akses. Jika satu syarat gagal, seluruh approval dibatalkan.
-  Klik **Helper lengkap: mengapa approval belum bisa disetujui** untuk rincian dan
-  shortcut ke Workspace. Editor metadata/pembuat konfigurasi tidak boleh memutuskan.
-- Sesudah deploy, **Sync manual** membaca data dan menampilkan hasil per tab.
-  NON_MASTER dengan konfigurasi ACTIVE yang disetujui reviewer berbeda, akses aktif,
-  dan rilis siap langsung dimuat jika validasi teknis/AI/preview konflik lolos;
-  tidak meminta approval batch tambahan. Master, FULL_REFRESH, dan batch biasa tidak
-  memakai jalur langsung. Struktur ACTIVE belum berarti ada data.
+- Approver memeriksa spreadsheet dan seluruh tab saat registrasi awal, lalu memastikan klasifikasi MASTER/NON_MASTER dan mencegah sumber ganda/tidak layak. Sesudah registrasi disetujui, konfigurasi dan deployment dikelola data owner/steward tanpa approval rutin kedua.
+- Akses default READ/QUERY diberikan dalam cakupan domain bisnis dan business unit yang sama. Kecocokan yurisdiksi tidak diwajibkan untuk fallback default. Pemilik data dapat meminta policy lebih khusus menurut yurisdiksi, department, purpose, atau clearance. Tenant, explicit DENY, sensitivitas, dan validasi backend tetap berlaku; tidak ada akses default EXPORT.
+- Sesudah validasi konfigurasi dan deploy, **Sync manual** membaca data dan menampilkan hasil per tab. Owner workflow dapat menjalankan pemuatan langsung, termasuk FULL_REFRESH setelah konfirmasi. Master memakai batch import, Preview, dan Apply oleh pemilik. Konflik, kualitas, akses atau drift tetap dapat menghentikan proses. Struktur ACTIVE belum berarti ada data.
 - Katalog menyediakan **Buka Google Sheet**, **Buka sumber di Workspace** bagi role
   operasional, status pembaruan, dan timestamp aktif/pemuatan terakhir.
 - **Menunggu tindakan** berarti proses berhenti, bukan worker berjalan. Tekan **Lihat detail**
   berikon mata untuk keterangan, kode, baris asli Sheet dan kolom temuan; audit trail
   menyediakan riwayat dan alasan keputusan. Detail tidak memberi approval atau izin akses.
 
-Langkah review metadata/aktivasi admin terpisah di bawah tetap didukung untuk sumber
-yang sudah aktif tanpa revisi konfigurasi. Ini bukan lagi langkah tambahan wajib sesudah
-approval gabungan berhasil. Lihat [panduan pengguna](USER_GUIDE_END_TO_END.md) untuk
-alur baru serta helper `/guide#approval-gabungan` dan `/guide#sync-manual` pada frontend.
+Policy akses khusus dan assignment akun tetap dikelola admin pada menu Administrasi/Access policy. Item legacy yang masih memiliki gate review harus mengikuti statusnya. Lihat [panduan pengguna](USER_GUIDE_END_TO_END.md) dan helper `/guide` pada frontend.
 
 ## Mengapa sumber ACTIVE belum muncul?
 
 **ACTIVE adalah status ETL, bukan status akses.** Katalog memerlukan semua syarat berikut:
 
 1. Tab mempunyai Data Product ACTIVE. Tabel storage master tidak otomatis menjadi Data Product.
-2. Role pengguna tercantum dalam `allowed_roles` produk.
-3. Sumber dengan metadata akses mempunyai review metadata APPROVED dan akses POLICY_APPROVED.
-4. Policy ALLOW yang berlaku terikat pada sumber dan memuat aksi DISCOVER untuk katalog,
-   serta QUERY untuk analitik.
-5. Pengguna memiliki assignment aktif untuk **setiap** atribut wajib policy.
-6. Tidak ada policy DENY yang cocok. Kontrol baris/kolom pada policy SOURCE tidak dapat
+2. Role pengguna mendapat aksi READ/QUERY yang diperlukan.
+3. Untuk default access, domain bisnis dan business unit pengguna cocok dengan pemilik sumber; fallback default tidak mensyaratkan yurisdiksi.
+4. Jika policy khusus berlaku, ALLOW dan atribut wajibnya harus cocok dengan pengguna.
+5. Tidak ada policy DENY yang cocok. Kontrol baris/kolom pada policy SOURCE tidak dapat
    dipakai untuk membuka sumber pada runtime saat ini.
 
 Permission bundle bukan pengganti assignment atau policy. Role SOURCE_OWNER dan

@@ -11,12 +11,12 @@ interaktif yang sama tersedia pada menu **Panduan penggunaan** (`/guide`) di fro
 | `PLATFORM_ADMIN` | Membuat akun, atribut organisasi, permission, dan access policy |
 | `SOURCE_OWNER` | Mendaftarkan sumber dan memastikan konteks bisnisnya benar |
 | `DATA_STEWARD` | Mengelola klasifikasi, master, taxonomy, konfigurasi, dan kualitas |
-| `TECHNICAL_APPROVER` | Mereview definisi, binding, konfigurasi, dan batch |
+| `TECHNICAL_APPROVER` | Memeriksa pendaftaran sumber/tab dan klasifikasinya |
 | `ANALYST` / `VIEWER` | Mencari dan memvisualisasikan data yang sudah diizinkan |
 
-Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memakai separate approval.
+Approver memeriksa sumber sekali pada saat registrasi. Sesudah itu pemilik data/steward mengelola konfigurasi, validasi, deploy dan sync. Gate legacy dapat tetap berlaku untuk item lama.
 
-## Alur sederhana akun, approval gabungan, dan sync
+## Alur akun, pemeriksaan sumber, dan sync
 
 1. **Registrasi akun sekaligus rekomendasi akses.** Admin memilih unit, domain, yurisdiksi
    dan paket izin yang diperlukan, serta alasan bisnis di form Registrasi. Akun dan
@@ -24,20 +24,12 @@ Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memaka
    sejak pengajuan. Admin lain dapat memilih seluruh rekomendasi akun tersebut dan
    menyetujuinya sekaligus di Permintaan akses; pending belum memberi assignment/izin.
    Policy APPROVED yang cocok digunakan kembali, bukan dibuat ulang untuk setiap akun.
-2. **Satu approval konfigurasi dan akses.** Approver konfigurasi sumber membaca ringkasan
-   metadata dan memilih policy SOURCE APPROVED yang cocok. Keputusan sekaligus menyetujui
-   metadata PENDING dan mengaktifkan akses. Maker-checker selalu berlaku untuk keputusan
-   gabungan, termasuk bila separate approval konfigurasi lama dinonaktifkan.
-   Metadata incomplete/rejected, editor tidak aktif/assignment sudah berakhir, revisi berubah,
-   policy tidak cocok/kedaluwarsa, atau gate yang diwajibkan belum lengkap menghentikan
-   transaksi: tidak ada approval sebagian. Dialog menampilkan penyebab dan helper lengkap
-   `/guide#approval-gabungan`, serta shortcut ke sumber di Workspace. Reviewer tidak perlu
-   punya assignment scope sumber sendiri; assignment editor dan pembaca tetap divalidasi.
+2. **Satu pemeriksaan registrasi sumber.** Approver berbeda dari pendaftar memeriksa spreadsheet, seluruh tab yang ditemukan, klasifikasi MASTER/NON_MASTER, dan kelayakan sumber. Setelah disetujui, owner/steward melanjutkan konfigurasi dan pemuatan. Akses pembaca dikelola terpisah melalui role, assignment domain/unit, dan policy khusus bila diperlukan.
 3. **Sync manual per sumber.** Setelah deploy, pilih Sync manual di Sumber & tracking
    atau Workspace. Konfirmasi pembacaan Sheet/kuota AI, lalu pantau job dan hasil setiap tab,
    baris valid/dimuat, cakupan AI, temuan, dan link batch. Untuk NON_MASTER dengan konfigurasi
    ACTIVE yang sudah disetujui, sync langsung memuat jika seluruh pemeriksaan lolos.
-   Master/konflik/drift/keamanan berhenti tanpa pemuatan. Sync tidak mengubah Sheet.
+   FULL_REFRESH dapat dijalankan oleh owner workflow setelah validasi dan pemeriksaan lolos. Master memakai batch import, preview dan Apply oleh pemilik. Konflik/drift/keamanan tetap dapat menghentikan pemuatan. Sync tidak mengubah Sheet.
    Batas pemantauan 10 menit
    bukan pembatalan job; Muat ulang hasil atau monitor job melanjutkan pemantauan tanpa
    enqueue baru. Sumber yang masih mempunyai job QUEUED/RUNNING menolak sync duplikat.
@@ -55,24 +47,20 @@ Pemisahan editor dan approver diperlukan pada workflow yang dikonfigurasi memaka
    perubahan diketahui setelah profiling/sync. Tidak ada pemuatan sukses berarti
    **Belum dimuat**, walaupun struktur konfigurasi ACTIVE.
 
-Policy baru tetap dibuat dan disetujui admin berbeda. Gate IT/unit tetap berlaku;
-approval batch tetap diperlukan untuk master, jadwal otomatis, dan batch review biasa,
-bukan sync manual NON_MASTER yang lolos seluruh pemeriksaan. Jalur review metadata dan aktivasi admin terpisah tetap tersedia untuk
-sumber yang sudah aktif tanpa revisi konfigurasi. Perubahan metadata membatalkan akses;
-katalog tidak mempertahankan akses yang sudah dicabut hanya demi menampilkan status.
+Policy akses khusus masih memakai alur policy dan pemeriksaan yang tersedia. Persetujuan tayang serta approval konfigurasi/batch hanya diperlukan bila item legacy memang menampilkannya. Akses pembaca tetap diperiksa terpisah dari approval sumber/ETL.
 
 ## Prosedur awal sampai akhir
 
 | Tahap | Tindakan | Hasil minimum sebelum lanjut |
 |---|---|---|
-| 1. Administrasi | Buat pengguna, role, atribut departemen/domain/yurisdiksi/purpose, assignment multi-unit eksplisit, permission, policy, approver per sumber, dan aturan persetujuan sebelum tayang | Pengguna dapat login, cakupan unit dipilih, dan pemeriksa IT/unit terkait ditunjuk |
+| 1. Administrasi | Buat pengguna, role, atribut organisasi, permission, dan akses khusus bila diperlukan; tetapkan approver untuk pendaftaran sumber | Pengguna dapat login dan cakupan akses sesuai kebutuhan bisnis |
 | 2. Pendaftaran sumber | Bagikan Sheet ke service account sebagai Viewer, lalu daftarkan URL/ID serta metadata kepemilikan | Discovery dan profiling sukses; tab serta header terbaca |
 | 3. Klasifikasi tab | Konfirmasi `MASTER` atau `NON_MASTER` untuk setiap tab | Semua tab yang akan diproses berstatus confirmed |
-| 4. Master | Definisikan field, business key, label, policy, storage, dan binding | Definisi/storage/binding approved dan record rujukan siap |
-| 5. Taxonomy | Buat term, alias, hierarki, versi, serta binding kolom | Taxonomy dan binding approved |
-| 6. Konfigurasi ETL | Map kolom, transformasi, DQ, strategi load, business key, semantic product, dimensi, dan metrik | Konfigurasi valid tanpa blocker |
-| 7. Review/deploy | Approver menyetujui konfigurasi sekaligus metadata dan policy sumber; selesaikan gate IT/unit yang diwajibkan, lalu deploy | Konfigurasi `ACTIVE`, metadata `APPROVED`, akses `POLICY_APPROVED` |
-| 8. Pemuatan data | Untuk NON_MASTER aktif, jalankan Sync manual; data valid langsung dimuat. Master/jadwal/batch biasa tetap stage, jawab pertanyaan, preview, approve, apply | Batch per tab `SUCCEEDED` dan baris dimuat terisi |
+| 4. Master | Definisikan field, business key, label, policy, storage, dan binding | Definisi, storage, dan binding tervalidasi; record rujukan dimuat |
+| 5. Taxonomy | Buat term, alias, hierarki, versi, serta binding kolom | Taxonomy dan binding tersedia sesuai validasi sistem |
+| 6. Konfigurasi ETL | Map kolom, transformasi, DQ, strategi load, business key, semantic product, dimensi, dan metrik | Konfigurasi tervalidasi tanpa blocker |
+| 7. Review/deploy | Pemilik data memvalidasi dan deploy; ikuti gate legacy yang masih tampil | Konfigurasi `ACTIVE`; akses pembaca tetap memenuhi policy |
+| 8. Pemuatan data | Untuk NON_MASTER aktif jalankan Sync manual; untuk MASTER buat batch, selesaikan temuan, Preview, lalu Apply sebagai pemilik. Jadwal dan item legacy mengikuti status yang tampil | Batch per tab `SUCCEEDED` dan baris dimuat terisi |
 | 9. Operasional | Pantau job, schedule/dependency/watermark, karantina, resolusi, dan reprocess | Job terbaru sukses dan tidak ada blocker kualitas |
 | 10. Analitik | Tanyakan data dengan bahasa alami atau gunakan query builder; pilih tabel/chart | Hasil tampil dan dapat ditelusuri ke produk serta sumber approved |
 
@@ -158,11 +146,7 @@ pesan error dan nilai tidak tersedia, bukan angka 0 yang seolah-olah sudah diver
 
 Untuk pemuatan awal NON_MASTER, pilih **Sync manual** di Sumber & tracking atau
 **Sync manual data** di tabel hasil ETL Workspace, lalu **Jalankan sync sekarang**.
-Konfigurasi harus ACTIVE dengan approval reviewer berbeda, akses sumber POLICY_APPROVED,
-dan gate rilis lengkap. Validasi teknis, AI dan preview konflik berjalan sebelum pemuatan
-otomatis; data yang lolos tidak meminta approval batch tambahan. FULL_REFRESH dan master
-tidak memakai jalur langsung. Master, jadwal, endpoint sync-review lama dan batch biasa
-tetap memerlukan review pertanyaan, preview, approval serta Apply.
+Konfigurasi owner-managed harus ACTIVE dan akses sumber harus siap. Validasi teknis, AI dan preview konflik berjalan sebelum pemuatan. Pemilik dapat menjalankan FULL_REFRESH setelah konfirmasi. Master memiliki jalur batch tersendiri: selesaikan temuan, Preview, lalu Apply. Jadwal atau item legacy mengikuti gate yang masih ditampilkan.
 
 Job induk SYNC_REVIEW SUCCEEDED tidak membuktikan setiap tab sudah dimuat.
 Periksa status batch per tab, **Baris dimuat**, dan waktu pemuatan. Tab dengan blocker
@@ -191,7 +175,7 @@ Approval konfigurasi/IT tidak menggantikan aktivasi akses POLICY_APPROVED.
 2. Pastikan tab sudah diklasifikasikan dan konfigurasi berstatus approved, deployed, serta active.
    Jika gate siap tayang aktif, periksa apakah IT dan semua unit terkait sudah menyetujui revisi yang sama.
 3. Periksa batch per tab dan Baris dimuat, bukan hanya job induk. Pada sync manual langsung,
-   approval konfigurasi aktif menjadi dasar; pada master/batch biasa, preview tetap harus approved sebelum Apply.
+   konfigurasi owner-managed yang aktif menjadi dasar. Batch master memakai Preview dan Apply oleh pemilik setelah validasi; legacy mengikuti gate yang tampil.
 4. Periksa master/taxonomy binding dan dependency freshness.
 5. Periksa masalah karantina dan aturan kualitas yang menahan batch.
 6. Periksa metadata sumber, policy `SOURCE`, assignment pengguna, row scope, serta kolom sensitif.
@@ -255,7 +239,7 @@ memperbaiki klasifikasi/mapping yang sesuai.
 
 ### Review perubahan schema NON_MASTER
 
-Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Reviewer menyetujui schema dan mapping pada revisi serta fingerprint schema/data yang sama. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
+Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Pemilik meninjau schema dan mapping pada revisi serta fingerprint schema/data yang sama; workflow legacy mengikuti reviewer yang ditampilkan. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
 
 Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal = Serial Google Sheets** (`date_input_format: "GOOGLE_SHEETS_SERIAL"`) bersama `parse_date_id`. Tipe bigint atau angka dalam rentang valid saja tidak membuktikan bahwa nilainya tanggal. Konfirmasi makna sumber melalui mapping; backend memeriksa seluruh nilai non-null dan menampilkan `validation.checked`, `convertible`, `invalid`, serta contoh. Nilai di luar rentang 1..2958465 menghentikan migrasi. Mode serial eksplisit menolak text, pecahan dan nilai non-finite; mode `TEXT` memakai pola strptime dan menolak angka. Default null mempertahankan parser konfigurasi lama, tetapi tidak mengizinkan migrasi berisiko tanpa deklarasi format. Workbook menyimpan pilihan ini di `02 Struktur Kolom`, kolom AD.
 
@@ -302,9 +286,9 @@ Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) serta [lima templ
 
 ## Panduan khusus binding master
 
-Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, approval definisi, deploy storage, mapping tab MASTER, Simpan binding & dry-run, approval binding, batch import, Preview, approval dan Apply. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
+Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, validasi definisi, deploy storage, mapping tab MASTER, validasi binding, batch import, Preview dan Apply owner-managed. Workflow legacy dapat tetap meminta reviewer. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
 
 
 ## Koreksi sebelum storage pertama
 
-Definisi approved dapat dikoreksi sebelum storage pertama dibuat melalui revisi dan approval reviewer berbeda. Backend memeriksa bahwa tabel/relation belum ada dan audit tidak mencatat deployment storage sebelumnya. Key, tipe atau field wajib baru pada fase ini tidak memigrasikan data. Approval menyimpan versi lama dan menandai initial_schema_correction; binding versi lama perlu review ulang. Jika storage sudah ada atau pernah dideploy, perubahan tidak kompatibel tetap memerlukan migrasi yang direview, termasuk pada tabel kosong atau tabel yang pernah dihapus. Jangan hapus/buat ulang storage untuk melewati pemeriksaan.
+Definisi master dapat dikoreksi sebelum storage pertama dibuat melalui revisi dan validasi owner workflow; workflow legacy dapat tetap meminta reviewer. Backend memeriksa bahwa tabel/relation belum ada dan audit tidak mencatat deployment storage sebelumnya. Key, tipe atau field wajib baru pada fase ini tidak memigrasikan data. Validasi menyimpan versi lama dan menandai initial_schema_correction; binding versi lama perlu review ulang. Jika storage sudah ada atau pernah dideploy, perubahan tidak kompatibel tetap memerlukan migrasi yang direview, termasuk pada tabel kosong atau tabel yang pernah dihapus. Jangan hapus/buat ulang storage untuk melewati pemeriksaan.

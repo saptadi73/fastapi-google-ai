@@ -94,7 +94,7 @@ Halaman: **Storage & record master → Sumber master terikat**. Pelaksana: Sourc
 
 Hasil sebelum lanjut: **Batch master tersedia untuk pemeriksaan dan keputusan.**.
 
-### 8. Review batch, approve dan Apply
+### 8. Validasi batch dan Apply
 
 Halaman: **Batch import → batch master yang baru dibuat**. Pelaksana: Source Owner / Data Steward pada owner workflow; reviewer pada workflow legacy.
 

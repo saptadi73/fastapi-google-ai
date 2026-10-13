@@ -2,7 +2,7 @@
 
 Tanggal: 12 Oktober 2026.
 
-Status: hasil pemeriksaan kode dan rancangan perombakan; belum merupakan perilaku runtime yang sudah diterapkan. Dokumen ini tidak menggantikan panduan operasional saat ini sampai implementasi, pengujian dan rollout selesai.
+Status: snapshot audit sebelum implementasi bertahap; uraian pada tabel di bawah tidak seluruhnya mencerminkan runtime terbaru. Backend `d76f897` dan frontend `6986666` sudah diterapkan di production pada 13 Oktober 2026. Keputusan akses terbaru adalah default untuk business domain **dan** unit yang sama; yurisdiksi/department menjadi pembatas tambahan yang masih perlu ditinjau. Gunakan [TODO dan status rollout terbaru](WORKFLOW_SIMPLIFICATION_TODO.md) untuk mengetahui perilaku yang sudah aktif dan pekerjaan yang masih terbuka. Dokumen ini dipertahankan sebagai baseline temuan, bukan panduan operasional saat ini.
 
 ## Tujuan dan keputusan pengguna
 

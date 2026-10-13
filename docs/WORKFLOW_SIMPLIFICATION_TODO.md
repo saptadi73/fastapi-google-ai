@@ -1,22 +1,22 @@
 # Penyederhanaan workflow ETL — TODO dan review risiko
 
-Status dokumen: sebagian perubahan terpasang di production pada 13 Oktober 2026 (backend `12c39b0`, frontend `b6dc662`); TODO yang belum dicentang tetap belum dianggap selesai. Audit ulang terakhir: 13 Oktober 2026.
+Status dokumen: sebagian perubahan terpasang di production pada 13 Oktober 2026 (backend `d76f897`, frontend `6986666`); TODO yang belum dicentang tetap belum dianggap selesai. Audit ulang terakhir: 13 Oktober 2026.
 
 ## Temuan dari implementasi saat ini
 
 Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada [review menyeluruh](REVIEW_PENYEDERHANAAN_WORKFLOW_AKSES.md). Dokumen ini menjadi checklist eksekusi; bila ada perbedaan, keputusan pengguna pada permintaan perubahan menjadi acuan. Khusus akses default, acuan pengguna adalah **business domain dan unit pemilik yang sama**, bukan unit saja.
 
-- Registrasi sumber, metadata akses, dan aktivasi akses memiliki review/policy terpisah.
-- Konfigurasi harus divalidasi, diajukan, disetujui reviewer, lalu dapat tertahan lagi oleh approval rilis IT dan unit.
-- Batch import masih memerlukan pertanyaan selesai, revalidate, preview, approval, dan apply.
-- Master memakai lifecycle definisi/storage, binding sumber, binding kolom, serta batch import sendiri. `MASTER_RUNTIME_PENDING` masih menjadi blocker pada jalur ETL umum.
+- Registrasi sumber tetap memerlukan satu keputusan reviewer. Metadata dan aktivasi sumber lama masih memiliki endpoint/policy kompatibilitas; sumber yang telah ditinjau dapat mengubah metadata akses melalui owner workflow tanpa review kedua.
+- Konfigurasi owner-managed divalidasi dan dapat di-deploy pemilik tanpa approval rutin; konfigurasi legacy masih dapat tertahan oleh reviewer/release approval IT dan unit.
+- Batch import owner-managed memakai pertanyaan, revalidate, preview, konfirmasi konflik yang diwajibkan, dan Apply tanpa approval rutin untuk batch bersih. Workflow legacy tetap memakai approval lama.
+- Master memiliki jalur Batch Import tersendiri; `MASTER_RUNTIME_PENDING` tetap memblokir tab MASTER pada jalur konfigurasi/sync ETL biasa, bukan seluruh pemuatan master.
 - Policy evaluator bersifat default-deny; policy sumber dan data product serta assignment memengaruhi katalog dan query.
 - Role `PLATFORM_ADMIN` sudah mempunyai aksi `ADMIN`, tetapi sejumlah alur administrasi dan resource tetap memiliki pemeriksaan policy tersendiri.
-- Workflow owner-managed sebelumnya default OFF. Default aplikasi kini ON, tetapi nilai `.env` production tetap perlu diverifikasi.
+- Workflow owner-managed dan fallback akses domain+unit aktif di production; default kode keduanya ON dan konfigurasi production sudah diverifikasi.
 - Submit konfigurasi owner-managed sebelumnya mewajibkan checklist kolom/bagian. Checklist kini opsional di owner-managed dan tetap ada untuk workflow reviewer legacy.
 - Sync aktif sebelumnya menolak `FULL_REFRESH`. Owner-managed kini boleh langsung sync penuh setelah pemeriksaan status, freshness, akses, preview konflik, dan validasi baris.
 - Monitor perubahan Drive lokal mendeteksi perubahan melalui polling dan mengantre discovery/profiling. Production bergantung pada migration, Drive API/permission, worker dan Beat; pelaku edit eksternal tidak dapat dipastikan hanya dari `modifiedTime`.
-- Pada production, workflow owner-managed, fallback domain+unit, dan monitor aktif; `REQUIRE_SEPARATE_APPROVER=false` sudah disetel dan service API/worker/Beat aktif. Probe metadata Drive read-only pada 13 Oktober 2026 mengidentifikasi `403 accessNotConfigured`: Google Drive API belum diaktifkan pada project Cloud Service Account. Kode lokal kini membedakan kondisi tersebut dari izin file, tetapi belum dideploy; aktivasi API masih memerlukan admin project Google Cloud.
+- Pada production, workflow owner-managed, fallback domain+unit, dan monitor aktif; `REQUIRE_SEPARATE_APPROVER=false` sudah disetel dan service API/worker/Beat aktif. Backend `d76f897` membedakan `403 accessNotConfigured` dari izin file. Poll berikutnya memperbarui notifikasi terbuka; pemeriksaan read-only menemukan 61 notifikasi dengan kode `DRIVE_API_NOT_ENABLED`. Admin project Google Cloud masih perlu mengaktifkan Google Drive API; sampai itu selesai, perubahan Sheet tidak dapat dipantau otomatis.
 
 ## Target workflow
 
@@ -52,7 +52,7 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 - [x] Perluas konteks review sumber agar approver dapat melihat semua tab yang ditemukan (termasuk tab hilang/nonaktif), klasifikasi, status profiling, jumlah baris, serta nama/tipe/indikasi PII kolom tanpa nilai contoh.
 - [x] Kirim fingerprint bukti tab pada keputusan review dan tolak keputusan bila tab/profil berubah setelah approver membuka konteks. Perubahan inventory, klasifikasi, pengaturan tab, atau schema profil setelah approval mengembalikan sumber ke status perlu review.
-- [ ] Pertahankan pemeriksaan kepemilikan sumber, akses Google Sheet, dan audit.
+- [x] Pertahankan pemeriksaan kepemilikan sumber, metadata assignment, akses Google Sheet, dan audit pada registrasi/review; tes integrasi mencakup validasi assignment serta kegagalan akses discovery (`tests/test_integration.py`).
 - [ ] Sediakan migrasi kompatibilitas untuk sumber lama yang telah melewati sebagian workflow.
 
 ### P3 — konfigurasi dan deployment
@@ -84,10 +84,20 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 - [~] Tampilkan 7 langkah sebagai progres berurutan: checklist ditinjau/kedaluwarsa, status validasi/deploy, job gagal, dan tindakan berikutnya; helper per tahap tetap tersedia. Status tiap tahap hanya mencerminkan bukti UI yang ada dan tidak menggantikan validasi backend. Helper tracking menjelaskan approval IT awal; batch import dan Persetujuan tayang telah diperjelas untuk owner-managed versus legacy. Helper tujuh langkah kini ringkas dan menjelaskan jalur owner-managed/legacy secara terpisah; masih perlu menuntaskan keselarasan navigasi/panduan admin dan review semua teks workflow lama.
 - [ ] Hilangkan tombol/menu approval yang tidak lagi menjadi bagian alur setelah backend dan migration siap.
 - [~] Perbarui helper/knowledge base untuk AI review, sumber legacy, rollback owner workflow, error owner/legacy, serta alur master owner-managed versus legacy. Generator backend dan salinan helper frontend diselaraskan; ringkasan alur dan helper tujuh langkah telah disederhanakan; panduan admin lengkap dan review teks lama masih perlu dituntaskan.
-- [~] Jalankan migrasi staging, dry-run data lama, regression/security tests, lalu canary terbatas. Migration source-change monitor `a7q0w3e6r9t2` telah diterapkan di production; 84 tes backend workflow/monitor lulus sebelum deploy. Dry-run akses legacy, regression/security penuh, dan canary bertahap masih terbuka.
+- [~] Jalankan migrasi staging, dry-run data lama, regression/security tests, lalu canary terbatas. Migration source-change monitor `a7q0w3e6r9t2` telah diterapkan di production; tes backend workflow/monitor lulus sebelum deploy dan tes terarah terakhir lulus 7/7. Dry-run akses legacy, regression/security penuh, dan canary bertahap masih terbuka.
 - [ ] Siapkan rollback feature flag dan audit sebelum rollout global.
 - [~] Verifikasi `.env` production dan worker/Beat: owner workflow serta domain+unit fallback aktif dari default; `REQUIRE_SEPARATE_APPROVER=false` tersimpan; worker/Beat aktif. Drive metadata belum tersedia karena Google Drive API project Service Account belum aktif (`accessNotConfigured`); setelah diaktifkan, verifikasi ulang izin metadata dan tunggu poll monitor.
 - [x] Samakan frontend dengan owner-managed default: CTA “Validasi & siapkan deploy”, tanpa approval rutin pada konfigurasi owner-managed, dan FULL_REFRESH dijelaskan sebagai penggantian isi tabel setelah validasi. Jalur review tetap tersedia untuk konfigurasi legacy.
+- [ ] Audit dan koreksi panduan/helper yang masih menyajikan approval legacy sebagai langkah umum. Prioritas: `docs/knowledge/16-error-response-import.md`, `23-sheet-format-operasi.md`, `24-sheet-format-contoh.md`, `35-binding-master-langkah.md`, `36-binding-master-pemuatan.md`, serta generator/help frontend; pisahkan owner-managed, legacy, dan blocker integritas.
+- [ ] Setelah Google Drive API diaktifkan, verifikasi notifikasi monitor beralih dari `DRIVE_API_NOT_ENABLED` ke pemantauan sukses dan tertutup; uji satu perubahan Sheet terkendali sampai discovery/profiling selesai, termasuk tes warning terbuka diperbarui dan kemudian diakui otomatis.
+
+## Hasil audit ulang dan urutan terdekat
+
+1. **Operasional segera:** 61 notifikasi `DRIVE_API_NOT_ENABLED` masih terbuka pada pemeriksaan production 13 Oktober 2026. Admin Google Cloud perlu mengaktifkan Drive API pada project Service Account; setelah itu uji satu perubahan file dan pastikan discovery/profiling jalan serta peringatan ditutup otomatis.
+2. **Panduan pengguna:** beberapa artikel masih menyuruh semua pengguna melewati approval. Perbarui teks dan helper owner-managed versus legacy sebelum menghapus inbox atau endpoint legacy.
+3. **Akses dan data lama:** fallback default domain+unit sudah berjalan, tetapi restriction jurisdiction/department, dry-run/backfill sumber lama, pengelolaan seluruh scope oleh PLATFORM_ADMIN, dan tes tenant/cache/revoke masih perlu diverifikasi serta diselesaikan konservatif.
+4. **Master:** jalur Batch Import ada dan sengaja terpisah dari sync ETL biasa; penyatuan tracking/runtime serta pemetaan referensi opsional dan uji konflik tetap menjadi pekerjaan besar tersisa.
+5. **Pembersihan legacy:** inbox/gate reviewer dan migrasi kompatibilitas hanya dihapus setelah bukti sumber/config/import lama dapat dilanjutkan tanpa mengubah audit atau melemahkan tenant/policy boundary.
 
 ## Blocker yang jangan dihapus
 
@@ -95,7 +105,7 @@ Jangan melewati tenant isolation, autentikasi, validasi role admin, sumber tidak
 
 ## Risiko dan urutan rollout
 
-Perubahan default akses berisiko membuka data lama; backfill harus konservatif dan policy lama tidak boleh diam-diam dilonggarkan. Owner workflow ON tidak mengubah assignment domain/unit, access status, tenant boundary, atau approval registrasi sumber. Pertahankan endpoint/status legacy untuk record lama tanpa memalsukan keputusan reviewer. Full refresh hanya mengganti isi data setelah lulus validasi dan tidak mengesahkan perubahan schema secara otomatis. Penyatuan runtime master tetap berisiko pada referential integrity dan migrasi schema. Uji per fase di staging; periksa setting runtime dan preview sebelum production. Perubahan lokal pada default, checklist, dan sync FULL_REFRESH belum dideploy.
+Perubahan default akses berisiko membuka data lama; backfill harus konservatif dan policy lama tidak boleh diam-diam dilonggarkan. Owner workflow ON tidak mengubah assignment domain/unit, access status, tenant boundary, atau approval registrasi sumber. Pertahankan endpoint/status legacy untuk record lama tanpa memalsukan keputusan reviewer. FULL_REFRESH hanya mengganti isi data setelah lulus validasi dan tidak mengesahkan perubahan schema secara otomatis. Penyatuan runtime master tetap berisiko pada referential integrity dan migrasi schema. Uji per fase di staging; periksa setting runtime dan preview sebelum production. Backend `d76f897` dan frontend `6986666` telah terpasang; perubahan akses/master berikutnya tetap memerlukan rollout bertahap.
 
 ## Review ulang sebelum tiap fase dianggap selesai
 

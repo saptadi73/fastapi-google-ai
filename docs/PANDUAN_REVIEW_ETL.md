@@ -1,6 +1,6 @@
 # Implementasi review konfigurasi ETL
 
-Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. AI menghasilkan draft; pengguna menyesuaikan konfigurasi, menjawab pertanyaan, memvalidasi, lalu mengajukan review. Approver berbeda menyetujui konfigurasi. Jika admin mengaktifkan aturan persetujuan tayang pada sumber, pemeriksa IT dan satu approver dari setiap unit terkait juga harus menyetujui revisi yang sama sebelum deployment. Master memakai [registry/binding](REGISTRY_MASTER_BE03.md), [storage](STORAGE_MASTER_BE04.md), dan [review/apply batch](MASTER_IMPORT_POLICY_BE07.md). [Referensi/FK master](MASTER_REFERENCES_BE08.md) serta [taxonomy](FRONTEND_BE13.md) tersedia melalui alur tersendiri. Rekomendasi AI bukan koreksi otomatis seluruh sel; keputusan ambigu tetap memerlukan review.
+Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. Jalur yang disarankan adalah draft manual dari profil/template, penyesuaian mapping, jawaban pertanyaan dan validasi oleh pemilik data. Approval manusia dilakukan sekali saat registrasi awal sumber dan klasifikasi seluruh tab. Setelah itu owner/steward dapat deploy dan sync tanpa approval konfigurasi atau rilis rutin kedua. Item legacy yang masih menampilkan gate review harus mengikuti statusnya. Master memakai [registry/binding](REGISTRY_MASTER_BE03.md), [storage](STORAGE_MASTER_BE04.md), dan [review/apply batch](MASTER_IMPORT_POLICY_BE07.md). [Referensi/FK master](MASTER_REFERENCES_BE08.md) serta [taxonomy](FRONTEND_BE13.md) tersedia melalui alur tersendiri. Rekomendasi AI bukan koreksi otomatis seluruh sel; keputusan ambigu tetap memerlukan review.
 
 ## Menjalankan
 
@@ -13,7 +13,7 @@ Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runt
 2. Jalankan backend, Redis, dan worker sesuai [panduan implementasi](IMPLEMENTASI.md). Profiling, rekomendasi AI, deployment, dan sync berjalan sebagai job. Status QUEUED terus-menerus berarti worker perlu diperiksa. Validasi draft, export, dan import-preview dijalankan melalui API.
 3. Di `C:\projek\vue-googlesheet-ai`, gunakan `npm run dev`. Pastikan `VITE_API_ORIGIN`, `VITE_API_BASE_PATH`, dan CORS backend sesuai. Buka `/workspace` atau tombol **Buka workspace ETL** pada halaman utama.
 4. Login dengan tenant dan akun aplikasi. Token berada di memori; reload penuh memerlukan login ulang. Jika sesi kedaluwarsa, keluar/ganti akun lalu login kembali.
-5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Konfirmasi klasifikasi per tab di Workspace ETL. Jalankan rekomendasi AI setelah profiling selesai. Buka draft yang dihasilkan; lihat [kontrak dan rollout BE-02](KLASIFIKASI_TAB_BE02.md).
+5. Pilih sumber/tab, atau hubungkan Google Sheet baru yang sudah dibagikan ke service account. Approver memeriksa seluruh tab saat registrasi. Setelah itu buat konfigurasi manual dari template profiling sebagai jalur utama; rekomendasi AI opsional. Lihat [kontrak klasifikasi tab](KLASIFIKASI_TAB_BE02.md).
 6. Periksa mapping kolom, cleansing, kualitas data, strategi pemuatan, dimensi, metrik, dan akses. Simpan perubahan, periksa validasi/dry-run, lalu **Validasi & siapkan deploy**. Pemilik tidak perlu mengisi checklist review berulang.
 7. Persetujuan orang hanya dilakukan saat registrasi awal sumber. Untuk konfigurasi berikutnya, sistem memvalidasi snapshot, klasifikasi, dry-run, business key, akses, dan rencana schema; masalah validasi ditampilkan ke pemilik untuk diperbaiki.
 8. **Deploy konfigurasi** oleh data owner/steward yang tercatat, tunggu job SUCCEEDED, lalu jalankan sync. Sinkronisasi memakai policy akses aktif, pemeriksaan sumber terbaru, preview konflik, dan validasi kualitas. Tidak ada approval konfigurasi/rilis rutin.
@@ -30,8 +30,8 @@ bukan registrasi ulang, untuk memperbarui dataset.
 | Perubahan | Alur |
 |---|---|
 | Kolom sumber baru atau header diubah/dihapus | Ubah Google Sheets, profiling ulang, lalu buat draft dari profile terbaru dan sesuaikan mapping |
-| Cleansing, DQ, label bisnis, dimensi/metrik untuk kolom yang sudah tersedia | Edit draft; jika versi sudah APPROVED/ACTIVE/REJECTED, clone dahulu; validasi dan review snapshot terkini |
-| Nilai/baris berubah tanpa perubahan struktur | Sync manual NON_MASTER aktif membaca/profiling snapshot terbaru dan langsung memuat data valid; master/batch biasa tetap review import |
+| Cleansing, DQ, label bisnis, dimensi/metrik untuk kolom yang sudah tersedia | Edit draft; jika versi sudah APPROVED/ACTIVE/REJECTED, clone dahulu; validasi dan validasi snapshot terkini |
+| Nilai/baris berubah tanpa perubahan struktur | Sync manual NON_MASTER aktif membaca/profiling snapshot terbaru dan langsung memuat data valid; master memakai batch import dan Preview/Apply oleh pemilik |
 | Kolom/type/nullability/business key target non-master berubah pada tabel yang sudah ada | Migrasi manual yang direview sebelum deployment; approval konfigurasi tidak menjalankan ALTER TABLE otomatis |
 
 Urutan untuk kolom baru:
@@ -44,14 +44,12 @@ Urutan untuk kolom baru:
    header lama sudah hilang/berubah, buat draft manual atau AI dari profile terbaru.
 4. Tambah/perbaiki mapping melalui form. `source_column` harus cocok persis dengan header
    profile. Draft lama dengan fingerprint berbeda tidak dapat dipakai tanpa versi baru.
-5. Validate/dry-run, selesaikan pertanyaan, submit-review, approve, dan selesaikan
-   persetujuan tayang bila diaktifkan. Jangan mengubah Sheet lagi di antara review dan deploy;
-   deploy membaca ulang sumber dan menolak snapshot yang sudah berubah.
+5. Validasi/dry-run dan selesaikan pertanyaan. Pada owner workflow, gunakan Validasi & siapkan deploy lalu Deploy; tidak perlu mengajukan review rutin. Jika item legacy menampilkan submit/reviewer, ikuti alur tersebut. Hindari mengubah Sheet di antara validasi dan deploy karena deploy memeriksa snapshot terbaru.
 6. Pada langkah **Validasi & persetujuan**, periksa **Preview perubahan schema**:
    operasi, jumlah record lama, contoh tanggal, dan blocker. Centang konfirmasi schema
-   sebelum submit bila target/view berubah. Approval mengikat fingerprint schema dan data;
-   worker menjalankan perubahan aman saat deploy, bukan saat dry-run atau approval.
-7. Deploy, tunggu sukses, kemudian Sync manual untuk NON_MASTER yang memenuhi syarat; master/batch biasa tetap review import sebelum Apply.
+   sebelum validasi deploy bila target/view berubah. Validasi mengikat fingerprint schema dan data;
+   worker menjalankan perubahan aman saat deploy.
+7. Deploy, tunggu sukses, kemudian Sync manual untuk NON_MASTER yang memenuhi syarat; master memakai batch import dan Preview/Apply oleh pemilik sebelum Apply.
 
 ### Draft manual APPEND dan key
 
@@ -75,7 +73,7 @@ waktu dan maksimal 20 lokasi tanpa nilai mentah; daftar pertanyaan dapat dimuat 
 Temuan AI bukan kepastian data salah. Verifikasi dengan pemilik data, koreksi mapping/PII
 atau sumber jika diperlukan. `KEEP_ORIGINAL` hanya untuk AI yang telah diverifikasi sah,
 dengan alasan wajib; bukan bypass error teknis. Setelah batch sync langsung siap tanpa
-blocker, Sync manual kembali dapat melanjutkan pemuatan. Batch biasa tetap approval/Apply.
+blocker, Sync manual kembali dapat melanjutkan pemuatan. Owner workflow dapat Apply batch setelah preview valid; legacy mengikuti gate yang terlihat.
 
 ### Mengganti label periode text dengan tanggal
 
@@ -108,7 +106,7 @@ serta `bigint` serial Sheets menjadi `date` pada tabel berisi data bila mapping 
 `parse_date_id`, `date_input_format=GOOGLE_SHEETS_SERIAL` dan seluruh nilai valid. Hash record diperbarui agar APPEND tetap mengenali
 record identik. View dibuat ulang hanya tanpa dependency yang menghalangi, menjaga ACL dan
 komentar, tanpa CASCADE atau menghapus record. DDL, view, konversi, hash, aktivasi konfigurasi, audit sukses dan status job SUCCEEDED berada dalam satu transaksi. Kegagalan sebelum commit mempertahankan schema/data serta konfigurasi aktif sebelumnya. Audit kegagalan dan alasan UI dicatat setelah rollback; retry memeriksa fingerprint review kembali. Perubahan di luar aplikasi, termasuk target yang sudah cocok atau
-perubahan data tanpa operasi DDL, tetap memerlukan review ulang.
+perubahan data tanpa operasi DDL tetap memerlukan validasi snapshot terbaru.
 Rollback versi yang pernah aktif boleh memakai tabel yang telah dimuat bila tidak
 memerlukan operasi schema/view; pemeriksaan snapshot sumber dan gate rilis tetap berlaku.
 Rollback yang mengubah schema tidak mendapat pengecualian fingerprint ini.
@@ -123,10 +121,10 @@ Cocokkan konfigurasi APPROVED dengan payload job DEPLOY, bukan URL draft lama.
 
 ### Pengecualian untuk schema master
 
-Master tidak memakai konfigurasi ETL biasa. Perbarui definisi master dan minta approval.
+Master tidak memakai konfigurasi ETL biasa. Perbarui definisi dan validasi sebagai pemilik.
 Field baru nullable didukung melalui deploy-storage ulang; record lama bernilai null.
-Perbarui/review binding sesuai versi approved dan profile sumber terbaru, lalu gunakan
-batch import. Field wajib baru, perubahan key/type/nullability, rename, atau penghapusan
+Periksa binding terhadap versi definisi dan profil sumber terbaru, lalu gunakan batch import
+dengan Preview dan Apply. Workflow legacy dapat tetap meminta reviewer. Field wajib baru, perubahan key/type/nullability, rename, atau penghapusan
 memerlukan migrasi khusus. Lihat [storage master](STORAGE_MASTER_BE04.md#perubahan-schema-dan-record).
 
 ## Kontrak API review
@@ -279,7 +277,7 @@ Parameter runtime terbaru (DQ, precision, unit, timezone, currency) dan mapping 
 
 ### Review perubahan schema NON_MASTER
 
-Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Reviewer menyetujui schema dan mapping pada revisi serta fingerprint schema/data yang sama. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
+Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Pemilik meninjau schema dan mapping pada revisi serta fingerprint schema/data yang sama; workflow legacy mengikuti reviewer yang ditampilkan. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
 
 Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal = Serial Google Sheets** (`date_input_format: "GOOGLE_SHEETS_SERIAL"`) bersama `parse_date_id`. Tipe bigint atau angka dalam rentang valid saja tidak membuktikan bahwa nilainya tanggal. Konfirmasi makna sumber melalui mapping; backend memeriksa seluruh nilai non-null dan menampilkan `validation.checked`, `convertible`, `invalid`, serta contoh. Nilai di luar rentang 1..2958465 menghentikan migrasi. Mode serial eksplisit menolak text, pecahan dan nilai non-finite; mode `TEXT` memakai pola strptime dan menolak angka. Default null mempertahankan parser konfigurasi lama, tetapi tidak mengizinkan migrasi berisiko tanpa deklarasi format. Workbook menyimpan pilihan ini di `02 Struktur Kolom`, kolom AD.
 
@@ -328,9 +326,9 @@ Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) serta [lima templ
 
 ## Panduan khusus binding master
 
-Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, approval definisi, deploy storage, mapping tab MASTER, Simpan binding & dry-run, approval binding, batch import, Preview, approval dan Apply. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
+Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, validasi definisi, deploy storage, mapping tab MASTER, Simpan binding & dry-run, batch import, Preview dan Apply owner-managed; workflow legacy dapat tetap meminta review. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
 
 
 ## Koreksi sebelum storage pertama
 
-Definisi approved dapat dikoreksi sebelum storage pertama dibuat melalui revisi dan approval reviewer berbeda. Backend memeriksa bahwa tabel/relation belum ada dan audit tidak mencatat deployment storage sebelumnya. Key, tipe atau field wajib baru pada fase ini tidak memigrasikan data. Approval menyimpan versi lama dan menandai initial_schema_correction; binding versi lama perlu review ulang. Jika storage sudah ada atau pernah dideploy, perubahan tidak kompatibel tetap memerlukan migrasi yang direview, termasuk pada tabel kosong atau tabel yang pernah dihapus. Jangan hapus/buat ulang storage untuk melewati pemeriksaan.
+Definisi master dapat dikoreksi sebelum storage pertama dibuat melalui revisi dan validasi owner workflow; workflow legacy dapat tetap meminta reviewer. Backend memeriksa bahwa tabel/relation belum ada dan audit tidak mencatat deployment storage sebelumnya. Key, tipe atau field wajib baru pada fase ini tidak memigrasikan data. Approval menyimpan versi lama dan menandai initial_schema_correction; binding versi lama perlu review ulang. Jika storage sudah ada atau pernah dideploy, perubahan tidak kompatibel tetap memerlukan migrasi yang direview, termasuk pada tabel kosong atau tabel yang pernah dihapus. Jangan hapus/buat ulang storage untuk melewati pemeriksaan.

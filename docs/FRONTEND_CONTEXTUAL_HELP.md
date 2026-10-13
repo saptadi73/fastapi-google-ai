@@ -94,13 +94,9 @@ Route `/sources` memiliki bantuan khusus untuk pencarian dan pagination sumber, 
 
 ## Alur sederhana dan detail temuan
 
-Helper Workspace/review menerangkan approval gabungan konfigurasi, metadata sumber PENDING,
-dan aktivasi policy SOURCE APPROVED tanpa approval sebagian. Reviewer tidak boleh menjadi
-pembuat konfigurasi/editor metadata. Gate IT/unit dan kontrol akses pembaca tetap berlaku.
+Helper Workspace/review menerangkan bahwa approval manusia dilakukan sekali saat registrasi sumber/tab. Setelah itu pemilik data/steward memvalidasi konfigurasi, deploy, dan sync. Item legacy dapat tetap menampilkan reviewer gate. Akses pembaca dikelola terpisah dari approval ETL.
 
-Helper Sumber/Workspace/import membedakan Sync manual langsung NON_MASTER ACTIVE dari master,
-FULL_REFRESH, jadwal dan batch review biasa. Jalur langsung tidak meminta approval batch
-tambahan jika validasi teknis, AI dan preview konflik lolos; jalur biasa tetap approval/Apply.
+Helper Sumber/Workspace/import membedakan sync NON_MASTER dan batch MASTER. Owner workflow dapat menjalankan sync atau FULL_REFRESH setelah validasi; pemuatan master menggunakan batch, Preview dan Apply oleh pemilik. Item legacy mengikuti approval yang masih tampil.
 Setelah jawaban temuan selesai, sync manual kembali dapat memuat batch siap sesuai prasyarat.
 
 `NEEDS_INPUT` berarti Menunggu tindakan, bukan proses aktif. **Lihat detail** berikon mata
@@ -144,7 +140,7 @@ Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) serta [lima templ
 
 ## Panduan khusus binding master
 
-Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, approval definisi, deploy storage, mapping tab MASTER, Simpan binding & dry-run, approval binding, batch import, Preview, approval dan Apply. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
+Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, validasi definisi, deploy storage, mapping tab MASTER, validasi binding, batch import, Preview dan Apply owner-managed. Workflow legacy dapat tetap meminta reviewer. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
 
 
 ## Koreksi sebelum storage pertama

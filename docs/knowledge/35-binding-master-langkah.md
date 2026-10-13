@@ -1,7 +1,7 @@
 ---
 id: "binding-master-langkah"
-title: "Binding master: Registry, storage, mapping dan approval"
-summary: "Panduan step by step binding tab MASTER, Simpan binding & dry-run, Setujui binding dan prasyarat."
+title: "Binding master: Registry, storage, dan pemetaan"
+summary: "Langkah owner-managed untuk definisi, storage, binding tab MASTER, dan validasi; workflow legacy dapat tetap meminta reviewer."
 routes: ["/masters", "/masters/*", "/sources/*", "/guide"]
 audiences: ["PLATFORM_ADMIN", "SOURCE_OWNER", "DATA_STEWARD", "TECHNICAL_APPROVER"]
 source: "docs/PANDUAN_BINDING_MASTER.md"
@@ -42,12 +42,12 @@ Hasil sebelum lanjut: **Draft definisi master dengan arti field dan identitas re
 
 Halaman: **Halaman definisi master**. Pelaksana: Source Owner / Data Steward pada owner workflow; reviewer pada workflow legacy.
 
-- Simpan definisi dan jalankan tindakan validasi/pengajuan yang tersedia.
+- Simpan definisi dan jalankan tindakan validasi yang tersedia.
 - Owner workflow memeriksa schema, business key, label, sensitivitas, policy dan authority sebelum mengesahkan revisi; tidak ada inbox approval rutin kedua.
 - Workflow legacy masih mengirim definisi untuk keputusan reviewer. Gunakan master aktif dengan versi yang sudah disahkan.
 - Koreksi field wajib, key atau tipe setelah storage dibuat dapat memerlukan migrasi khusus; baca storage plan dan blocker sebelum melanjutkan.
 
-Hasil sebelum lanjut: **Definisi master aktif memiliki versi yang tervalidasi dan dapat dipakai untuk binding.**.
+Hasil sebelum lanjut: **Definisi master aktif memiliki versi tervalidasi yang dapat dipakai untuk binding.**.
 
 ### 4. Siapkan storage master
 

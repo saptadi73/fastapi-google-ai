@@ -1,54 +1,25 @@
 ---
 id: pemecahan-masalah-umum
 title: Pemecahan masalah umum
-summary: Pemeriksaan awal ketika sumber, konfigurasi, import, akses, atau layanan AI belum siap.
+summary: Tindakan awal saat sumber, konfigurasi, import, akses, atau layanan AI terhambat.
 routes: ["/*"]
 audiences: ["*"]
 source: docs/USER_GUIDE_END_TO_END.md
 ---
-Jika sumber tidak terbaca, periksa URL, akses Viewer service account, credential backend, dan health Google. Untuk konfigurasi/batch yang diblokir, baca kode error, muat ulang state, dan selesaikan dependency sebelum mencoba lagi.
+Jika sumber tidak terbaca, periksa URL/ID, izin Viewer service account, range, dan status job. Sumber yang gagal tetap tercatat; perbaiki tahapnya, jangan mendaftarkan ulang. **Temukan tab** membaca ulang daftar tab Google Sheet; **Muat ulang** hanya menyegarkan tampilan aplikasi.
 
-Jika kolom sumber berubah atau fingerprint tidak cocok (`CONFIGURATION_CONFLICT`), perbaiki Sheet lalu profiling ulang sumber sama dan buat draft terbaru. Clone hanya jika header lama masih ada. Periksa Preview perubahan schema di Validasi & persetujuan, konfirmasi sebelum submit; worker menjalankan perubahan aman setelah approval. Jangan hapus tabel/registrasi ulang. Range/header aktif terkunci. Periode text w1/w2/january/february perlu tanggal/tahun sesuai grain/kalender, bukan mengganti tipe saja.
+Jika tab dihapus/diubah, jalankan Temukan tab, tunggu SUCCEEDED, lalu Profiling ulang. Profil baru dapat membuat draft schema terbaru. Perbaiki mapping dan jalankan validasi. Pada owner workflow, pemilik data melanjutkan deploy setelah validasi tanpa approval konfigurasi rutin. Item legacy mengikuti reviewer yang ditampilkan. `REVIEW_STALE` berarti snapshot berubah; gunakan profil dan validasi terbaru, bukan retry bukti lama.
 
-SCHEMA_REVIEW_REQUIRED: clone/review versi tanpa bukti schema. SCHEMA_MIGRATION_STALE: schema/data berubah, review preview baru. SCHEMA_MIGRATION_BLOCKED: selesaikan blocker; rename/drop fisik, key, kolom wajib baru pada tabel berisi data/dependency tidak aman diblokir. Worker: nullable baru, tipe pada tabel kosong, bigint serial menjadi date dengan parse_date_id, date_input_format=GOOGLE_SHEETS_SERIAL dan semua nilai valid; bigint bukan bukti tanggal; data dijaga, hash diperbarui. DDL/view/konversi transaksional tanpa DROP CASCADE, ACL dijaga. View mengikuti ID tab. Error lama SCHEMA_CHANGE_UNSAFE/SEMANTIC_SCHEMA_MIGRATION_REQUIRED: gunakan review baru. Cocokkan configuration_id job/versi APPROVED; /guide#review-ulang-tanggal.
+`DRIVE_API_NOT_ENABLED`: admin mengaktifkan Google Drive API pada Cloud project service account. `SOURCE_CHANGE_CHECK_DENIED`: periksa Drive API dan izin metadata Drive. Temukan tab/profiling manual bisa digunakan sementara. `SOURCE_ACCESS_DENIED`: pemilik Sheet memastikan service account mendapat Viewer.
 
-NL2SQL: periksa reader, USAGE semantic/SELECT view, health OpenAI. Reader tidak boleh menulis/superuser.
+`CONFIGURATION_INVALID`: buka detail validasi, perbaiki mapping, tipe, key, aturan atau jawaban yang ditunjuk, lalu dry-run ulang. `SCHEMA_MIGRATION_STALE`: muat preview perubahan schema terbaru. `SCHEMA_MIGRATION_BLOCKED`: baca blocker; perubahan key, kolom wajib baru, rename/drop fisik atau dependency berisiko tidak bisa dilewati dengan menghapus tabel.
 
-Hubungkan & profiling tidak bereaksi: baca pesan/field wajib. Pendaftaran gagal: periksa daftar sebelum retry. QUEUED/RUNNING: tunggu/buka monitor. Discovery FAILED: sumber tetap tercatat; perbaiki tahapnya, bukan pendaftaran.
+`MASTER_RUNTIME_PENDING` berarti tab MASTER tidak memakai konfigurasi ETL biasa. Buka Registry master, validasi definisi, deploy storage, atur binding sumber, lalu buat batch master. Pada owner workflow, selesaikan temuan, Preview, dan Apply setelah konfirmasi. Legacy dapat menampilkan approval. Binding valid belum berarti record sudah masuk; periksa Record kanonis.
 
-Dropdown unit/domain/yurisdiksi memakai assignment aktif akun/tenant. Admin lain menugaskan lewat Administrasi/Pengguna, lalu muat ulang pilihan; registry bukan assignment. Purpose dari registry; owner/steward akun aktif.
+`NEEDS_INPUT` atau **Menunggu tindakan** berarti batch berhenti untuk jawaban/keputusan, bukan worker masih berjalan. **Lihat detail** berikon mata menampilkan alasan, kode, nomor baris, kolom dan catatan tanpa nilai mentah. `KEEP_ORIGINAL` hanya untuk nilai sah yang sudah diverifikasi pemilik dengan alasan wajib; error teknis, PII, atau salah mapping perlu diperbaiki.
 
-Panel Berikan unit/departemen memuat DEPARTMENT; domain/yurisdiksi lewat form Atribut. Centang unit dan pastikan akun tujuan sama dengan pengguna Workspace.
+Katalog kosong: periksa produk aktif, apakah data sudah dimuat, aksi READ/QUERY, domain dan unit pengguna, tenant, serta policy khusus. Akses default READ/QUERY berlaku dalam domain dan business unit pemilik; fallback tidak mensyaratkan yurisdiksi. Policy khusus dapat mempersempit akses. `DEFAULT_DENY` berarti tak ada izin yang cocok; `EXPLICIT_DENY` tidak dapat dikalahkan ALLOW.
 
-Data belum muncul: periksa discovery/profiling/klasifikasi/review/deploy/activation/import/job, binding master/taxonomy, pertanyaan, karantina, freshness, metadata dan policy akses.
+`RELEASE_APPROVAL_REQUIRED` berlaku pada gate legacy/rilis yang masih aktif; item owner-managed tervalidasi tidak memerlukan approval rilis kedua. Database `DATABASE_PERMISSION_DENIED` perlu admin memeriksa log job dan privilege role; jangan memberi runtime superuser. AI error: catat request ID, cek health, model, budget dan kuota; jangan mengirim key/password ke helper.
 
-RELEASE_APPROVAL_REQUIRED: buka Persetujuan tayang, IT melengkapi checklist dan tiap unit menyetujui revisi sama. Penolakan/perubahan revisi/snapshot/aturan membatalkan keputusan; perbaiki sebelum deploy. Bukan approval batch/izin membaca.
-
-Untuk `DATABASE_PERMISSION_DENIED` (42501), admin memeriksa role DDL: USAGE/CREATE pada schema trusted/semantic serta izin/ownership objek target. `DATABASE_CONNECTION_FAILED` memerlukan pemeriksaan koneksi aplikasi/DDL. Catat ID job agar admin dapat mencari log worker.
-
-Deploy memberi SELECT/INSERT trusted untuk APPEND dan UPDATE untuk UPSERT, SELECT semantic. FULL_REFRESH perlu izin DELETE admin.
-
-AI gagal: periksa health/model/kuota/budget/policy/request ID. Jangan kirim password/token/API key/credential/data pribadi ke asisten.
-
-Sumber tidak ada di dropdown? Cari nama/kode melalui **Sumber & tracking**, pagination, lalu **Buka sumber**. Dropdown hanya memilih konteks, bukan daftar lengkap. Kegagalan tahap tidak menghapus sumber; jangan registrasi ulang.
-
-UNLINKED menyembunyikan sumber tanpa menghapus riwayat. Admin dapat memulihkan dengan dua konfirmasi. Unlink perlu sumber utama, alasan, dua konfirmasi; relasi operasional dapat menahannya.
-
-DISCOVERY gagal: periksa akses/tab. PROFILING gagal: periksa header/error. CONFIGURATION belum siap: lengkapi mapping/review. Binding master approved belum memuat record; periksa batch/apply dan Owner/Steward.
-
-Menunggu tindakan (NEEDS_INPUT) berarti berhenti pada temuan, bukan worker masih berjalan; menunggu saja tidak menyelesaikannya. Sedang validasi/diperiksa AI/memuat berarti aktif. IN_PROGRESS berarti belum lengkap; SUCCEEDED per batch berarti pemuatan selesai, bukan hanya job induk.
-
-Lihat detail berikon mata pada tracking, hasil ETL/sync dan audit trail membuka kode, keterangan, baris asli Sheet pada snapshot (termasuk header), kolom serta tautan batch. Audit menyimpan maksimal 20 lokasi tanpa nilai mentah; Muat temuan berikutnya memaginasi pertanyaan. Jika Sheet berubah setelah snapshot, nomor baris dapat bergeser. Riwayat kegagalan lama bukan status terbaru. Membuka modal tidak approve/sync.
-
-Dugaan PII pada kolom non-sensitif masih temuan AI, bukan kepastian: verifikasi nama pribadi/mapping dengan pemilik data, perbaiki klasifikasi jika benar PII. KEEP_ORIGINAL hanya untuk nilai sah terverifikasi, alasan wajib dan diaudit; bukan bypass error teknis. Setelah blocker selesai, sync manual NON_MASTER siap dapat dilanjutkan tanpa approval batch ulang. Master/jadwal/batch biasa tetap preview/approval/Apply.
-
-Aktivasi versi baru membuat konfigurasi lama SUPERSEDED. Inventaris tabel retired hanya mencatat tabel yang masih ada, tidak menghapusnya. REVIEW_REQUIRED meminta pemeriksaan rollback/dependency/retensi; delete_ready tetap false sampai cleanup terkontrol tersedia.
-
-
-MASTER_RUNTIME_PENDING berarti tab MASTER tidak memakai konfigurasi atau sync ETL biasa. Jangan ubah klasifikasi untuk melewatinya. Buka Registry master → Storage & record master, pastikan source binding dan storage siap, lalu buat batch dari **Sumber master terikat**. Dalam owner workflow, binding yang lulus validasi dapat langsung dipakai dan pemilik meng-Apply setelah preview bersih; pada workflow legacy, ikuti status review yang ditampilkan. `GET /source-sheets/{id}/classification` membedakan `execution_path=MASTER_BATCH_IMPORT` dan `standard_etl_blocking_reason`, sehingga blocker ETL biasa tidak berarti jalur batch master juga tertutup. MASTER_BINDING_REQUIRED: atur binding. MASTER_STORAGE_REQUIRED: deploy storage setelah validasi schema. Preview tetap memeriksa snapshot, business key, konflik, dan integritas sebelum Apply.
-
-DDL/aktivasi satu transaksi; gagal mempertahankan kondisi lama. UI/audit mencatat alasan setelah rollback; retry memeriksa fingerprint.
-
-Text/varchar mendapat trim otomatis. Temuan dari [REDACTED] tidak sah; duplikat wajib terbukti dari data asli. Lihat panduan cleansing text dan review AI.
-
-Tabel kode, penyebab dan tindakan tersedia di Bantuan serta /guide#error-responses.
+Gunakan **Sumber & tracking** sebagai daftar lengkap dengan pencarian dan pagination. Kegagalan tahap tidak menghapus sumber. UNLINKED menyembunyikan sumber dari daftar aktif tetapi menyimpan audit; pemulihan mengikuti dua konfirmasi. Audit menampilkan siapa melakukan tindakan dalam aplikasi; Drive modifiedTime tidak menunjukkan siapa editor eksternal.
