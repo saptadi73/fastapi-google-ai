@@ -616,6 +616,7 @@ Metadata master dan binding tersedia; kontrak lengkap, payload, respons, version
 | PUT | `/source-sheets/{sheet_id}/column-bindings` | E | MasterColumnBindingCreate | 200 | binding kolom draft dengan revision baru |
 | POST | `/column-bindings/{binding_id}/approve` | R | MasterRevisionRequest | 200 | binding kolom APPROVED |
 | POST | `/column-bindings/{binding_id}/reject` | R | MasterRevisionRequest | 200 | binding kolom REJECTED |
+| POST | `/column-bindings/{binding_id}/remove` | E + pengelola sumber | MasterRevisionRequest | 200 | Arsipkan binding REVOKED; 409 bila masih dipakai konfigurasi aktif |
 | GET | `/master-definitions/dependency-plan` | S | Tidak ada | 200 | nodes, edges (termasuk target_table/target_column), load_order, has_cycle, correction_actions, execution_ready |
 | GET | `/master-definitions/reference-orphans` | S | Tidak ada | 200 | items per binding, orphan_count, orphan_values, type validation, execution_ready |
 | POST | `/master-definitions/deploy-foreign-keys` | R | Tidak ada | 200 | created constraints, execution_ready=true |

@@ -114,7 +114,7 @@ def compile_table(config, sheet_id):
     ]
     for col in config.columns:
         columns.append(Column(col.target_column, mapped_type(col), nullable=col.nullable))
-        if col.master_reference and col.target_type != "uuid":
+        if (col.master_reference or col.master_reference_disabled) and col.target_type != "uuid":
             # Existing rows remain readable; required matches are enforced during
             # validation and again at apply, without guessing a historical match.
             columns.append(Column(reference_storage_column(col), Uuid(as_uuid=False), nullable=True))

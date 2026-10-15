@@ -27,11 +27,13 @@ async def reference_context(session, user, sheet_id, config=None):
     if sheet is None:
         raise AppError("RESOURCE_NOT_FOUND", "Tab referensi tidak ditemukan.", 404)
     bindings = (await session.scalars(repo.query(MasterColumnBinding).where(
-        MasterColumnBinding.source_sheet_id == str(sheet_id)
+        MasterColumnBinding.source_sheet_id == str(sheet_id),
+        MasterColumnBinding.status != "REVOKED",
     ).order_by(MasterColumnBinding.master_definition_id, MasterColumnBinding.source_column)
       .with_for_update().execution_options(populate_existing=True))).all()
     bindings_by_column = {binding.source_column: binding for binding in bindings}
-    effective_bindings = list(bindings)
+    disabled = {c.source_column for c in config.columns if c.master_reference_disabled} if config else set()
+    effective_bindings = [b for b in bindings if b.source_column not in disabled]
     if config:
         for column in config.columns:
             mapping = column.master_reference

@@ -806,6 +806,14 @@ Body: [MasterRevisionRequest](#masterrevisionrequest).
 |---|---|---|---|
 | `binding_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/column-bindings/{binding_id}/remove
+
+Body: [MasterRevisionRequest](#masterrevisionrequest).
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `binding_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/taxonomies/{taxonomy_id}/recommend-terms-ai
 
 Body: [TaxonomyAIRecommendRequest](#taxonomyairecommendrequest).
@@ -2342,6 +2350,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `taxonomy_version` | Tidak | `integer / null` | — | — |
 | `taxonomy_required` | Tidak | `boolean` | false | — |
 | `master_reference` | Tidak | `MasterReferenceMapping / null` | — | — |
+| `master_reference_disabled` | Tidak | `boolean` | false | — |
 
 ### ConfigurationAccessApproval
 

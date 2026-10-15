@@ -617,11 +617,38 @@ class MasterService:
         return {"master_id": master.id, "items": items}
 
     async def column_bindings(self, sheet_id):
-        await self.repo.get(SourceSheet, sheet_id)
+        sheet = await self.repo.get(SourceSheet, sheet_id)
+        active = await self.repo.get(Configuration, sheet.active_configuration_id) if sheet.active_configuration_id else None
+        disabled = {c["source_column"] for c in (active.configuration_json["columns"] if active else [])
+                    if c.get("master_reference_disabled")}
         rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
             MasterColumnBinding.source_sheet_id == str(sheet_id)
         ).order_by(MasterColumnBinding.source_column))).all()
-        return [record(row) for row in rows]
+        return [{**record(row), "disabled_by_configuration": row.source_column in disabled} for row in rows]
+
+    async def remove_column_binding(self, binding_id, data):
+        self.require_role(EDIT_ROLES)
+        binding = await self.repo.get(MasterColumnBinding, binding_id)
+        sheet = await ClassificationService(self.session, self.user).locked_sheet(binding.source_sheet_id)
+        source = await self.repo.get(DataSource, sheet.source_id)
+        ConfigurationService(self.session, self.user).require_reference_manager(source)
+        await self.session.refresh(binding, with_for_update=True)
+        if binding.revision_no != data.revision_no:
+            raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Revisi binding berubah; muat ulang.", 409)
+        if binding.status == "REVOKED":
+            return record(binding)
+        if sheet.active_configuration_id:
+            active = await self.repo.get(Configuration, sheet.active_configuration_id)
+            column = next((c for c in active.configuration_json["columns"]
+                           if c["source_column"] == binding.source_column), None)
+            if column and not column.get("master_reference_disabled"):
+                raise AppError("REFERENCE_IN_USE", "Lepaskan relasi melalui draft konfigurasi, lalu deploy sebelum mengarsipkan binding lama.", 409)
+        binding.status = "REVOKED"
+        binding.revision_no += 1
+        audit(self.session, self.user, "master.column_binding_removed", binding.id,
+              source_sheet_id=str(sheet.id), source_column=binding.source_column,
+              master_id=str(binding.master_definition_id), comment=data.comment)
+        return record(binding)
 
     async def binding_recommendations(self, sheet_id):
         sheet = await self.repo.get(SourceSheet, sheet_id)
@@ -753,11 +780,27 @@ class MasterService:
         if wanted != found:
             raise AppError("MASTER_ALIAS_INVALID", "Alias harus menunjuk UUID record aktif pada master dan tenant ini.", 422)
 
-    async def dependency_plan(self):
-        self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
+    async def _live_column_bindings(self):
         rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
             MasterColumnBinding.status == "APPROVED"
         ))).all()
+        disabled_by_sheet = {}
+        result = []
+        for binding in rows:
+            if binding.source_sheet_id not in disabled_by_sheet:
+                sheet = await self.repo.get(SourceSheet, binding.source_sheet_id)
+                active = await self.repo.get(Configuration, sheet.active_configuration_id) if sheet.active_configuration_id else None
+                disabled_by_sheet[binding.source_sheet_id] = {
+                    c["source_column"] for c in (active.configuration_json["columns"] if active else [])
+                    if c.get("master_reference_disabled")
+                }
+            if binding.source_column not in disabled_by_sheet[binding.source_sheet_id]:
+                result.append(binding)
+        return result
+
+    async def dependency_plan(self):
+        self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
+        rows = await self._live_column_bindings()
         masters = {row.master_definition_id for row in rows}
         graph = {master_id: set() for master_id in masters}
         # Bindings are currently column-level edges; expose a stable plan for the
@@ -840,9 +883,7 @@ class MasterService:
     async def validate_reference_orphans(self):
         from app.services.master_storage_service import check_storage
         self.require_role((*EDIT_ROLES, *REVIEW_ROLES))
-        rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
-            MasterColumnBinding.status == "APPROVED"
-        ))).all()
+        rows = await self._live_column_bindings()
         results = []
         for binding in rows:
             sheet = await self.repo.get(SourceSheet, binding.source_sheet_id)
@@ -886,9 +927,7 @@ class MasterService:
         validation = await self.validate_reference_orphans()
         if not validation["execution_ready"]:
             raise AppError("REFERENCE_VALIDATION_REQUIRED", "Selesaikan orphan/type validation sebelum memasang FK.", 409)
-        rows = (await self.session.scalars(self.repo.query(MasterColumnBinding).where(
-            MasterColumnBinding.status == "APPROVED"
-        ))).all()
+        rows = await self._live_column_bindings()
         connection = await self.session.connection()
         created = []
         for binding in rows:

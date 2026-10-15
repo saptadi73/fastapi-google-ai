@@ -142,6 +142,7 @@ class ColumnMapping(StrictModel):
         default=None,
         description="Cocokkan kode/nama text/varchar dengan master aktif; identitas relasi disimpan otomatis pada kolom internal. Target UUID lama tetap kompatibel.",
     )
+    master_reference_disabled: bool = False
 
     @model_validator(mode="after")
     def valid_numeric_scale(self):
@@ -184,6 +185,11 @@ class ColumnMapping(StrictModel):
             raise ValueError("taxonomy_version memerlukan taxonomy_id")
         if self.taxonomy_required and self.taxonomy_id is None:
             raise ValueError("taxonomy_required memerlukan taxonomy_id")
+        if self.master_reference_disabled:
+            if self.master_reference is not None:
+                raise ValueError("Relasi yang dilepas tidak boleh sekaligus memiliki mapping master")
+            if self.target_type not in ("text", "varchar"):
+                raise ValueError("Pelepasan relasi mempertahankan kode/nama sumber sebagai text atau varchar")
         if self.master_reference is not None:
             if self.target_type not in ("text", "varchar", "uuid"):
                 raise ValueError("Relasi master memerlukan kode/nama bertipe text atau varchar")
@@ -308,7 +314,7 @@ class ETLConfiguration(StrictModel):
         sources = [c.source_column for c in self.columns]
         from app.domain.master_references import reference_storage_column
 
-        references = [reference_storage_column(c) for c in self.columns if c.master_reference]
+        references = [reference_storage_column(c) for c in self.columns if c.master_reference or c.master_reference_disabled]
         if len(references) != len(set(references)):
             raise ValueError("Nama kolom relasi internal bertabrakan; pendekkan nama kolom target")
         if len(names) != len(set(names)) or len(sources) != len(set(sources)):

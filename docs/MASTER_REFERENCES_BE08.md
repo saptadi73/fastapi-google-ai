@@ -156,6 +156,14 @@ kandidat/pertanyaan dan alur ETL legacy tidak diperluas oleh perubahan ini.
 
 ## Relasi dari kode/nama tanpa input UUID (15 Oktober 2026)
 
+### Melepas relasi dan mengarsipkan binding
+
+Pada langkah Kolom, klik **Hapus relasi** atau pilih **Tidak berelasi dengan master**, lalu Simpan draft, Validasi dan Deploy. `master_reference_disabled=true` dengan `master_reference=null` menyimpan keputusan eksplisit untuk mengabaikan binding lama pada versi konfigurasi tersebut. Relasi tidak dimuat kembali saat reload. Mengaktifkan relasi kembali menghapus penanda disabled dan memakai pencocokan yang dipilih.
+
+Konfigurasi aktif tidak diubah oleh penyimpanan draft. Kolom text/varchar, record master, data lama dan kolom `_ref_` historis dipertahankan. Baris baru pada konfigurasi yang telah melepas relasi mendapat identitas internal null; tidak ada lookup ke master. Pelepasan tidak menghapus kolom fisik. Konversi target UUID legacy ke teks tetap tunduk pada pemeriksaan migrasi; tabel berisi data tidak dikonversi secara spekulatif.
+
+Pada halaman Binding kolom referensi, **Hapus relasi** membuka draft terbaru, atau membuat clone dari versi aktif bila diperlukan. Pengguna meninjau dan menyimpan perubahan sebelum deployment. Binding tanpa pemakaian aktif, atau yang telah dilepas melalui konfigurasi aktif, dapat diarsipkan melalui `POST /column-bindings/{binding_id}/remove` dengan `MasterRevisionRequest`. Pengelola sumber/admin dan tenant/revisi binding diperiksa. Endpoint mempertahankan record binding sebagai REVOKED beserta audit; tidak menghapus record master. `REFERENCE_IN_USE` meminta pelepasan melalui draft dahulu. Binding REVOKED diabaikan resolver, dan perubahan dependency membatalkan batch/preview yang tidak lagi sesuai.
+
 Pada mapping NON_MASTER pilih master aktif dan field pencocokan, misalnya `BISNIS` → `master_business.bisnis` atau `BISNIS_CODE` → `bisnis_code`. Kode stabil lebih disarankan bila nama dapat berubah. `master_reference` menerima target text/varchar dan mempertahankan teks hasil cleansing. Identitas master disimpan otomatis pada `_ref_<target_column>` di tabel trusted; kolom internal tidak dimasukkan ke semantic view/kolom publik. Target UUID lama tetap didukung untuk kompatibilitas, tanpa mewajibkan pengguna menulis UUID pada Sheet.
 
 Dry-run, deploy, worker dan final apply memakai resolver yang sama: exact/alias unik atau kosong opsional diterima; nilai tidak ditemukan, ambigu, required kosong, pelanggaran kardinalitas dan pencarian field sensitif tanpa izin tetap diblokir. Pesan validasi menunjuk kolom sumber. Apply menghitung ulang identitas dari teks terkoreksi dan memeriksa dependency/hash master; UUID staging tidak dipercaya begitu saja. Preview baca tidak mengubah staging.

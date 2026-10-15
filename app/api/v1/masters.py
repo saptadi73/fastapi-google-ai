@@ -206,3 +206,10 @@ async def reject_column_binding(
     binding_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser
 ):
     return success(await MasterService(session, user).column_binding_decision(binding_id, data, False))
+
+
+@router.post("/column-bindings/{binding_id}/remove", dependencies=edit)
+async def remove_column_binding(
+    binding_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser
+):
+    return success(await MasterService(session, user).remove_column_binding(binding_id, data))

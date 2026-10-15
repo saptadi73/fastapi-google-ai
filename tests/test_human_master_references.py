@@ -94,3 +94,28 @@ def test_sensitive_master_lookup_stays_forbidden():
     config, context, _ = setup_reference(pii="HIGH")
     with pytest.raises(AppError, match="field master sensitif"):
         transform(["BC06"], config, context)
+
+
+def test_detached_mapping_retains_internal_storage_without_looking_up_master():
+    config, _, _ = setup_reference()
+    before = compile_table(config, uuid4())
+    column = config.columns[0]
+    column.master_reference = None
+    column.master_reference_disabled = True
+    restored = ETLConfiguration.model_validate_json(config.model_dump_json())
+    assert restored.columns[0].master_reference_disabled
+    after = compile_table(restored, uuid4())
+    assert list(before.c.keys()) == list(after.c.keys())
+    good, issues, _ = transform(["A business outside the master"], restored, {})
+    assert issues == []
+    assert good[0][1] == {"bisnis": "A business outside the master", "_ref_bisnis": None}
+
+
+def test_disabled_and_enabled_reference_cannot_be_submitted_together():
+    from pydantic import ValidationError
+
+    config, _, _ = setup_reference()
+    data = config.model_dump(mode="json")
+    data["columns"][0]["master_reference_disabled"] = True
+    with pytest.raises(ValidationError):
+        ETLConfiguration.model_validate(data)

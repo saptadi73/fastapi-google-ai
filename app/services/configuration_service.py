@@ -275,6 +275,13 @@ class ConfigurationService:
 
         return await reference_context(self.session, self.user, sheet_id, parsed)
 
+    def require_reference_manager(self, source):
+        metadata = source.access_metadata or {}
+        managers = {str(source.owner_user_id), str(metadata.get("data_owner_user_id")),
+                    str(metadata.get("data_steward_user_id"))}
+        if self.user.role != "PLATFORM_ADMIN" and str(self.user.id) not in managers:
+            raise AppError("FORBIDDEN", "Hanya pengelola sumber yang boleh menghapus relasi.", 403)
+
     async def patch(self, config_id, data):
         config = await self.repo.get(Configuration, config_id, lock=True)
         if config.status not in ("AI_DRAFT", "NEEDS_REVIEW"):
@@ -284,6 +291,17 @@ class ConfigurationService:
         if config.revision_no != data.revision_no:
             raise AppError("CONFIGURATION_CONFLICT", "Revision berubah; muat ulang konfigurasi.", 409)
         before = config.configuration_json
+        old_columns = {c["source_column"]: c for c in before["columns"]}
+        new_columns = {c.source_column: c for c in data.configuration.columns}
+        removes_reference = any(
+            c.master_reference_disabled and not old_columns.get(c.source_column, {}).get("master_reference_disabled")
+            for c in data.configuration.columns
+        ) or any(
+            c.get("master_reference") and (name not in new_columns or not new_columns[name].master_reference)
+            for name, c in old_columns.items()
+        )
+        if removes_reference:
+            self.require_reference_manager(await self.repo.get(DataSource, config.source_id))
         removed = set(before.get("unresolved_questions", [])) - set(data.configuration.unresolved_questions)
         if not removed.issubset(data.question_answers):
             raise AppError(

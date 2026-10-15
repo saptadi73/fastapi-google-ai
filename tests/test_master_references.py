@@ -239,6 +239,103 @@ async def test_alias_is_scoped_to_batch_sheet_and_edits_revoke_approval(referenc
     assert exc.value.code == "REFERENCE_BINDING_REQUIRED"
 
 
+async def test_binding_in_use_requires_a_configuration_change_before_archival(reference):
+    saved = await reference.bind(required=False)
+    async with SessionFactory() as session, session.begin():
+        with pytest.raises(AppError) as exc:
+            await MasterService(session, reference.editor).remove_column_binding(
+                saved["id"], SimpleNamespace(revision_no=saved["revision_no"], comment="Remove relation"))
+        assert exc.value.code == "REFERENCE_IN_USE"
+        assert (await session.get(MasterColumnBinding, saved["id"])).status == "APPROVED"
+
+
+async def test_binding_without_active_consumer_is_revoked_with_revision_and_tenant_guards(reference):
+    saved = await reference.bind(required=False)
+    async with SessionFactory() as session, session.begin():
+        sheet = await session.get(type(reference.sheets[1]), reference.sheet_id)
+        sheet.active_configuration_id = None
+    async with SessionFactory() as session, session.begin():
+        service = MasterService(session, reference.editor)
+        unrelated = SimpleNamespace(id=str(uuid4()), tenant_id=reference.tenant_id, role="SOURCE_OWNER")
+        with pytest.raises(AppError) as forbidden:
+            await MasterService(session, unrelated).remove_column_binding(
+                saved["id"], SimpleNamespace(revision_no=saved["revision_no"], comment=""))
+        assert forbidden.value.status_code == 403
+        with pytest.raises(AppError) as stale:
+            await service.remove_column_binding(saved["id"], SimpleNamespace(revision_no=1, comment=""))
+        assert stale.value.code == "MASTER_COLUMN_BINDING_CONFLICT"
+        removed = await service.remove_column_binding(saved["id"], SimpleNamespace(revision_no=saved["revision_no"], comment="No consumer"))
+        assert removed["status"] == "REVOKED"
+        assert removed["revision_no"] == saved["revision_no"] + 1
+        from app.services.reference_service import reference_context
+
+        assert await reference_context(session, reference.editor, reference.sheet_id) == {}
+        assert await session.get(MasterDefinition, reference.master_id) is not None
+        assert str(await session.scalar(select(reference.table.c._record_id))) == reference.record_id
+    async with SessionFactory() as session, session.begin():
+        outsider = SimpleNamespace(id=str(uuid4()), tenant_id=str(uuid4()), role="PLATFORM_ADMIN")
+        with pytest.raises(AppError) as cross_tenant:
+            await MasterService(session, outsider).remove_column_binding(
+                saved["id"], SimpleNamespace(revision_no=removed["revision_no"], comment=""))
+        assert cross_tenant.value.status_code == 404
+
+
+async def test_detached_configuration_ignores_legacy_binding_and_can_archive_it(reference):
+    saved = await reference.bind(required=False)
+    async with SessionFactory() as session, session.begin():
+        config = await session.scalar(select(Configuration).where(Configuration.source_sheet_id == reference.sheet_id))
+        data = dict(config.configuration_json)
+        data["columns"] = [{**c, **({"target_type": "text", "master_reference_disabled": True}
+                                  if c["source_column"] == "Product" else {})} for c in data["columns"]]
+        parsed = ETLConfiguration.model_validate(data)
+        config.configuration_json = parsed.model_dump(mode="json")
+        from app.services.reference_service import reference_context
+
+        assert await reference_context(session, reference.editor, reference.sheet_id, parsed) == {}
+        rows = await MasterService(session, reference.editor).column_bindings(reference.sheet_id)
+        assert rows[0]["disabled_by_configuration"] is True
+        assert (await MasterService(session, reference.editor).dependency_plan())["edges"] == []
+        removed = await MasterService(session, reference.editor).remove_column_binding(
+            saved["id"], SimpleNamespace(revision_no=saved["revision_no"], comment="Detached"))
+        assert removed["status"] == "REVOKED"
+
+
+async def test_detached_import_keeps_existing_identity_but_accepts_new_text_without_master(reference, monkeypatch):
+    await reference.bind(required=False)
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    async with SessionFactory() as session, session.begin():
+        config = await session.scalar(select(Configuration).where(Configuration.source_sheet_id == reference.sheet_id))
+        data = dict(config.configuration_json)
+        data["columns"] = [{**c, **({"target_type": "text", "master_reference_disabled": True}
+                                  if c["source_column"] == "Product" else {})} for c in data["columns"]]
+        parsed = ETLConfiguration.model_validate(data)
+        config.configuration_json = parsed.model_dump(mode="json")
+        batch = await session.get(ImportReview, reference.batch_id)
+        batch.configuration_json = config.configuration_json
+        row = await session.get(ImportReviewRow, reference.row_id)
+        row.transformed_data = {"code": "T1", "product_id": "Not in master", "_ref_product_id": None}
+        await (await session.connection()).run_sync(reference.consumer.drop)
+        table = compile_table(parsed, reference.sheet_id)
+        await (await session.connection()).run_sync(table.create)
+        await session.execute(table.insert().values(
+            _tenant_id=reference.tenant_id, _source_sheet_id=reference.sheet_id, _source_row=1,
+            _etl_run_id=str(uuid4()), _row_hash="historical", code="T0", product_id="001",
+            _ref_product_id=reference.record_id,
+        ))
+    preview = await reference.preview()
+    async with SessionFactory() as session, session.begin():
+        batch = await session.get(ImportReview, reference.batch_id)
+        result = await ImportReviewService(session, reference.editor).apply(batch.id, SimpleNamespace(
+            revision_no=batch.revision_no, preview_token=preview["preview_token"],
+            preview_hash=preview["preview_hash"], accept_source_conflicts=False, approval_comment="",
+        ))
+        assert result["rows_applied"] == 1
+        rows = {row["code"]: row for row in (await session.execute(select(table))).mappings()}
+        assert str(rows["T0"]["_ref_product_id"]) == reference.record_id
+        assert rows["T1"]["product_id"] == "Not in master"
+        assert rows["T1"]["_ref_product_id"] is None
+
+
 @pytest.mark.parametrize("required", [True, False])
 async def test_empty_reference_respects_optionality(reference, required):
     await reference.bind(required=required)

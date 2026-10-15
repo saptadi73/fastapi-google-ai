@@ -212,6 +212,10 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                 if value is None and not column.nullable:
                     raise ValueError("Required value")
                 result[column.target_column] = value
+                if column.master_reference_disabled:
+                    from app.domain.master_references import reference_storage_column
+
+                    result[reference_storage_column(column)] = None
                 if column.master_reference or reference:
                     from app.domain.master_references import reference_storage_column
                     from app.services.reference_service import resolve_value

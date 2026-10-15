@@ -1428,7 +1428,7 @@ class ImportReviewService:
 
                     identities = {
                         reference_storage_column(c): cast_value(values.get(reference_storage_column(c)), "uuid")
-                        for c in config.columns if c.master_reference and c.target_type != "uuid"
+                        for c in config.columns if (c.master_reference or c.master_reference_disabled) and c.target_type != "uuid"
                     }
                     values = {c.target_column: cast_value(values.get(c.target_column), c.target_type)
                               for c in config.columns}
