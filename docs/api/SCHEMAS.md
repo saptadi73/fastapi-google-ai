@@ -2341,6 +2341,7 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `taxonomy_id` | Tidak | `string (uuid) / null` | — | — |
 | `taxonomy_version` | Tidak | `integer / null` | — | — |
 | `taxonomy_required` | Tidak | `boolean` | false | — |
+| `master_reference` | Tidak | `MasterReferenceMapping / null` | — | — |
 
 ### ConfigurationAccessApproval
 
@@ -3210,6 +3211,17 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | `business_key_change_policy` | Tidak | `"EXPLICIT_MIGRATION"` | "EXPLICIT_MIGRATION" | — |
 | `delete_referenced_policy` | Tidak | `"RESTRICT"` | "RESTRICT" | — |
 | `effective_dating` | Tidak | `EffectiveDating / null` | — | — |
+
+### MasterReferenceMapping
+
+| Field | Wajib | Tipe | Default | Batas |
+|---|---|---|---|---|
+| `master_definition_id` | Ya | `string (uuid)` | — | — |
+| `master_field` | Ya | `string` | — | {"pattern":"^[a-z][a-z0-9_]{0,62}$"} |
+| `required` | Tidak | `boolean` | false | — |
+| `cardinality` | Tidak | `enum ["MANY_TO_ONE","ONE_TO_ONE"]` | "MANY_TO_ONE" | — |
+| `normalization` | Tidak | `"TRIM_CASEFOLD"` | "TRIM_CASEFOLD" | — |
+| `aliases` | Tidak | `map<string, string>` | {} | — |
 
 ### MasterRevisionRequest
 

@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from test_master_apply_postgres import master as master
 
 from app.core.database import SessionFactory
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
@@ -22,6 +23,13 @@ from app.services.master_service import MasterService
 from app.services.schema_compiler_service import compile_table
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def legacy_reference_workflow(monkeypatch):
+    # These compatibility scenarios explicitly exercise separate binding/batch
+    # approval; do not inherit the owner's workflow default from a local .env.
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
 
 
 @pytest.fixture
@@ -128,7 +136,11 @@ async def test_exact_resolution_preserves_raw_and_loads_uuid(reference):
         assert str(await session.scalar(select(reference.consumer.c.product_id))) == reference.record_id
 
 
-async def test_configuration_embedded_optional_reference_uses_shared_batch_lifecycle(reference):
+@pytest.mark.parametrize("owner_workflow", [False, True])
+async def test_configuration_embedded_optional_reference_uses_shared_batch_lifecycle(
+    reference, monkeypatch, owner_workflow,
+):
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", owner_workflow)
     async with SessionFactory() as session, session.begin():
         config = await session.scalar(select(Configuration).where(
             Configuration.source_sheet_id == reference.sheet_id,
@@ -156,8 +168,21 @@ async def test_configuration_embedded_optional_reference_uses_shared_batch_lifec
 
     resolved = await reference.resolve("001", write=True)
     assert resolved["status"] == "EXACT" and resolved["staging_updated"]
-    preview = await reference.preview(approve=True)
-    assert (await reference.apply(preview))["rows_applied"] == 1
+    preview = await reference.preview(approve=not owner_workflow)
+    if owner_workflow:
+        async with SessionFactory() as session, session.begin():
+            batch = await session.get(ImportReview, reference.batch_id)
+            assert batch.status == "READY_FOR_APPROVAL"
+            result = await ImportReviewService(session, reference.editor).apply(
+                batch.id, SimpleNamespace(
+                    revision_no=batch.revision_no, preview_token=preview["preview_token"],
+                    preview_hash=preview["preview_hash"], accept_source_conflicts=False,
+                    approval_comment="",
+                ),
+            )
+        assert result["rows_applied"] == 1
+    else:
+        assert (await reference.apply(preview))["rows_applied"] == 1
 
 
 async def test_alias_is_scoped_to_batch_sheet_and_edits_revoke_approval(reference):

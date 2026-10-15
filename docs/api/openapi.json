@@ -25502,6 +25502,16 @@
             "type": "boolean",
             "title": "Taxonomy Required",
             "default": false
+          },
+          "master_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MasterReferenceMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -27034,6 +27044,55 @@
           "source_conflict_policy"
         ],
         "title": "MasterImportPolicy"
+      },
+      "MasterReferenceMapping": {
+        "properties": {
+          "master_definition_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Master Definition Id"
+          },
+          "master_field": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "title": "Master Field"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "cardinality": {
+            "type": "string",
+            "enum": [
+              "MANY_TO_ONE",
+              "ONE_TO_ONE"
+            ],
+            "title": "Cardinality",
+            "default": "MANY_TO_ONE"
+          },
+          "normalization": {
+            "type": "string",
+            "const": "TRIM_CASEFOLD",
+            "title": "Normalization",
+            "default": "TRIM_CASEFOLD"
+          },
+          "aliases": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "maxProperties": 200,
+            "title": "Aliases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "master_definition_id",
+          "master_field"
+        ],
+        "title": "MasterReferenceMapping"
       },
       "MasterRevisionRequest": {
         "properties": {
