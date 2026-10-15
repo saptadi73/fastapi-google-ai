@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.core.exceptions import AppError
 from app.domain.enums import DATA_ROLES
+from app.domain.master_references import reference_storage_column
 from app.models.master import MasterColumnBinding
 from app.models.source import SourceSheet
 from app.repositories.base import TenantRepository
@@ -37,11 +38,22 @@ async def reference_context(session, user, sheet_id, config=None):
             if mapping is None:
                 continue
             if column.source_column in bindings_by_column:
-                raise AppError(
-                    "REFERENCE_BINDING_CONFLICT",
-                    "Kolom memakai relasi master pada konfigurasi dan binding tab lama; sisakan satu pemetaan.",
-                    409,
+                old = bindings_by_column[column.source_column]
+                identical = (
+                    str(old.master_definition_id) == str(mapping.master_definition_id)
+                    and old.master_field == mapping.master_field
+                    and old.required == mapping.required
+                    and old.cardinality == mapping.cardinality
+                    and old.normalization == mapping.normalization
+                    and old.aliases_json == mapping.aliases
                 )
+                if not identical:
+                    raise AppError(
+                        "REFERENCE_BINDING_CONFLICT",
+                        "Relasi konfigurasi berbeda dari binding lama untuk kolom "
+                        + column.source_column + ". Samakan master, field dan aturan pencocokannya.", 409,
+                    )
+                effective_bindings.remove(old)
             effective_bindings.append(SimpleNamespace(
                 id=None,
                 source_sheet_id=str(sheet_id),
@@ -68,8 +80,8 @@ async def reference_context(session, user, sheet_id, config=None):
         if binding.master_field not in {field.name for field in definition.fields}:
             raise AppError("MASTER_FIELD_INVALID", "Field referensi tidak tersedia.", 409)
         column = next((c for c in config.columns if c.source_column == binding.source_column), None) if config else None
-        if config and (not column or column.target_type != "uuid"):
-            raise AppError("REFERENCE_MAPPING_INVALID", "Binding referensi memerlukan kolom konfigurasi bertipe UUID.", 409)
+        if config and (not column or (column.target_type != "uuid" and not column.master_reference)):
+            raise AppError("REFERENCE_MAPPING_INVALID", "Pilih master dan field pencocokan pada mapping kolom sumber; identitas relasi disiapkan otomatis.", 409)
         await (await session.connection()).run_sync(lambda sync: check_storage(sync, table))
         records = [dict(r) for r in (await session.execute(select(table).where(
             table.c._tenant_id == user.tenant_id).order_by(table.c._record_id))).mappings()]
@@ -89,7 +101,7 @@ async def reference_context(session, user, sheet_id, config=None):
                     "definition": master.approved_definition_json, "records": records,
                     "field": binding.master_field, "required": binding.required,
                     "cardinality": binding.cardinality, "normalization": binding.normalization, "aliases": aliases}
-        context[binding.source_column] = {"binding": binding, "definition": definition, "active": active,
+        context[binding.source_column] = {"binding": binding, "definition": definition, "active": active, "user": user,
                                           "aliases": aliases, "column": column, "hash": digest(evidence)}
     return context
 
@@ -102,7 +114,17 @@ def validate_reference_rows(context, rows):
     for item in context.values():
         binding, column, seen = item["binding"], item["column"], set()
         for row in rows:
-            value = {**row.transformed_data, **row.corrected_data}.get(column.target_column)
+            if column.target_type != "uuid":
+                label = {**row.transformed_data, **row.corrected_data}.get(column.target_column)
+                match = resolve_value(item, "" if label is None else str(label), item["user"])
+                if match["status"] not in ("EXACT", "ALIAS", "EMPTY"):
+                    raise AppError("REFERENCE_" + match["status"],
+                                   f"Baris {row.source_row}, kolom {column.source_column}: nilai belum cocok secara unik dengan master.", 409)
+                row.corrected_data = {
+                    **row.corrected_data,
+                    reference_storage_column(column): match.get("record", {}).get("_record_id"),
+                }
+            value = {**row.transformed_data, **row.corrected_data}.get(reference_storage_column(column))
             if value in (None, ""):
                 if binding.required:
                     raise AppError("REFERENCE_REQUIRED", "Referensi wajib belum diselesaikan.", 409)

@@ -103,6 +103,8 @@ def physical_name(config, sheet_id):
 
 
 def compile_table(config, sheet_id):
+    from app.domain.master_references import reference_storage_column
+
     columns = [
         Column("_tenant_id", Uuid(as_uuid=False), nullable=False),
         Column("_source_sheet_id", Uuid(as_uuid=False), nullable=False),
@@ -112,6 +114,10 @@ def compile_table(config, sheet_id):
     ]
     for col in config.columns:
         columns.append(Column(col.target_column, mapped_type(col), nullable=col.nullable))
+        if col.master_reference and col.target_type != "uuid":
+            # Existing rows remain readable; required matches are enforced during
+            # validation and again at apply, without guessing a historical match.
+            columns.append(Column(reference_storage_column(col), Uuid(as_uuid=False), nullable=True))
     keys = [c.target_column for c in config.columns if c.is_business_key or c.is_primary_key]
     constraints = [UniqueConstraint("_tenant_id", *keys)] if keys else []
     if not keys:

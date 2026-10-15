@@ -63,6 +63,8 @@ class ConfigurationReviewService(ConfigurationService):
         return config, source, sheet, snapshot
 
     async def review(self, config_id):
+        from app.models.master import MasterColumnBinding
+
         config, source, sheet, _ = await self.context(config_id)
         profile = await SourceRepository(self.session, self.user.tenant_id).latest_profile(sheet.id)
         try:
@@ -78,6 +80,12 @@ class ConfigurationReviewService(ConfigurationService):
             "validation": validation,
             "capabilities": CAPABILITIES,
             "owner_workflow_enabled": get_settings().etl_owner_workflow_enabled,
+            "legacy_reference_bindings": [record(binding) for binding in (
+                await self.session.scalars(self.repo.query(MasterColumnBinding).where(
+                    MasterColumnBinding.source_sheet_id == sheet.id,
+                    MasterColumnBinding.status == "APPROVED",
+                ))
+            ).all()],
         }
 
     async def preview(self, config_id, data):

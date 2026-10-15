@@ -1060,7 +1060,6 @@ class ImportReviewService:
             current = references.get(evidence["source_column"])
             if not current or current["hash"] != evidence["hash"]:
                 raise AppError("REFERENCE_RESOLUTION_STALE", "Master/alias berubah; lakukan resolusi referensi ulang.", 409)
-        validate_reference_rows(references, rows)
         pinned_revision = review.checkpoint.get("preview_revision")
         if _read_only:
             if not review.checkpoint.get("preview_hash") or review.checkpoint.get("preview_format") != 2:
@@ -1071,6 +1070,7 @@ class ImportReviewService:
             # Canonicalization on GET must never persist corrections to staging.
             rows = [SimpleNamespace(source_row=row.source_row, transformed_data=dict(row.transformed_data),
                                     corrected_data=dict(row.corrected_data)) for row in rows]
+        validate_reference_rows(references, rows)
         canonicalize_rows(await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id,
                                                  config, lock=True), rows, config)
         target = None
@@ -1367,6 +1367,7 @@ class ImportReviewService:
         references = await reference_context(self.session, self.user, review.source_sheet_id, config)
         if reference_hash(references) != review.checkpoint.get("reference_preview_hash"):
             raise AppError("REFERENCE_RESOLUTION_STALE", "Dependency referensi berubah setelah preview.", 409)
+        validate_reference_rows(references, rows)
         if review.dependencies["dataset_kind"] == "MASTER" or references:
             # Rebuild the approved plan only after acquiring the per-master lock.
             # A valid signed token alone does not prove target/staging freshness.
@@ -1423,8 +1424,15 @@ class ImportReviewService:
                 # Restore JSON staging types for UPSERT as well as APPEND. Source
                 # transformations/conversions have already run and must not repeat.
                 try:
+                    from app.domain.master_references import reference_storage_column
+
+                    identities = {
+                        reference_storage_column(c): cast_value(values.get(reference_storage_column(c)), "uuid")
+                        for c in config.columns if c.master_reference and c.target_type != "uuid"
+                    }
                     values = {c.target_column: cast_value(values.get(c.target_column), c.target_type)
                               for c in config.columns}
+                    values.update(identities)
                 except (ValueError, TypeError, ArithmeticError):
                     raise AppError("IMPORT_STAGING_VALUE_INVALID", "Nilai staging tidak sesuai tipe target.", 422) from None
                 values = {**values, "_tenant_id": self.user.tenant_id, "_source_sheet_id": review.source_sheet_id, "_source_row": row.source_row, "_etl_run_id": review.id, "_row_hash": digest(values)}
@@ -1492,7 +1500,13 @@ class ImportReviewService:
         if writing and result["status"] in ("EXACT", "ALIAS", "EMPTY"):
             before = {**staging.transformed_data, **staging.corrected_data}.get(data.target_column)
             resolved = str(result["record"]["_record_id"]) if result.get("record") else None
-            staging.corrected_data = {**staging.corrected_data, data.target_column: resolved}
+            from app.domain.master_references import reference_storage_column
+
+            storage = reference_storage_column(item["column"])
+            corrections = {storage: resolved}
+            if item["column"].target_type != "uuid":
+                corrections[data.target_column] = data.value.strip() or None
+            staging.corrected_data = {**staging.corrected_data, **corrections}
             evidence = {**review.checkpoint.get("reference_resolutions", {}),
                         str(staging.id) + ":" + data.target_column: {"source_column": data.source_column, "hash": item["hash"]}}
             review.checkpoint = {k: v for k, v in review.checkpoint.items() if k not in (
@@ -1532,6 +1546,8 @@ class ImportReviewService:
                 )
                 good, issues, warnings = transform_rows(
                     review_values, SimpleNamespace(**review.dependencies["sheet"]), config,
+                    references=(await reference_context(self.session, self.user, review.source_sheet_id, config)
+                                if any(c.master_reference for c in config.columns) or review.dependencies.get("reference_hash") else {}),
                     taxonomy=await taxonomy_context(self.session, self.user.tenant_id, review.source_sheet_id, config, lock=True),
                     review_mode=True,
                 )

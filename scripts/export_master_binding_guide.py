@@ -37,6 +37,8 @@ def documents(frontend_root=None):
         f"| {r['symptom']} | {r['cause']} | {r['action']} |" for r in guide["troubleshooting"]
     )
     reference = "\n".join(f"{i}. {step}" for i, step in enumerate(guide["reference_steps"], 1))
+    if guide.get("reference_configuration_help"):
+        reference += "\n\n" + guide["reference_configuration_help"]
     prerequisites = "\n".join(f"- {item}" for item in guide["prerequisites"])
     completion = "\n".join(f"- {item}" for item in guide["completion"])
     full = (

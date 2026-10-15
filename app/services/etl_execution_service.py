@@ -136,7 +136,10 @@ class ETLExecutionService:
                 run_key=run_key,
                 rows_extracted=incremental_count if incremental_count is not None else profile["row_count"],
             )
+            from app.services.reference_service import reference_context
+
             good, issues, warnings = transform_rows(load_values, sheet, parsed,
+                references=await reference_context(self.session, self.user, sheet.id, parsed),
                 taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
             good = await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
             # Never replace trusted data with a partial/invalid FULL_REFRESH snapshot.

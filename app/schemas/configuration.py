@@ -138,7 +138,10 @@ class ColumnMapping(StrictModel):
     taxonomy_id: UUID | None = None
     taxonomy_version: int | None = Field(default=None, ge=1)
     taxonomy_required: bool = False
-    master_reference: MasterReferenceMapping | None = None
+    master_reference: MasterReferenceMapping | None = Field(
+        default=None,
+        description="Cocokkan kode/nama text/varchar dengan master aktif; identitas relasi disimpan otomatis pada kolom internal. Target UUID lama tetap kompatibel.",
+    )
 
     @model_validator(mode="after")
     def valid_numeric_scale(self):
@@ -182,9 +185,11 @@ class ColumnMapping(StrictModel):
         if self.taxonomy_required and self.taxonomy_id is None:
             raise ValueError("taxonomy_required memerlukan taxonomy_id")
         if self.master_reference is not None:
-            if self.target_type != "uuid" or self.is_business_key or self.is_primary_key:
-                raise ValueError("master_reference memerlukan kolom UUID non-key")
-            if self.master_reference.required and self.nullable:
+            if self.target_type not in ("text", "varchar", "uuid"):
+                raise ValueError("Relasi master memerlukan kode/nama bertipe text atau varchar")
+            if self.target_type == "uuid" and (self.is_business_key or self.is_primary_key):
+                raise ValueError("Kolom identitas relasi internal tidak boleh menjadi primary/business key")
+            if self.target_type == "uuid" and self.master_reference.required and self.nullable:
                 raise ValueError("Relasi master wajib memerlukan kolom non-nullable")
         if self.taxonomy_id is not None and (self.taxonomy_version is None or self.target_type not in ("text", "varchar")):
             raise ValueError("taxonomy_id requires taxonomy_version and text/varchar target")
@@ -301,6 +306,11 @@ class ETLConfiguration(StrictModel):
 
         names = [c.target_column for c in self.columns]
         sources = [c.source_column for c in self.columns]
+        from app.domain.master_references import reference_storage_column
+
+        references = [reference_storage_column(c) for c in self.columns if c.master_reference]
+        if len(references) != len(set(references)):
+            raise ValueError("Nama kolom relasi internal bertabrakan; pendekkan nama kolom target")
         if len(names) != len(set(names)) or len(sources) != len(set(sources)):
             raise ValueError("Source/target columns must be unique")
         keys = [c for c in self.columns if c.is_business_key or c.is_primary_key]

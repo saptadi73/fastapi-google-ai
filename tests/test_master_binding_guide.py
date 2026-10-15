@@ -22,7 +22,7 @@ def test_master_guide_generated_documents_are_current_and_not_truncated():
             "binding master Registry storage Simpan binding dry-run Setujui binding",
             "/masters",
             "binding-master-langkah",
-            "tidak ada langkah submit terpisah",
+            "Owner workflow",
         ),
         (
             "MASTER_BINDING_REQUIRED binding APPROVED record kosong Apply",
@@ -49,5 +49,6 @@ def test_binding_tutorial_uses_available_screen_actions():
     body = (Path(__file__).resolve().parents[1] / "docs/PANDUAN_BINDING_MASTER.md").read_text(
         encoding="utf-8"
     )
-    assert "Simpan binding & dry-run" in body and "Setujui binding" in body
-    assert "Record kanonis" in body and "binding APPROVED belum berarti record sudah dimuat" in body
+    assert "Simpan binding & dry-run" in body and "Owner workflow" in body
+    assert "Record kanonis" in body and "Preview" in body and "Apply" in body
+    assert "pengguna tidak perlu mengetik atau mencari UUID" in body

@@ -33,7 +33,7 @@ def test_non_master_column_can_declare_optional_master_reference():
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"target_type": "text"},
+        {"target_type": "bigint"},
         {"is_business_key": True},
         {"master_reference": {"master_definition_id": MASTER_ID, "master_field": "label", "required": True}},
         {"master_reference": {"master_definition_id": MASTER_ID, "master_field": "label", "aliases": {" A ": MASTER_ID, "a": MASTER_ID}}},

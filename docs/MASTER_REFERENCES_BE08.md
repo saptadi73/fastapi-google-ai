@@ -2,8 +2,9 @@
 
 Hardening 10 September 2026 membatasi resolusi ke binding approved milik tenant,
 tab batch, kolom sumber, dan master yang diminta. Binding harus menunjuk versi
-master aktif yang sesuai. Kolom konfigurasi tujuannya wajib bertipe `uuid`.
-Tidak ada migrasi database.
+master aktif yang sesuai. Target UUID pada konfigurasi lama tetap kompatibel.
+Mapping baru mempertahankan kode/nama sebagai text/varchar dan menyiapkan identitas
+relasi internal otomatis (lihat pembaruan 15 Oktober 2026 di bawah).
 
 ## Rekomendasi binding dari nama kolom
 
@@ -124,7 +125,7 @@ kontrak hash sebelumnya.
 |---|---|---|
 | REFERENCE_BINDING_REQUIRED | 409 | Simpan/approve binding tab dan kolom yang benar |
 | REFERENCE_BINDING_STALE | 409 | Perbarui binding ke versi master terbaru |
-| REFERENCE_MAPPING_INVALID | 409 pada context, 422 pada target request salah | Gunakan target konfigurasi UUID yang sesuai |
+| REFERENCE_MAPPING_INVALID | 409 pada context, 422 pada target request salah | Pilih master dan field pencocokan pada mapping; kode/nama tetap text/varchar |
 | MASTER_ALIAS_INVALID | 422 pada lifecycle, 409 pada context | Koreksi alias/target dan approve ulang |
 | REFERENCE_REQUIRED / REFERENCE_UNRESOLVED / REFERENCE_RECORD_UNAVAILABLE | 409 | Selesaikan referensi ke UUID aktif atau kosong opsional |
 | REFERENCE_CARDINALITY_CONFLICT | 409 | Hilangkan referensi berulang dalam batch ONE_TO_ONE |
@@ -152,3 +153,15 @@ Ini bukan acceptance provider nyata, rollout production, pengujian semua penulis
 eksternal, atau implementasi FK fisik BE-09. Fingerprint membaca seluruh record master
 yang dirujuk; benchmark/optimasi dataset besar masih BE-17. Otomatisasi pemilihan
 kandidat/pertanyaan dan alur ETL legacy tidak diperluas oleh perubahan ini.
+
+## Relasi dari kode/nama tanpa input UUID (15 Oktober 2026)
+
+Pada mapping NON_MASTER pilih master aktif dan field pencocokan, misalnya `BISNIS` → `master_business.bisnis` atau `BISNIS_CODE` → `bisnis_code`. Kode stabil lebih disarankan bila nama dapat berubah. `master_reference` menerima target text/varchar dan mempertahankan teks hasil cleansing. Identitas master disimpan otomatis pada `_ref_<target_column>` di tabel trusted; kolom internal tidak dimasukkan ke semantic view/kolom publik. Target UUID lama tetap didukung untuk kompatibilitas, tanpa mewajibkan pengguna menulis UUID pada Sheet.
+
+Dry-run, deploy, worker dan final apply memakai resolver yang sama: exact/alias unik atau kosong opsional diterima; nilai tidak ditemukan, ambigu, required kosong, pelanggaran kardinalitas dan pencarian field sensitif tanpa izin tetap diblokir. Pesan validasi menunjuk kolom sumber. Apply menghitung ulang identitas dari teks terkoreksi dan memeriksa dependency/hash master; UUID staging tidak dipercaya begitu saja. Preview baca tidak mengubah staging.
+
+Binding lama dan mapping embedded yang identik mewakili satu relasi, bukan konflik ganda. Jika master, field, required, kardinalitas, normalisasi atau alias berbeda, sistem meminta penyamaan aturan. Binding lama yang masih menunjuk target text tanpa deklarasi relasi ditandai saat validasi; form draft memuat binding tersebut agar dapat disimpan sebagai mapping terintegrasi.
+
+Penambahan kolom internal memakai migrasi nullable yang direview. Record historis tidak diubah diam-diam dan belum memiliki referensi sampai diproses ulang dengan strategi yang sesuai; APPEND SKIP_IDENTICAL tidak memperbarui record lama. Konfigurasi perlu divalidasi dan dideploy sebelum batch baru memakai struktur referensi. Pengguna cukup menyimpan mapping, menjalankan validasi dan memeriksa hasil pemuatan, tanpa mengelola tipe UUID manual.
+
+Verifikasi perubahan 15 Oktober: 114 tes schema/resolver/workflow, 32 tes integrasi referensi PostgreSQL (termasuk kode teks + identitas internal dan binding legacy identik), 7 tes preview baca, 5 tes panduan, 125 unit frontend dan satu skenario browser pemilihan/simpan relasi lulus. Typecheck/build, Ruff dan exporter dokumen lulus. Regresi lebih luas menemukan `test_import_idempotency_checkpoint_and_blocked_resume` mengharapkan satu audit notifikasi tetapi mendapat nol; kegagalan yang sama direproduksi pada baseline `e4fe537` di worktree terpisah, sehingga bukan akibat perubahan relasi ini. Pengujian tidak menyatakan seluruh suite aplikasi lulus.

@@ -25511,7 +25511,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Cocokkan kode/nama text/varchar dengan master aktif; identitas relasi disimpan otomatis pada kolom internal. Target UUID lama tetap kompatibel."
           }
         },
         "additionalProperties": false,

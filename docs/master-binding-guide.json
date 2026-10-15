@@ -104,7 +104,7 @@
       "result": "Batch master tersedia untuk pemeriksaan dan keputusan."
     },
     {
-      "title": "Review batch, approve dan Apply",
+      "title": "Validasi batch dan Apply",
       "where": "Batch import → batch master yang baru dibuat",
       "actor": "Source Owner / Data Steward pada owner workflow; reviewer pada workflow legacy",
       "actions": [
@@ -218,5 +218,6 @@
     "Batch pemuatan sudah SUCCEEDED setelah Apply.",
     "Record kanonis ditemukan dengan business key / label yang benar.",
     "Binding kolom referensi dibuat dan tervalidasi bila dipakai dataset lain."
-  ]
+  ],
+  "reference_configuration_help": "Konfigurasi ETL non-master menerima `master_reference` langsung pada mapping kolom. Di Workspace ETL, langkah Kolom menyediakan pilihan master, field kode/nama untuk pencocokan, kardinalitas, dan apakah relasi wajib. Isi Sheet serta kolom target tetap text/varchar: misalnya BISNIS berisi BSP atau BISNIS_CODE berisi BC06. Aplikasi mencari record aktif secara otomatis dan menyimpan identitasnya pada kolom internal terpisah; pengguna tidak perlu mengetik atau mencari UUID. Preview dan analitik tetap menampilkan kode/nama sumber. Nilai tidak ditemukan/ambigu, field sensitif tanpa izin, dan pelanggaran satu-ke-satu ditolak sebelum pemuatan. Binding tab lama yang identik digunakan sebagai relasi yang sama; aturan yang berbeda harus disamakan, bukan dipilih diam-diam. Konfigurasi UUID lama tetap kompatibel. Penambahan relasi tidak menebak isi record historis: kolom internal baru nullable; record lama belum memiliki referensi sampai diproses ulang melalui strategi yang sesuai."
 }

@@ -150,7 +150,7 @@ def cleanse_text_input(value, target_type):
     return value.strip() if target_type in ("text", "varchar") and isinstance(value, str) else value
 
 
-def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None, review_mode=False):
+def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None, review_mode=False, references=None):
     from app.services.taxonomy_validation_service import exact_terms, normalized
 
     for rule in config.data_quality_rules:
@@ -168,6 +168,7 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
             "CONFIGURATION_CONFLICT", "Kolom sumber berubah; lakukan profiling dan review ulang.", 409
         )
     good, issues, warnings, seen = [], [], [], {}
+    reference_seen = {}
     dq_seen, dq_failed = {}, {}
     keys = [c.target_column for c in config.columns if c.is_business_key or c.is_primary_key]
     for row_number, raw in enumerate(values[sheet.data_start_row - 1 :], sheet.data_start_row):
@@ -195,10 +196,15 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                 used_default = (value is None or value == "") and column.target_column in defaults
                 if used_default:
                     value = cleanse_text_input(defaults[column.target_column], column.target_type)
-                value = cast_value(
-                    value, column.target_type,
-                    source_timezone=None if used_default else column.source_timezone,
-                )
+                reference = (references or {}).get(column.source_column)
+                if reference and column.target_type == "uuid":
+                    # Legacy identity targets also consume codes/names from Sheets.
+                    pass
+                else:
+                    value = cast_value(
+                        value, column.target_type,
+                        source_timezone=None if used_default else column.source_timezone,
+                    )
                 if value is not None and column.target_type == "numeric":
                     value = apply_numeric_parameters(value, column, use_conversion=not used_default)
                 if value is not None and column.varchar_length is not None and len(value) > column.varchar_length:
@@ -206,6 +212,26 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                 if value is None and not column.nullable:
                     raise ValueError("Required value")
                 result[column.target_column] = value
+                if column.master_reference or reference:
+                    from app.domain.master_references import reference_storage_column
+                    from app.services.reference_service import resolve_value
+
+                    if reference is None:
+                        errors.append({"column": column.target_column, "code": "REFERENCE_CONTEXT_REQUIRED"})
+                        continue
+                    match = resolve_value(reference, "" if value is None else str(value), reference["user"])
+                    storage = reference_storage_column(column)
+                    if match["status"] not in ("EXACT", "ALIAS", "EMPTY"):
+                        result[storage] = None
+                        errors.append({"column": column.target_column, "code": "REFERENCE_" + match["status"]})
+                        continue
+                    record_id = match.get("record", {}).get("_record_id")
+                    result[storage] = record_id
+                    used = reference_seen.setdefault(column.source_column, set())
+                    if record_id and reference["binding"].cardinality == "ONE_TO_ONE" and record_id in used:
+                        errors.append({"column": column.target_column, "code": "REFERENCE_CARDINALITY_CONFLICT"})
+                    if record_id:
+                        used.add(record_id)
             except (ValueError, TypeError, InvalidOperation, OverflowError):
                 errors.append({"column": column.target_column, "code": "TYPE_OR_NULL_ERROR"})
         if not errors:
@@ -267,7 +293,7 @@ def transform_rows(values, sheet, config, *, reference_time=None, taxonomy=None,
                 bucket.add(key)
         if errors:
             issue = {"source_row": row_number, "data": raw, "errors": errors}
-            if review_mode and any(error["code"] == "IN_TAXONOMY" for error in errors):
+            if review_mode and any(error["code"] == "IN_TAXONOMY" or error["code"].startswith("REFERENCE_") for error in errors):
                 issue["transformed_data"] = result
             issues.append(issue)
         else:

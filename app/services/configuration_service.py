@@ -75,6 +75,7 @@ class ConfigurationService:
             "reviewed_sections": data.reviewed_sections,
             "snapshot_hash": validation["snapshot_hash"],
             "snapshot_id": validation["snapshot_id"],
+            "reference_hash": validation.get("reference_hash"),
             "classification_revision": sheet.classification_revision,
             "dataset_kind": sheet.dataset_kind,
             "schema_migration": validation["deployment_plan"]["migration"],
@@ -216,7 +217,16 @@ class ConfigurationService:
         )
         if snapshot is None:
             raise AppError("PROFILE_REQUIRED", "Snapshot belum tersedia.", 409)
+        reference_issues = []
+        try:
+            references = await self._reference_context(sheet.id, parsed)
+        except AppError as exc:
+            if exc.status_code == 403:
+                raise
+            references = {}
+            reference_issues.append({"code": exc.code, "message": exc.message})
         good, issues, warnings = transform_rows(snapshot.values, sheet, parsed,
+            references=references,
             taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
         good = await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
         suspected = {c["source_column"] for c in profile.profile_json["columns"] if c.get("pii_suspected")}
@@ -236,16 +246,21 @@ class ConfigurationService:
                 after[column.target_column] = "[REDACTED]" if sensitive else output[column.target_column]
             previews.append({"source_row": row_number, "before": before, "after": after})
         migration = await preview_schema_migration(parsed, sheet.id, self.user.tenant_id)
+        from app.services.reference_service import reference_hash
+
         return {
-            "valid": not parsed.unresolved_questions and not issues and migration["allowed"],
+            "valid": not parsed.unresolved_questions and not issues and not reference_issues and migration["allowed"],
             "classification": classification_record(sheet),
             "ready_for_review": not parsed.unresolved_questions
             and not issues
+            and not reference_issues
             and migration["allowed"]
             and classification_record(sheet)["execution_ready"],
             "sample_rows_valid": len(good),
             "sample_rows_invalid": len(issues),
             "warnings": warnings[:20],
+            "reference_issues": reference_issues,
+            "reference_hash": reference_hash(references),
             "unresolved_questions": parsed.unresolved_questions,
             "snapshot_id": snapshot.id,
             "snapshot_hash": snapshot.content_hash,
@@ -253,6 +268,12 @@ class ConfigurationService:
             "issues": [{"source_row": i["source_row"], "errors": i["errors"]} for i in issues[:50]],
             "deployment_plan": {**schema_plan(parsed, sheet.id, self.user.tenant_id), "migration": migration},
         }
+
+    async def _reference_context(self, sheet_id, parsed):
+        # Local import: master storage uses this service for compatibility.
+        from app.services.reference_service import reference_context
+
+        return await reference_context(self.session, self.user, sheet_id, parsed)
 
     async def patch(self, config_id, data):
         config = await self.repo.get(Configuration, config_id, lock=True)
@@ -419,7 +440,15 @@ class ConfigurationService:
         )
         if profile["fingerprint"] != config.based_on_fingerprint:
             raise AppError("CONFIGURATION_CONFLICT", "Schema sumber berubah sejak approval.", 409)
+        references = await self._reference_context(sheet.id, parsed)
+        from app.services.reference_service import reference_hash
+
+        if any(c.master_reference for c in parsed.columns) and (
+            (config.review_state or {}).get("reference_hash") != reference_hash(references)
+        ):
+            raise AppError("REFERENCE_RESOLUTION_STALE", "Master atau aturan pencocokan berubah; jalankan validasi konfigurasi kembali.", 409)
         good, issues, _ = transform_rows(values, sheet, parsed,
+            references=references,
             taxonomy=await taxonomy_context(self.session, self.user.tenant_id, sheet.id, parsed, lock=True))
         await canonicalize_outputs(self.session, self.user.tenant_id, sheet.id, parsed, good)
         if issues or parsed.unresolved_questions:

@@ -185,6 +185,48 @@ async def test_configuration_embedded_optional_reference_uses_shared_batch_lifec
         assert (await reference.apply(preview))["rows_applied"] == 1
 
 
+@pytest.mark.parametrize("legacy_binding", [False, True])
+async def test_human_reference_preserves_text_and_loads_internal_identity_without_reviewer(
+    reference, monkeypatch, legacy_binding,
+):
+    # Existing equivalent bindings must not make the embedded UI mapping fail.
+    if legacy_binding:
+        await reference.bind(required=False)
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    async with SessionFactory() as session, session.begin():
+        config = await session.scalar(select(Configuration).where(Configuration.source_sheet_id == reference.sheet_id))
+        data = dict(config.configuration_json)
+        data["columns"] = [{**c, **({
+            "target_type": "text",
+            "master_reference": {"master_definition_id": reference.master_id, "master_field": "code"},
+        } if c["source_column"] == "Product" else {})} for c in data["columns"]]
+        parsed = ETLConfiguration.model_validate(data)
+        config.configuration_json = parsed.model_dump(mode="json")
+        batch = await session.get(ImportReview, reference.batch_id)
+        batch.configuration_json = config.configuration_json
+        batch.dependencies = {**batch.dependencies, "configuration_id": config.id,
+                              "configuration_revision": config.revision_no}
+        row = await session.get(ImportReviewRow, reference.row_id)
+        row.transformed_data = {"code": "T1", "product_id": "001"}
+        # Recreate only this disposable test table with the proposed schema.
+        await (await session.connection()).run_sync(reference.consumer.drop)
+        table = compile_table(parsed, reference.sheet_id)
+        await (await session.connection()).run_sync(table.create)
+    preview = await reference.preview()
+    async with SessionFactory() as session, session.begin():
+        batch = await session.get(ImportReview, reference.batch_id)
+        assert batch.status == "READY_FOR_APPROVAL"
+        result = await ImportReviewService(session, reference.editor).apply(
+            batch.id, SimpleNamespace(revision_no=batch.revision_no,
+                preview_token=preview["preview_token"], preview_hash=preview["preview_hash"],
+                accept_source_conflicts=False, approval_comment=""),
+        )
+        assert result["rows_applied"] == 1
+        stored = (await session.execute(select(table))).mappings().one()
+        assert stored["product_id"] == "001"
+        assert str(stored["_ref_product_id"]) == reference.record_id
+
+
 async def test_alias_is_scoped_to_batch_sheet_and_edits_revoke_approval(reference):
     await reference.bind(aliases={"local": reference.record_id})
     await reference.bind(aliases={"elsewhere": reference.record_id}, source_sheet=reference.sheets[0].id)

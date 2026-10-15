@@ -1,7 +1,7 @@
 ---
 id: "binding-master-pemuatan"
 title: "Binding master: pemuatan record dan troubleshooting"
-summary: "Buat batch master, selesaikan temuan, Preview dan Apply owner-managed; MASTER_BINDING_REQUIRED dan tombol tidak aktif."
+summary: "Buat batch review/import, Preview, approval, Apply, Record kanonis; MASTER_BINDING_REQUIRED dan tombol tidak aktif."
 routes: ["/masters", "/masters/*", "/sources/*", "/guide"]
 audiences: ["PLATFORM_ADMIN", "SOURCE_OWNER", "DATA_STEWARD", "TECHNICAL_APPROVER"]
 source: "docs/PANDUAN_BINDING_MASTER.md"
@@ -17,7 +17,7 @@ Halaman: **Storage & record master → Sumber master terikat**. Pelaksana: Sourc
 - Tekan Buat batch review/import dan pantau proses melalui Batch import atau monitor job.
 - Pemuatan MASTER tetap memakai alur batch, bukan jalur sync langsung NON_MASTER.
 
-Hasil sebelum lanjut: **Batch master tersedia untuk validasi dan pemuatan oleh pemilik.**.
+Hasil sebelum lanjut: **Batch master tersedia untuk pemeriksaan dan keputusan.**.
 
 ### 8. Validasi batch dan Apply
 
@@ -26,7 +26,7 @@ Halaman: **Batch import → batch master yang baru dibuat**. Pelaksana: Source O
 - Selesaikan pertanyaan wajib, nilai tidak valid, kandidat record baru dan konflik sesuai policy.
 - Jalankan Preview dan periksa record baru/update, konflik, dependency serta dampak pemuatan.
 - Owner workflow dapat Apply setelah validasi, preview terbaru, dan konfirmasi konflik yang diwajibkan; legacy mengikuti approval batch yang berlaku.
-- Pantau sampai SUCCEEDED dan periksa jumlah record dimuat. Jika data/snapshot berubah, buat preview baru sesuai pesan blocker.
+- Pantau sampai SUCCEEDED dan periksa jumlah record dimuat. Jika data/snapshot berubah, gunakan review terbaru sesuai pesan blocker.
 
 Hasil sebelum lanjut: **Apply sukses; record rujukan benar-benar masuk ke storage master.**.
 
