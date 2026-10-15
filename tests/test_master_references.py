@@ -8,8 +8,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from test_master_apply_postgres import master as master
 
-from app.core.database import SessionFactory
 from app.core.config import get_settings
+from app.core.database import SessionFactory
 from app.core.exceptions import AppError
 from app.models.configuration import Configuration
 from app.models.etl import Snapshot
