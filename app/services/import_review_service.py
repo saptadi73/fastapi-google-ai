@@ -1232,6 +1232,8 @@ class ImportReviewService:
             else:
                 comparable = {k: before.get(k) for k in after}
                 outcome = "UNCHANGED" if key in identical_versions or comparable == after else "UPDATE"
+                if definition is None and config.load_strategy == "APPEND":
+                    outcome, reason = "UNCHANGED", "APPEND_KEY_EXISTS"
                 if definition and outcome == "UPDATE":
                     conflict = self.source_policy_change(definition.policy, review.source_sheet_id, before)
                     if conflict == "FORBIDDEN":
@@ -1512,6 +1514,12 @@ class ImportReviewService:
             stmt = insert(table).values(**values)
             if review.dependencies["dataset_kind"] != "MASTER" and keyless_append(config):
                 loaded += await append_row(self.session, table, values, config)
+                continue
+            if review.dependencies["dataset_kind"] != "MASTER" and config.load_strategy == "APPEND" and keys:
+                # Keyed APPEND follows the ETL runtime: retain existing records.
+                # An UPSERT clause would require UPDATE even for a brand-new key.
+                result = await self.session.execute(stmt.on_conflict_do_nothing(index_elements=["_tenant_id", *keys]))
+                loaded += max(0, result.rowcount)
                 continue
             if keys and version_rows is None:
                 updates = {k: stmt.excluded[k] for k in values if k not in ("_tenant_id", *keys, "_record_id")}

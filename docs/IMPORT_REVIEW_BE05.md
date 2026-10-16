@@ -1,5 +1,10 @@
 # Batch review import — BE-05
 
+APPEND dengan business/primary key hanya menambah key baru. Key yang sudah tersedia
+ditampilkan sebagai UNCHANGED dengan alasan APPEND_KEY_EXISTS dan tidak diperbarui,
+sesuai jalur ETL biasa. Apply memakai INSERT ON CONFLICT DO NOTHING, tidak memerlukan
+izin UPDATE, dan rows_applied menghitung insert yang benar-benar terjadi.
+
 BE-05 memperkenalkan batch persisten, snapshot tetap, checkpoint worker, idempotency,
 temuan deterministik, cancel, revalidate, dan resume. Bagian yang menyebut
 `AI_REVIEW_NOT_IMPLEMENTED`, tidak memanggil AI, atau belum tersedia apply adalah catatan

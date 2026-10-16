@@ -6,15 +6,18 @@ import pytest
 from sqlalchemy import select
 from test_be12_append import append_config
 from test_import_reviews import create, non_master
-from test_integration import activate, onboard, request, sync
+from test_integration import activate, onboard, request
 from test_integration import context as context
 
 from app.core.database import SessionFactory
+from app.models.auth import User
+from app.models.etl import Job
 from app.models.import_review import ImportReview, ImportReviewRow
 from app.services.append_service import append_row
 from app.services.etl_compiler_service import transform_rows
 from app.services.profiling_service import canonical_json
 from app.services.schema_compiler_service import compile_table
+from app.workers.runner import run_pending
 
 pytestmark = pytest.mark.integration
 
@@ -94,14 +97,28 @@ async def test_identical_arrives_after_approval_and_rolls_back_earlier_inserts(c
 
 
 @pytest.mark.parametrize("policy", ["SKIP_IDENTICAL", "REJECT_IDENTICAL"])
-async def test_legacy_sync_uses_same_append_policy(context, config_data, policy):
+async def test_legacy_sync_uses_same_append_policy(context, config_data, policy, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
     config = append_config(config_data, policy)
     source_id, sheet_id, stored_config = await onboard(context, config.model_dump(mode="json"))
     await activate(context, stored_config)
-    assert (await sync(context, source_id))["status"] == "SUCCEEDED"
+    async def legacy_sync():
+        # /sync now starts the batch workflow. Exercise the retained ETL worker explicitly.
+        async with SessionFactory() as session, session.begin():
+            user = await session.scalar(select(User).where(User.tenant_id == context.tenant_id, User.username == "admin"))
+            job = Job(tenant_id=context.tenant_id, source_id=source_id, requested_by=user.id, kind="ETL", payload={})
+            session.add(job)
+            await session.flush()
+            job_id = job.id
+        await run_pending(context.tenant_id)
+        return (await request(context, "GET", f"/jobs/{job_id}"))["data"]
+
+    assert (await legacy_sync())["status"] == "SUCCEEDED"
     # A different snapshot contains a new event followed by already-loaded events.
     context.values.insert(1, ["004", "2026-09-04", "Jakarta", 75])
-    job = await sync(context, source_id)
+    job = await legacy_sync()
     table = compile_table(config, sheet_id)
     async with SessionFactory() as session:
         rows = (await session.execute(select(table))).mappings().all()

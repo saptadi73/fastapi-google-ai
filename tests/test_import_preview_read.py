@@ -151,6 +151,24 @@ async def test_legacy_defaults_allow_preview_and_owner_apply(context, config_dat
     assert result["review"]["checkpoint"]["approval_mode"] == "OWNER_VALIDATED"
 
 
+async def test_keyed_append_keeps_existing_values_and_counts_only_inserts(context, config_data, monkeypatch):
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    config_data["load_strategy"] = "APPEND"
+    review, table = await staged(context, config_data)
+    path = f"/import-reviews/{review['id']}"
+    preview = (await request(context, "POST", path + "/preview", data={"revision_no": 1}))["data"]
+    assert preview["summary"]["unchanged"] == 1 and preview["summary"]["update"] == 0
+    assert preview["changes"][0]["reason_code"] == "APPEND_KEY_EXISTS"
+    result = (await request(context, "POST", path + "/apply", data={
+        "revision_no": 1, "preview_token": preview["preview_token"], "preview_hash": preview["preview_hash"],
+    }))["data"]
+    assert result["status"] == "SUCCEEDED" and result["rows_applied"] == 2
+    async with SessionFactory() as session:
+        records = (await session.execute(select(table).order_by(table.c.transaction_id))).mappings().all()
+        assert len(records) == 3 and records[0]["net_amount"] == 777
+        assert records[0]["branch_name"] == "sensitive-before"
+
+
 async def test_stale_readiness_and_replacement_use_active_config_and_latest_snapshot(context, config_data):
     from app.models.etl import Snapshot
     from app.models.source import SourceSheet
