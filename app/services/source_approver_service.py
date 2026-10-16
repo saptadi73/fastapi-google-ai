@@ -2,6 +2,7 @@
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import REVIEW_ROLES
 from app.models.auth import User
@@ -13,13 +14,22 @@ WORKFLOWS = ("metadata_review", "configuration", "import_review")
 
 
 async def require_source_approver(session, actor, source_id, workflow):
+    if get_settings().etl_owner_workflow_enabled:
+        from app.domain.enums import EDIT_ROLES
+        from app.services.workflow_policy_service import require_source_manager
+
+        if actor.role in EDIT_ROLES:
+            return await require_source_manager(session, actor, source_id)
     if actor.role not in REVIEW_ROLES:
         raise AppError("FORBIDDEN", "Peran reviewer diperlukan untuk keputusan ini.", 403)
     repo = TenantRepository(session, actor.tenant_id)
     source = await repo.get(DataSource, source_id)
-    if source.approval_assignees is None and workflow == "metadata_review" and actor.role != "PLATFORM_ADMIN":
+    if get_settings().etl_owner_workflow_enabled:
+        from app.services.workflow_policy_service import require_source_reader
+        await require_source_reader(session, actor, source.id)
+    if not get_settings().etl_owner_workflow_enabled and source.approval_assignees is None and workflow == "metadata_review" and actor.role != "PLATFORM_ADMIN":
         raise AppError("FORBIDDEN", "Review metadata sumber lama memerlukan admin hingga approver ditunjuk.", 403)
-    if source.approval_assignees is not None and actor.id not in source.approval_assignees.get(workflow, []):
+    if not get_settings().etl_owner_workflow_enabled and source.approval_assignees is not None and actor.id not in source.approval_assignees.get(workflow, []):
         raise AppError("SOURCE_APPROVER_NOT_ASSIGNED", "Anda tidak ditunjuk sebagai approver sumber untuk keputusan ini.", 403)
     return source
 

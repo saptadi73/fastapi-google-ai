@@ -16,6 +16,7 @@ from app.services.configuration_service import ConfigurationService
 from app.services.profiling_service import digest
 from app.services.source_service import SourceService
 from app.services.workbook_service import decode, identities, parse_workbook, token
+from app.services.workflow_policy_service import require_source_reader
 
 CAPABILITIES = {
     "review_sections": REVIEW_SECTIONS,
@@ -51,6 +52,7 @@ class ConfigurationReviewService(ConfigurationService):
     async def context(self, config_id, *, lock=False):
         config = await self.repo.get(Configuration, config_id, lock=lock)
         source = await self.repo.get(DataSource, config.source_id)
+        await require_source_reader(self.session, self.user, source.id)
         sheet = await self.repo.get(SourceSheet, config.source_sheet_id)
         snapshot = await self.session.scalar(
             self.repo.query(Snapshot)

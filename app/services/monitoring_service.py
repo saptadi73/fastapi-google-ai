@@ -1,5 +1,6 @@
 from sqlalchemy import func, select
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.audit import AIUsage
 from app.models.etl import Job, QualityIssue
@@ -7,6 +8,7 @@ from app.models.source import DataSource
 from app.repositories.base import TenantRepository, record
 from app.services.audit_service import audit
 from app.services.job_service import enqueue
+from app.services.workflow_policy_service import require_source_manager
 
 
 class MonitoringService:
@@ -27,6 +29,8 @@ class MonitoringService:
         return await enqueue(self.session, self.user, job.kind, job.source_id, **job.payload)
 
     async def pause(self, source_id, paused):
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, source_id)
         source = await self.repo.get(DataSource, source_id, lock=True)
         source.paused = paused
         audit(self.session, self.user, "source.paused" if paused else "source.resumed", source.id)
@@ -34,6 +38,8 @@ class MonitoringService:
 
     async def resolve(self, issue_id, resolution):
         issue = await self.repo.get(QualityIssue, issue_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, issue.source_id)
         issue.status, issue.resolution = "RESOLVED", resolution
         audit(self.session, self.user, "quality_issue.resolved", issue.id)
         return record(issue, exclude=("data",))

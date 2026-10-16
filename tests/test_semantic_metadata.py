@@ -10,6 +10,12 @@ from app.schemas.semantic import JoinRelationshipCreate, JoinRelationshipUpdate,
 from app.services.semantic_catalog_service import SemanticCatalogService
 
 
+@pytest.fixture(autouse=True)
+def legacy_contract(monkeypatch):
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
+
+
 @pytest.mark.parametrize("payload", [
     {"name": "New"}, {"name": "  ", "expected_version": 1},
     {"name": None, "expected_version": 1}, {"description": None, "expected_version": 1},

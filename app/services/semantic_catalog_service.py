@@ -1,5 +1,6 @@
 from sqlalchemy import String, case, cast, func, select
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.audit import AuditEvent
 from app.models.configuration import Configuration
@@ -12,6 +13,7 @@ from app.repositories.semantic_repository import SemanticRepository
 from app.schemas.semantic import QueryPlan
 from app.services.audit_service import audit
 from app.services.query_execution_service import QueryExecutionService
+from app.services.workflow_policy_service import require_source_manager
 
 
 def normalize_intent(question):
@@ -39,8 +41,14 @@ class SemanticCatalogService:
         self.session, self.user = session, user
         self.repo = SemanticRepository(session, user.tenant_id)
 
+    async def require_product_manager(self, product):
+        if get_settings().etl_owner_workflow_enabled:
+            sheet = await self.repo.get(SourceSheet, product.source_sheet_id)
+            await require_source_manager(self.session, self.user, sheet.source_id)
+
     async def update_product(self, product_id, data):
         product = await self.repo.get(DataProduct, product_id, lock=True)
+        await self.require_product_manager(product)
         if data.expected_version is not None and product.version != data.expected_version:
             raise AppError("PRODUCT_VERSION_CONFLICT", "Versi produk berubah; muat ulang katalog dan tinjau edit lokal.", 409)
         changes = data.model_dump(mode="json", exclude_none=True, exclude={"expected_version", "metric_metadata"})
@@ -72,6 +80,8 @@ class SemanticCatalogService:
     async def create_join_relationship(self, data):
         left = await self.repo.product(data.left_product_code, self.user)
         right = await self.repo.product(data.right_product_code, self.user)
+        await self.require_product_manager(left)
+        await self.require_product_manager(right)
         if left.id == right.id:
             raise AppError("JOIN_PRODUCT_INVALID", "Relationship harus menghubungkan dua product berbeda.", 422)
         for product, column in ((left, data.left_column), (right, data.right_column)):
@@ -94,6 +104,8 @@ class SemanticCatalogService:
             raise AppError("JOIN_RELATIONSHIP_REVISION_CONFLICT", "Relationship berubah atau bukan draft.", 409)
         left = await self.repo.product(data.left_product_code, self.user)
         right = await self.repo.product(data.right_product_code, self.user)
+        await self.require_product_manager(left)
+        await self.require_product_manager(right)
         if left.id == right.id:
             raise AppError("JOIN_PRODUCT_INVALID", "Relationship harus menghubungkan dua product berbeda.", 422)
         for product, column in ((left, data.left_column), (right, data.right_column)):
@@ -118,6 +130,7 @@ class SemanticCatalogService:
             (obj.left_product_code, obj.left_column),
             (obj.right_product_code, obj.right_column),
         ):
+            await self.require_product_manager(await self.repo.product(product_code, self.user))
             view = await self.repo.product_record(product_code, self.user)
             selected = next((item for item in view["columns"] if item["target_column"] == column), None)
             if selected is None:
@@ -131,6 +144,8 @@ class SemanticCatalogService:
 
     async def reject_join_relationship(self, relationship_id, data):
         obj = await self.repo.get(JoinRelationship, relationship_id, lock=True)
+        for code in (obj.left_product_code, obj.right_product_code):
+            await self.require_product_manager(await self.repo.product(code, self.user))
         if obj.revision_no != data.revision_no or obj.status != "DRAFT":
             raise AppError("JOIN_RELATIONSHIP_REVISION_CONFLICT", "Relationship berubah atau bukan draft.", 409)
         obj.status, obj.revision_no = "REJECTED", obj.revision_no + 1
@@ -140,6 +155,7 @@ class SemanticCatalogService:
     async def validate_saved(self, template_id):
         obj = await self.repo.get(SavedQuery, template_id, lock=True)
         product = await self.repo.product(obj.data_product_code, self.user)
+        await self.require_product_manager(product)
         plan = QueryPlan.model_validate(obj.plan)
         await QueryExecutionService(self.session, self.user).compile(product.code, plan)
         obj.status, obj.semantic_version = "VALIDATED", product.version
@@ -149,6 +165,7 @@ class SemanticCatalogService:
     async def activate_saved(self, template_id):
         obj = await self.repo.get(SavedQuery, template_id, lock=True)
         product = await self.repo.product(obj.data_product_code, self.user)
+        await self.require_product_manager(product)
         if obj.status != "VALIDATED" or obj.semantic_version != product.version:
             raise AppError(
                 "TEMPLATE_VALIDATION_REQUIRED", "Validasi template terhadap semantic version terkini.", 409
@@ -322,6 +339,7 @@ class SemanticCatalogService:
 
     async def create_saved(self, data):
         product = await self.repo.product(data.data_product_code, self.user)
+        await self.require_product_manager(product)
         await QueryExecutionService(self.session, self.user).compile(product.code, data.plan)
         obj = await self.repo.add(
             SavedQuery,

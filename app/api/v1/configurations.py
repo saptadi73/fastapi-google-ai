@@ -27,6 +27,7 @@ from app.services.access_service import AccessService
 from app.services.configuration_review_service import CAPABILITIES, ConfigurationReviewService
 from app.services.configuration_service import ConfigurationService
 from app.services.retired_table_service import RetiredTableService
+from app.services.workflow_policy_service import require_source_reader, workflow_reviewer
 
 router = APIRouter(
     prefix="/configurations",
@@ -34,18 +35,18 @@ router = APIRouter(
     dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))],
 )
 edit = [Depends(require_roles(*EDIT_ROLES))]
-review = [Depends(require_roles(*REVIEW_ROLES))]
+review = [Depends(workflow_reviewer)]
 
 
 async def deploy_actor(user: CurrentUser):
-    permitted = (*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
+    permitted = EDIT_ROLES if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
     if user.role not in permitted:
         raise AppError("FORBIDDEN", "Role tidak memiliki izin untuk deploy.", 403)
     return user
 
 
 async def rollback_actor(user: CurrentUser):
-    permitted = (*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
+    permitted = EDIT_ROLES if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
     if user.role not in permitted:
         raise AppError("FORBIDDEN", "Role tidak memiliki izin untuk rollback.", 403)
     return user
@@ -57,6 +58,9 @@ async def configuration_access_review(config_id: UUID, session: Session, user: C
 
 
 async def _guard_configuration_source(session, user, config):
+    if get_settings().etl_owner_workflow_enabled:
+        await require_source_reader(session, user, config.source_id)
+        return
     source = await session.scalar(
         ConfigurationService(session, user).repo.query(DataSource).where(DataSource.id == config.source_id)
     )
@@ -180,7 +184,9 @@ async def retired_tables(
 
 @router.get("/{config_id}")
 async def get(config_id: UUID, session: Session, user: CurrentUser):
-    return success(record(await ConfigurationService(session, user).repo.get(Configuration, config_id)))
+    config = await ConfigurationService(session, user).repo.get(Configuration, config_id)
+    await require_source_reader(session, user, config.source_id)
+    return success(record(config))
 
 
 @router.patch("/{config_id}", dependencies=edit)
@@ -191,7 +197,9 @@ async def patch(config_id: UUID, data: ConfigurationPatch, session: Session, use
 @router.post("/{config_id}/validate")
 async def validate(config_id: UUID, session: Session, user: CurrentUser):
     service = ConfigurationService(session, user)
-    return success(await service.validate(await service.repo.get(Configuration, config_id)))
+    config = await service.repo.get(Configuration, config_id)
+    await require_source_reader(session, user, config.source_id)
+    return success(await service.validate(config))
 
 
 @router.post("/{config_id}/submit-review", dependencies=edit)
@@ -199,7 +207,7 @@ async def submit_review(config_id: UUID, data: ReviewSubmission, session: Sessio
     return success(record(await ConfigurationService(session, user).submit_review(config_id, data)))
 
 
-@router.post("/{config_id}/approve", dependencies=review)
+@router.post("/{config_id}/approve", dependencies=[Depends(workflow_reviewer)])
 async def approve(config_id: UUID, data: Decision, session: Session, user: CurrentUser):
     return success(record(await ConfigurationService(session, user).decision(config_id, data, "APPROVED")))
 
@@ -265,9 +273,14 @@ async def download(config_id: UUID, artifact_id: UUID, session: Session, user: C
 @router.get("/{config_id}/questions")
 async def questions(config_id: UUID, session: Session, user: CurrentUser):
     config = await ConfigurationService(session, user).repo.get(Configuration, config_id)
+    await require_source_reader(session, user, config.source_id)
     return success(config.configuration_json["unresolved_questions"])
 
 
 @router.get("/{config_id}/diff")
 async def diff(config_id: UUID, against: UUID, session: Session, user: CurrentUser):
+    service = ConfigurationService(session, user)
+    for key in (config_id, against):
+        config = await service.repo.get(Configuration, key)
+        await require_source_reader(session, user, config.source_id)
     return success(await ConfigurationService(session, user).compare(config_id, against))

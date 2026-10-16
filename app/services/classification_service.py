@@ -1,3 +1,4 @@
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.domain.enums import EDIT_ROLES
 from app.models.base import now
@@ -110,6 +111,10 @@ class ClassificationService:
         if self.user.role not in EDIT_ROLES:
             raise AppError("FORBIDDEN", "Peran tidak dapat mengubah klasifikasi.", 403)
         sheet = await self.locked_sheet(sheet_id)
+        if get_settings().etl_owner_workflow_enabled:
+            from app.services.workflow_policy_service import require_source_manager
+
+            await require_source_manager(self.session, self.user, sheet.source_id)
         if data.revision_no != sheet.classification_revision:
             raise AppError("CLASSIFICATION_CONFLICT", "Revisi klasifikasi berubah; muat ulang tab.", 409)
         kind = data.dataset_kind.value

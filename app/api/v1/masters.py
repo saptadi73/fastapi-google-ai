@@ -18,6 +18,7 @@ from app.schemas.master import (
 )
 from app.services.master_service import MasterService
 from app.services.master_storage_service import MasterStorageService
+from app.services.workflow_policy_service import workflow_reviewer
 
 router = APIRouter(
     tags=["Master registry"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))]
@@ -26,13 +27,13 @@ edit = [Depends(require_roles(*EDIT_ROLES))]
 
 
 async def storage_deploy_actor(user: CurrentUser):
-    permitted = (*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
+    permitted = EDIT_ROLES if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES
     if user.role not in permitted:
         raise AppError("FORBIDDEN", "Role tidak memiliki izin deploy storage master.", 403)
     return user
 
 
-review = [Depends(require_roles(*REVIEW_ROLES))]
+review = [Depends(workflow_reviewer)]
 
 
 @router.get("/master-definitions/dependency-plan")

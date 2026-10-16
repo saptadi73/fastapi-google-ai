@@ -1,18 +1,18 @@
 ---
 id: konfigurasi-import-dan-operasi
 title: Konfigurasi ETL, batch import, dan operasi
-summary: Cara owner memvalidasi, deploy, sync, dan menelusuri blocker; review rutin hanya untuk item legacy.
+summary: Cara owner memvalidasi, deploy, sync, dan menelusuri blocker; tanpa approver terpisah, termasuk item lama pada owner workflow.
 routes: ["/sources", "/workspace", "/etl-review/*", "/configurations/*", "/import-reviews", "/import-reviews/*", "/release-approvals", "/imports/*", "/jobs", "/quality", "/data-catalog"]
 audiences: ["PLATFORM_ADMIN", "SOURCE_OWNER", "DATA_STEWARD", "TECHNICAL_APPROVER"]
 source: docs/PANDUAN_REVIEW_ETL.md
 ---
 Konfigurasi menentukan mapping kolom, tipe, cleansing, kualitas, key, strategi load, dan semantic. Mulai dengan draft manual dari template hasil profiling untuk kontrol yang jelas; rekomendasi AI bersifat opsional bila tersedia.
 
-Approver memeriksa spreadsheet dan semua tab saat registrasi sumber, termasuk klasifikasi MASTER/NON_MASTER dan risiko sumber ganda. Sesudah lolos pemeriksaan awal, data owner/steward mengelola konfigurasi, validasi, deploy, serta sync tanpa approval rutin kedua. Konfigurasi atau batch legacy dapat tetap menampilkan reviewer; ikuti gate yang tampil pada item tersebut.
+Pada owner workflow, pengelola satu unit mendaftarkan sumber, memvalidasi metadata, menyiapkan konfigurasi dan menjalankan deploy/sync tanpa approver terpisah. Gate reviewer lama tidak menghalangi item lama yang lolos validasi terkini.
 
 **Alur NON_MASTER:** pilih sumber/tab, siapkan mapping dan aturan, jawab pertanyaan, jalankan dry-run, perbaiki blocker, lalu Validasi & siapkan deploy. Pemilik data yang tercatat dapat Deploy. Setelah aktif, Sync manual menjalankan pemeriksaan sumber, akses, kualitas, AI bila dikonfigurasi, dan konflik sebelum memuat. `FULL_REFRESH` mengganti semua baris dalam transaksi setelah validasi; bila gagal, data aktif lama dipertahankan.
 
-**Alur MASTER:** kelola definisi dan business key pada Registry master, validasi, tinjau rencana lalu deploy storage. Petakan tab MASTER, simpan binding dan jalankan validasi. Buat batch import, selesaikan temuan, jalankan Preview, lalu Apply setelah konfirmasi. Binding valid tidak berarti record sudah dimuat. Untuk item legacy, ikuti reviewer yang masih ditampilkan.
+**Alur MASTER:** kelola definisi dan business key pada Registry master, validasi, tinjau rencana lalu deploy storage. Petakan tab MASTER, simpan binding dan jalankan validasi. Buat batch import, selesaikan temuan, jalankan Preview, lalu Apply setelah konfirmasi. Binding valid tidak berarti record sudah dimuat. Item lama juga mengikuti alur pengelola saat owner workflow aktif.
 
 **Jika Google Sheet berubah:** tekan Temukan tab untuk membaca ulang tab, lalu Profiling ulang. Perbarui draft dan mapping berdasarkan profil terbaru, validasi ulang dan deploy. Notifikasi perubahan tetap terbuka jika profiling gagal atau konfigurasi masih perlu diperiksa; owner validation yang berhasil menutupnya pada jalur owner-managed. Sheet tidak dipantau secara live. `DRIVE_API_NOT_ENABLED` berarti admin perlu mengaktifkan Google Drive API pada project service account; profiling manual masih dapat digunakan. `SOURCE_CHANGE_CHECK_DENIED` juga dapat menunjukkan izin metadata Drive belum cukup.
 
@@ -22,6 +22,6 @@ Approver memeriksa spreadsheet dan semua tab saat registrasi sumber, termasuk kl
 
 Di **Sumber & tracking**, gunakan pencarian dan pagination untuk memilih sumber lalu **Buka sumber**. Tabel tahap per tab menunjukkan discovery, profiling, konfigurasi/binding, approval IT awal, database, dan status kegagalan terakhir. **Approval IT** adalah pemeriksaan registrasi sumber/tab, bukan persetujuan ETL berulang. **Batch Import** juga menyediakan daftar sumber yang dapat dicari.
 
-Di Katalog, produk aktif belum tentu sudah memuat baris. Periksa job dan batch per tab, jumlah baris, timestamp, konfigurasi aktif, binding dependency, dan izin pembaca. Default READ/QUERY menggunakan domain dan business unit pemilik; pemilik dapat membatasi lebih lanjut dengan policy khusus. Akses data terpisah dari approval sumber.
+Di Katalog, produk aktif belum tentu sudah memuat baris. Periksa job dan batch per tab, jumlah baris, timestamp, konfigurasi aktif, binding dependency, dan izin pembaca. Default READ/QUERY pada owner workflow menggunakan unit bisnis pemilik; pemilik dapat membatasi lebih lanjut dengan policy khusus. Akses data terpisah dari approval sumber.
 
 Perubahan skema target, key, kolom wajib, rename/drop fisik, atau dependency berisiko dapat diblokir. Periksa Preview perubahan schema dan blocker; jangan menghapus tabel atau mendaftarkan ulang sumber untuk melewati validasi. Detail teknis perubahan skema ada di [Panduan review ETL](../PANDUAN_REVIEW_ETL.md); istilah dan tindakan error ada di [Tabel error response](../ERROR_RESPONSES.md).

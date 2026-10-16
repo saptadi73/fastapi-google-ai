@@ -15,7 +15,7 @@ Di aplikasi buka **Panduan penggunaan > Binding master** (`/guide#binding-master
 - Tab rujukan dikonfirmasi MASTER. Tab transaksi yang memakai rujukan tetap NON_MASTER.
 - SOURCE_OWNER, DATA_STEWARD atau PLATFORM_ADMIN menyiapkan definisi dan binding. Jika ETL_OWNER_WORKFLOW_ENABLED aktif, owner/steward menyelesaikan validasi tanpa approval rutin kedua. Workflow legacy tetap dapat meminta reviewer.
 - Gunakan master yang sudah ada jika identitas dan arti bisnisnya sesuai. Jangan membuat master duplikat hanya karena sumbernya berbeda.
-- Akses sumber, assignment, policy dan gate lain yang diwajibkan tetap dipenuhi; klasifikasi MASTER atau approval binding tidak memberikan izin baca otomatis.
+- Pengelola dapat menangani sumber milik rekan satu unit aktif tanpa approver terpisah; akses sumber, assignment dan policy khusus tetap dipenuhi; klasifikasi MASTER atau approval binding tidak memberikan izin baca otomatis.
 
 ## Langkah dari Registry sampai pemuatan record
 
@@ -148,7 +148,7 @@ Untuk melepas relasi, buka langkah Kolom, klik Hapus relasi atau pilih Tidak ber
 | MASTER_RUNTIME_PENDING pada konfigurasi ETL | Tab MASTER sedang dibuka melalui alur ETL biasa. | Blocker ini hanya untuk konfigurasi/sync ETL biasa. Buka Registry master, pastikan binding dan storage siap, lalu lanjutkan lewat Batch Import master. Owner workflow Apply setelah preview bersih; legacy mengikuti review yang ditampilkan. |
 | MASTER_BINDING_REQUIRED | Tab belum mempunyai binding sumber ke definisi master. | Pilih master aktif/tervalidasi, petakan field, Simpan binding & dry-run. Owner workflow lanjut setelah validasi; legacy mengikuti review yang ditampilkan. |
 | Master tujuan tidak dapat dipilih | Master belum disahkan, tidak aktif atau versi sudah berubah. | Pada owner workflow, selesaikan validasi definisi; pada legacy, selesaikan review. Pilih versi terbaru dari master aktif. |
-| Binding belum siap | Ada perubahan belum disimpan, dry-run gagal, atau snapshot/versi/klasifikasi berubah. | Baca hasil validasi dan simpan ulang binding terhadap snapshot terbaru. Legacy juga memerlukan reviewer berbeda yang berwenang. |
+| Binding belum siap | Ada perubahan belum disimpan, dry-run gagal, atau snapshot/versi/klasifikasi berubah. | Baca hasil validasi dan simpan ulang binding terhadap snapshot terbaru. Reviewer berbeda hanya diperlukan bila owner workflow dimatikan. |
 | Sumber terikat Belum siap | Binding, storage, metadata atau gate pemuatan belum siap. | Baca blocking_reason; siapkan versi storage/binding serta akses yang diwajibkan, lalu muat ulang sumber terikat. |
 | Binding APPROVED tetapi record kosong | Pemetaan sudah valid; batch belum selesai di-Apply. | Buat batch import, selesaikan temuan, jalankan Preview lalu Apply. Owner workflow tidak memakai approval batch rutin; legacy mengikuti approval yang berlaku. Cek hasil per batch. |
 | is_active menjadi text atau nilai ditolak | Definisi/mapping tipe belum sesuai nilai TRUE/FALSE. | Siapkan boolean sejak definisi awal. Jika storage belum dibuat, koreksi lalu validasi definisi. Jika storage sudah ada atau pernah dideploy, perubahan tipe memerlukan migrasi khusus; baca blocker dan jangan hapus/buat ulang tabel. |

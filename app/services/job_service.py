@@ -1,3 +1,4 @@
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.models.etl import Job
 from app.models.source import DataSource
@@ -9,6 +10,10 @@ async def enqueue(session, user, kind, source_id=None, **payload):
     repo = TenantRepository(session, user.tenant_id)
     if source_id:
         source = await repo.get(DataSource, source_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            from app.services.workflow_policy_service import require_source_manager
+
+            await require_source_manager(session, user, source.id)
         if source.unlinked_at is not None:
             raise AppError("SOURCE_UNLINKED", "Sumber telah di-unlink. Pulihkan dahulu sebelum menjalankan job.", 409)
     job = await repo.add(Job, kind=kind, source_id=source_id, requested_by=user.id, payload=payload)

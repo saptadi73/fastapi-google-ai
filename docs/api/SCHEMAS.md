@@ -462,6 +462,14 @@ Body: [SourceAccessMetadataUpdate](#sourceaccessmetadataupdate).
 |---|---|---|---|
 | `source_id` | path | Ya | `string (uuid)` {} |
 
+### POST /api/v1/sources/{source_id}/validate-access
+
+Body: —.
+
+| Parameter | Lokasi | Wajib | Tipe / batas |
+|---|---|---|---|
+| `source_id` | path | Ya | `string (uuid)` {} |
+
 ### POST /api/v1/sources/{source_id}/access-review
 
 Body: [SourceMetadataReview](#sourcemetadatareview).
@@ -3759,12 +3767,12 @@ Contoh payload valid secara schema (ID harus diganti dengan ID backend):
 | Field | Wajib | Tipe | Default | Batas |
 |---|---|---|---|---|
 | `owner_unit_id` | Ya | `string (uuid)` | — | — |
-| `business_domain_id` | Ya | `string (uuid)` | — | — |
-| `jurisdiction_id` | Ya | `string (uuid)` | — | — |
-| `purpose_id` | Ya | `string (uuid)` | — | — |
-| `data_owner_user_id` | Ya | `string (uuid)` | — | — |
-| `data_steward_user_id` | Ya | `string (uuid)` | — | — |
-| `sensitivity` | Ya | `enum ["LOW","MEDIUM","HIGH"]` | — | — |
+| `business_domain_id` | Tidak | `string (uuid) / null` | — | — |
+| `jurisdiction_id` | Tidak | `string (uuid) / null` | — | — |
+| `purpose_id` | Tidak | `string (uuid) / null` | — | — |
+| `data_owner_user_id` | Tidak | `string (uuid) / null` | — | — |
+| `data_steward_user_id` | Tidak | `string (uuid) / null` | — | — |
+| `sensitivity` | Tidak | `enum ["LOW","MEDIUM","HIGH"]` | "LOW" | — |
 
 ### SourceAccessMetadataUpdate
 

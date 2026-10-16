@@ -16,6 +16,7 @@ from app.services.google_sheets_service import GoogleSheetsService
 from app.services.profiling_service import digest
 from app.services.query_execution_service import QueryExecutionService
 from app.services.source_approver_service import require_source_approver
+from app.services.workflow_policy_service import require_source_manager
 
 FORMULA_HEADERS = ["formula_code", "expression", "output_unit", "description"]
 RULE_HEADERS = [
@@ -185,6 +186,8 @@ class AnalyticsRulesService:
     async def create(self, definition, *, source=None, tables=None):
         product = await self.validate_product(definition)
         sheet = await self.repo.get(SourceSheet, product.source_sheet_id)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         if source is not None and sheet.source_id != source.id:
             raise AppError(
                 "ANALYTICS_RULES_INVALID",
@@ -247,13 +250,16 @@ class AnalyticsRulesService:
         product = await self.queries.repo.product(definition.product_code, self.user)
         sheet = await self.repo.get(SourceSheet, product.source_sheet_id)
         await require_source_approver(self.session, self.user, sheet.source_id, "configuration")
-        if bundle.created_by == self.user.id:
+        if bundle.created_by == self.user.id and not get_settings().etl_owner_workflow_enabled:
             raise AppError("ANALYTICS_SELF_APPROVAL", "Reviewer harus berbeda dari pembuat draft.", 403)
         expected_status = "APPROVED" if decision.decision == "REVOKE" else "DRAFT"
         if bundle.status != expected_status or decision.expected_hash != bundle.review_hash:
             raise AppError("ANALYTICS_RULES_STALE", "Draft/status berubah; muat ulang review.", 409)
         if decision.decision == "APPROVE":
             await self.assert_current(bundle, definition)
+            if get_settings().etl_owner_workflow_enabled:
+                await require_source_manager(self.session, self.user, sheet.source_id)
+                await self.evaluate(bundle_id, preview=True)
         bundle.status = {"APPROVE": "APPROVED", "REJECT": "REJECTED", "REVOKE": "REVOKED"}[decision.decision]
         bundle.approved_by = self.user.id
         bundle.decision_reason = decision.reason

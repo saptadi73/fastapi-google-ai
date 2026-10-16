@@ -19,6 +19,12 @@ from app.services.release_approval_service import owner_workflow_compatible
 from app.services.semantic_catalog_service import inventory_update_state
 
 
+@pytest.fixture(autouse=True)
+def legacy_contract(monkeypatch):
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
+
+
 def test_owner_configuration_submit_payload_does_not_require_checklist_fields():
     payload = ReviewSubmission(revision_no=1, snapshot_hash="a" * 64)
     assert payload.reviewed_columns == []
@@ -46,6 +52,17 @@ def test_source_access_backfill_report_never_auto_approves_legacy_sources():
         "sensitivity",
     ]
     assert "spreadsheet_id" not in report
+
+
+def test_owner_report_requests_unit_validation_instead_of_another_approver(monkeypatch):
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    source = SimpleNamespace(tenant_id=uuid4(), id=uuid4(), source_code="unit_source",
+        access_status="ACCESS_POLICY_REQUIRED", access_review_status="PENDING",
+        access_metadata={"owner_unit_id": str(uuid4())})
+    report = source_access_backfill_row(source)
+    assert report["action"] == "OWNER_ACCESS_VALIDATION_REQUIRED"
+    assert report["missing_metadata_fields"] == []
 
 
 def test_source_access_backfill_report_distinguishes_review_and_activation():
@@ -125,22 +142,6 @@ def test_owner_batch_apply_uses_explicit_role_checked_transition():
         })
 
 
-def test_owner_managed_configuration_action_is_limited_to_owner_steward_or_platform_admin():
-    source = SimpleNamespace(
-        access_metadata={"data_owner_user_id": "owner", "data_steward_user_id": "steward"}
-    )
-    service = SimpleNamespace(user=SimpleNamespace(id="owner", role="SOURCE_OWNER"))
-    configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
-    service.user = SimpleNamespace(id="steward", role="DATA_STEWARD")
-    configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
-    service.user = SimpleNamespace(id="admin", role="PLATFORM_ADMIN")
-    configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
-    service.user = SimpleNamespace(id="other", role="SOURCE_OWNER")
-    with pytest.raises(AppError) as error:
-        configuration_service.ConfigurationService.require_owner_managed_actor(service, source)
-    assert error.value.code == "OWNER_WORKFLOW_ACTOR_REQUIRED"
-
-
 def test_legacy_configuration_rollback_still_requires_reviewer():
     service = SimpleNamespace(user=SimpleNamespace(role="SOURCE_OWNER"))
     with pytest.raises(AppError) as error:
@@ -169,7 +170,7 @@ def test_master_deactivation_accepts_a_nonblank_reason():
         (SimpleNamespace(status="ACTIVE", review_state={}, approved_by="reviewer", approved_at="2026-01-01"), True, True),
         (SimpleNamespace(status="APPROVED", review_state={"owner_managed": True}, approved_by="owner", approved_at="2026-01-01"), True, True),
         (SimpleNamespace(status="ACTIVE", review_state={}, approved_by="reviewer", approved_at="2026-01-01"), False, False),
-        (SimpleNamespace(status="ACTIVE", review_state={}, approved_by=None, approved_at=None), True, False),
+        (SimpleNamespace(status="ACTIVE", review_state={}, approved_by=None, approved_at=None), True, True),
     ],
 )
 def test_release_gate_compatibility_requires_owner_workflow_or_prior_approval(monkeypatch, config, enabled, expected):
@@ -264,6 +265,7 @@ def configuration_context(monkeypatch):
 
 
 async def test_owner_workflow_self_validates_without_reviewer_checklists(monkeypatch):
+    monkeypatch.setattr(configuration_service, "require_source_manager", AsyncMock())
     actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
     service = configuration_service.ConfigurationService(Mock(), actor)
     service.session.execute = AsyncMock()
@@ -302,6 +304,7 @@ async def test_owner_workflow_self_validates_without_reviewer_checklists(monkeyp
 
 
 async def test_owner_workflow_does_not_skip_invalid_configuration(monkeypatch):
+    monkeypatch.setattr(configuration_service, "require_source_manager", AsyncMock())
     actor = SimpleNamespace(id="owner", tenant_id="tenant", role="SOURCE_OWNER")
     service = configuration_service.ConfigurationService(Mock(), actor)
     service.session.execute = AsyncMock()

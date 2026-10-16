@@ -6524,6 +6524,103 @@
         }
       }
     },
+    "/api/v1/sources/{source_id}/validate-access": {
+      "post": {
+        "tags": [
+          "Sources"
+        ],
+        "summary": "Validate Owner Access",
+        "description": "Validate unit metadata and enable access without a separate approver.",
+        "operationId": "validate_owner_access_api_v1_sources__source_id__validate_access_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/sources/{source_id}/access-review": {
       "post": {
         "tags": [
@@ -28606,28 +28703,63 @@
             "title": "Owner Unit Id"
           },
           "business_domain_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Business Domain Id"
           },
           "jurisdiction_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Jurisdiction Id"
           },
           "purpose_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Purpose Id"
           },
           "data_owner_user_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Data Owner User Id"
           },
           "data_steward_user_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Data Steward User Id"
           },
           "sensitivity": {
@@ -28637,19 +28769,14 @@
               "MEDIUM",
               "HIGH"
             ],
-            "title": "Sensitivity"
+            "title": "Sensitivity",
+            "default": "LOW"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "owner_unit_id",
-          "business_domain_id",
-          "jurisdiction_id",
-          "purpose_id",
-          "data_owner_user_id",
-          "data_steward_user_id",
-          "sensitivity"
+          "owner_unit_id"
         ],
         "title": "SourceAccessMetadata"
       },

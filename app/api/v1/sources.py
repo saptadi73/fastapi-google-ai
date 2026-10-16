@@ -4,6 +4,7 @@ from fastapi import Depends, Query
 from sqlalchemy import func, or_, select
 
 from app.api.dependencies import CurrentUser, Session, require_roles
+from app.core.config import get_settings
 from app.core.exceptions import AppError, success
 from app.core.routing import APIRouter
 from app.domain.enums import EDIT_ROLES
@@ -38,6 +39,11 @@ from app.services.job_service import enqueue
 from app.services.release_approval_service import release_status
 from app.services.source_approver_service import SourceApproverService
 from app.services.source_service import SourceService, source_records
+from app.services.workflow_policy_service import (
+    require_source_reader,
+    source_visibility_condition,
+    workflow_reviewer,
+)
 
 router = APIRouter(tags=["Sources"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
@@ -62,6 +68,8 @@ def tracking_rollup(values):
 
 @router.get("/source-sheets/{sheet_id}/classification")
 async def get_classification(sheet_id: UUID, session: Session, user: CurrentUser):
+    sheet = await SourceRepository(session, user.tenant_id).get(SourceSheet, sheet_id)
+    await require_source_reader(session, user, sheet.source_id)
     return success(await ClassificationService(session, user).get(sheet_id))
 
 
@@ -87,7 +95,7 @@ async def sources(
     include_unlinked: bool = Query(False),
 ):
     repo = SourceRepository(session, user.tenant_id)
-    query = repo.query(DataSource)
+    query = repo.query(DataSource).where(source_visibility_condition(user))
     conditions = []
     if not include_unlinked:
         conditions.append(DataSource.unlinked_at.is_(None))
@@ -124,7 +132,7 @@ async def source_tracking(
     include_unlinked: bool = Query(False),
 ):
     repo = SourceRepository(session, user.tenant_id)
-    source_query = repo.query(DataSource)
+    source_query = repo.query(DataSource).where(source_visibility_condition(user))
     conditions = []
     if not include_unlinked:
         conditions.append(DataSource.unlinked_at.is_(None))
@@ -274,6 +282,8 @@ async def source_tracking(
         if config is None:
             return "NOT_STARTED"
         status = str(config.status or "").upper()
+        if get_settings().etl_owner_workflow_enabled:
+            return "VALIDATED" if status in {"APPROVED", "ACTIVE", "SUPERSEDED"} else "VALIDATION_REQUIRED"
         if status == "NEEDS_REVIEW":
             review_state = config.review_state or {}
             return (
@@ -297,6 +307,10 @@ async def source_tracking(
         applicable = [value for value in values if value != "NOT_APPLICABLE"]
         if not applicable:
             return "NOT_APPLICABLE"
+        if "VALIDATION_REQUIRED" in applicable:
+            return "VALIDATION_REQUIRED"
+        if all(value == "VALIDATED" for value in applicable):
+            return "VALIDATED"
         if "PENDING_IT_APPROVAL" in applicable:
             return "PENDING_IT_APPROVAL"
         if "REJECTED" in applicable:
@@ -407,7 +421,7 @@ async def source_history(
     offset: int = Query(0, ge=0, le=10000),
     limit: int = Query(50, ge=1, le=100),
 ):
-    source = await SourceRepository(session, user.tenant_id).get(DataSource, source_id)
+    source = await require_source_reader(session, user, source_id)
     sheet_ids = list(await session.scalars(select(SourceSheet.id).where(
         SourceSheet.tenant_id == user.tenant_id, SourceSheet.source_id == source.id
     )))
@@ -464,6 +478,7 @@ async def source_history(
         "source.unlink_restored": "Link sumber dipulihkan",
         "source.access_metadata_updated": "Metadata akses diperbarui",
         "source.access_metadata_reviewed": "Metadata akses direview",
+        "source.owner_access_validated": "Akses unit sumber tervalidasi",
         "source.stage_started": "Tahap pemrosesan dimulai",
         "source.stage_succeeded": "Tahap pemrosesan berhasil",
         "source.stage_failed": "Tahap pemrosesan gagal",
@@ -600,7 +615,7 @@ async def delete_source(source_id: UUID, data: SourceDelete, session: Session, u
 
 @router.get("/sources/{source_id}")
 async def get_source(source_id: UUID, session: Session, user: CurrentUser):
-    source = await SourceRepository(session, user.tenant_id).get(DataSource, source_id)
+    source = await require_source_reader(session, user, source_id)
     return success((await source_records(session, [source]))[0])
 
 
@@ -611,14 +626,20 @@ async def update_access_metadata(
     return success(await SourceService(session, user).update_access_metadata(source_id, data))
 
 
-@router.post("/sources/{source_id}/access-review", dependencies=[Depends(require_roles("PLATFORM_ADMIN", "TECHNICAL_APPROVER"))])
+@router.post("/sources/{source_id}/validate-access", dependencies=edit)
+async def validate_owner_access(source_id: UUID, session: Session, user: CurrentUser):
+    """Validate unit metadata and enable access without a separate approver."""
+    return success(await SourceService(session, user).validate_owner_access(source_id))
+
+
+@router.post("/sources/{source_id}/access-review", dependencies=[Depends(workflow_reviewer)])
 async def review_access_metadata(
     source_id: UUID, data: SourceMetadataReview, session: Session, user: CurrentUser
 ):
     return success(await SourceService(session, user).review_access_metadata(source_id, data))
 
 
-@router.get("/sources/{source_id}/access-review-context", dependencies=[Depends(require_roles("PLATFORM_ADMIN", "TECHNICAL_APPROVER"))])
+@router.get("/sources/{source_id}/access-review-context", dependencies=[Depends(workflow_reviewer)])
 async def access_review_context(source_id: UUID, session: Session, user: CurrentUser):
     return success(await SourceService(session, user).metadata_review_context(source_id))
 
@@ -654,6 +675,7 @@ async def update_schedule(
 
 @router.get("/sources/{source_id}/sheets")
 async def sheets(source_id: UUID, session: Session, user: CurrentUser):
+    await require_source_reader(session, user, source_id)
     return success([record(s) for s in await SourceRepository(session, user.tenant_id).sheets(source_id)])
 
 
@@ -681,6 +703,9 @@ async def profile(source_id: UUID, session: Session, user: CurrentUser):
 
 @router.post("/sources/{source_id}/sync", status_code=202, dependencies=edit)
 async def sync(source_id: UUID, session: Session, user: CurrentUser):
+    if not get_settings().etl_owner_workflow_enabled:
+        await ClassificationService(session, user).require_source_ready(source_id)
+        return success(await enqueue(session, user, "ETL", str(source_id)))
     # Keep the compatibility URL, but send it through the reviewed batch lifecycle
     # so mapping, reference resolution, preview, apply, and audit are consistent.
     job = await SourceService(session, user).queue_sync_review(source_id)
@@ -699,6 +724,7 @@ async def start_sync_review(source_id: UUID, session: Session, user: CurrentUser
 
 @router.get("/sources/{source_id}/master-migration-preview")
 async def master_migration_preview(source_id: UUID, session: Session, user: CurrentUser):
+    await require_source_reader(session, user, source_id)
     repo = SourceRepository(session, user.tenant_id)
     sheets = await repo.sheets(source_id)
     result = []
@@ -735,7 +761,8 @@ async def ai_configuration(
 @router.get("/source-sheets/{sheet_id}/configurations")
 async def configurations(sheet_id: UUID, session: Session, user: CurrentUser):
     repo = SourceRepository(session, user.tenant_id)
-    await repo.get(SourceSheet, sheet_id)
+    sheet = await repo.get(SourceSheet, sheet_id)
+    await require_source_reader(session, user, sheet.source_id)
     return success(
         [
             record(c)
@@ -750,6 +777,7 @@ async def configurations(sheet_id: UUID, session: Session, user: CurrentUser):
 async def active_configuration(sheet_id: UUID, session: Session, user: CurrentUser):
     repo = SourceRepository(session, user.tenant_id)
     sheet = await repo.get(SourceSheet, sheet_id)
+    await require_source_reader(session, user, sheet.source_id)
     return success(
         record(await repo.get(Configuration, sheet.active_configuration_id))
         if sheet.active_configuration_id

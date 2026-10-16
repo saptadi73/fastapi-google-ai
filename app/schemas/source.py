@@ -13,12 +13,12 @@ from app.schemas.data_policy import DatasetKind
 
 class SourceAccessMetadata(StrictModel):
     owner_unit_id: UUID
-    business_domain_id: UUID
-    jurisdiction_id: UUID
-    purpose_id: UUID
-    data_owner_user_id: UUID
-    data_steward_user_id: UUID
-    sensitivity: Literal["LOW", "MEDIUM", "HIGH"]
+    business_domain_id: UUID | None = None
+    jurisdiction_id: UUID | None = None
+    purpose_id: UUID | None = None
+    data_owner_user_id: UUID | None = None
+    data_steward_user_id: UUID | None = None
+    sensitivity: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
 
 
 class SourceUnlink(StrictModel):

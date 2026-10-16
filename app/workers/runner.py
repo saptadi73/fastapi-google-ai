@@ -307,7 +307,8 @@ async def schedule_sources():
                 DataSource.sync_schedule.is_not(None),
                 DataSource.paused.is_(False),
                 DataSource.unlinked_at.is_(None),
-                DataSource.status == "ACTIVE",
+                DataSource.status.in_(("ACTIVE", "CHANGE_DETECTED", "NEEDS_REVIEW"))
+                if get_settings().etl_owner_workflow_enabled else DataSource.status == "ACTIVE",
             )
             .with_for_update(skip_locked=True)
         )
@@ -332,7 +333,7 @@ async def schedule_sources():
                     source_id=source.id,
                     requested_by=source.owner_user_id,
                     kind="SYNC_REVIEW",
-                    payload={},
+                    payload={"auto_load": get_settings().etl_owner_workflow_enabled},
                 )
             )
             source.last_scheduled_at = now()

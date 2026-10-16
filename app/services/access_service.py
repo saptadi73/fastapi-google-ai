@@ -1012,7 +1012,8 @@ class AccessService:
                     AccessPolicy.tenant_id == self.actor.tenant_id,
                     AccessPolicyBinding.tenant_id == self.actor.tenant_id,
                     or_(*resource_bindings),
-                    AccessPolicy.status != "REVOKED",
+                    AccessPolicy.status == "APPROVED" if get_settings().etl_owner_workflow_enabled else AccessPolicy.status != "REVOKED",
+                    AccessPolicy.effect == "ALLOW" if get_settings().etl_owner_workflow_enabled else True,
                 )
                 .limit(1)
             ))
@@ -1029,9 +1030,10 @@ class AccessService:
                 # Unit and business domain form the default tenant-local scope.
                 # Jurisdiction and any additional department are opt-in restrictions:
                 # they narrow access only when explicitly included by the policy.
+                scope_fields = ("owner_unit_id",) if get_settings().etl_owner_workflow_enabled else ("owner_unit_id", "business_domain_id")
                 required_source_scope = {
                     source.access_metadata[field]
-                    for field in ("owner_unit_id", "business_domain_id")
+                    for field in scope_fields
                     if source.access_metadata.get(field)
                 }
         matched = [
@@ -1068,13 +1070,37 @@ class AccessService:
                     "export_allowed": False,
                 }
             )
+        # Bound ALLOW policies are resource restrictions: an additional required
+        # scope cannot be bypassed by an older, broader ALLOW on the same resource.
+        matched_ids = {policy.id for policy in matched}
+        restricted = [policy for policy in policies if policy.effect == "ALLOW"
+                      and required_source_scope.issubset(policy.required_attribute_ids)
+                      and policy.id not in matched_ids]
+        if restricted:
+            return finish({"allowed": False, "reason_code": "DEFAULT_DENY",
+                           "policy_ids": [policy.id for policy in restricted],
+                           "policy_revisions": [{"id": policy.id, "revision": policy.revision} for policy in restricted],
+                           "row_scope": {}, "columns": {}, "export_allowed": False})
         allowed = [policy for policy in matched if policy.effect == "ALLOW"]
+        if data.resource_type == "DATA_PRODUCT":
+            # Product restrictions must not be widened by an inherited source ALLOW.
+            direct_ids = set((await self.session.scalars(
+                select(AccessPolicy.id).join(AccessPolicyBinding, AccessPolicyBinding.policy_id == AccessPolicy.id)
+                .where(AccessPolicy.tenant_id == self.actor.tenant_id,
+                       AccessPolicyBinding.tenant_id == self.actor.tenant_id,
+                       AccessPolicyBinding.resource_type == "DATA_PRODUCT",
+                       AccessPolicyBinding.resource_id == data.resource_id,
+                       AccessPolicy.effect == "ALLOW",
+                       AccessPolicy.status == "APPROVED" if get_settings().etl_owner_workflow_enabled else AccessPolicy.status != "REVOKED")
+            )).all())
+            if direct_ids:
+                has_bound_policy = True
+                allowed = [policy for policy in allowed if policy.id in direct_ids]
         if not allowed:
             default_scope = (
-                {
-                    source.access_metadata.get("owner_unit_id"),
-                    source.access_metadata.get("business_domain_id"),
-                }
+                {source.access_metadata.get(field) for field in (
+                    ("owner_unit_id",) if get_settings().etl_owner_workflow_enabled else ("owner_unit_id", "business_domain_id")
+                )}
                 if source is not None and source.access_metadata
                 else set()
             )

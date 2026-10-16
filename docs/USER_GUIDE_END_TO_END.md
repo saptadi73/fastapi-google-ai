@@ -239,7 +239,7 @@ memperbaiki klasifikasi/mapping yang sesuai.
 
 ### Review perubahan schema NON_MASTER
 
-Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Pemilik meninjau schema dan mapping pada revisi serta fingerprint schema/data yang sama; workflow legacy mengikuti reviewer yang ditampilkan. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
+Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Pemilik meninjau schema dan mapping pada revisi serta fingerprint schema/data yang sama; item lama mengikuti validasi pengelola bila owner workflow aktif. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
 
 Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal = Serial Google Sheets** (`date_input_format: "GOOGLE_SHEETS_SERIAL"`) bersama `parse_date_id`. Tipe bigint atau angka dalam rentang valid saja tidak membuktikan bahwa nilainya tanggal. Konfirmasi makna sumber melalui mapping; backend memeriksa seluruh nilai non-null dan menampilkan `validation.checked`, `convertible`, `invalid`, serta contoh. Nilai di luar rentang 1..2958465 menghentikan migrasi. Mode serial eksplisit menolak text, pecahan dan nilai non-finite; mode `TEXT` memakai pola strptime dan menolak angka. Default null mempertahankan parser konfigurasi lama, tetapi tidak mengizinkan migrasi berisiko tanpa deklarasi format. Workbook menyimpan pilihan ini di `02 Struktur Kolom`, kolom AD.
 
@@ -279,14 +279,14 @@ Lihat [Contoh data analitik](CONTOH_DATA_ANALITIK.md): keluhan pelanggan, sebara
 
 ## Formula analitik dan aturan action plan
 
-Lima contoh Excel memuat Formula_Analitik dan Aturan_Action_Plan. Kedua tab kontrol Dikecualikan dari ETL; produk data utamanya harus ACTIVE. Backend menerima impor melalui API analytics-rules/import-sheet, menyediakan preview, approval reviewer berbeda, evaluate berbasis metrik yang diizinkan dan REVOKE untuk menghentikan aturan. Hasil berupa usulan PROPOSED dengan bukti angka, periode dan versi; unit, sampel serta hipotesis diperiksa manusia. Workflow aturan saat ini melalui API, belum terhubung otomatis ke wizard ETL atau chat AI.
+Lima contoh Excel memuat Formula_Analitik dan Aturan_Action_Plan. Kedua tab kontrol Dikecualikan dari ETL; produk data utamanya harus ACTIVE. Backend menerima impor melalui API analytics-rules/import-sheet, menyediakan preview, validasi pengelola pada owner workflow (reviewer berbeda hanya pada mode legacy), evaluate berbasis metrik yang diizinkan dan REVOKE untuk menghentikan aturan. Hasil berupa usulan PROPOSED dengan bukti angka, periode dan versi; unit, sampel serta hipotesis diperiksa manusia. Workflow aturan saat ini melalui API, belum terhubung otomatis ke wizard ETL atau chat AI.
 
 Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) serta [lima template Excel](CONTOH_DATA_ANALITIK.md).
 
 
 ## Panduan khusus binding master
 
-Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, validasi definisi, deploy storage, mapping tab MASTER, validasi binding, batch import, Preview dan Apply owner-managed. Workflow legacy dapat tetap meminta reviewer. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
+Baca [Panduan khusus binding master](PANDUAN_BINDING_MASTER.md): Registry, validasi definisi, deploy storage, mapping tab MASTER, validasi binding, batch import, Preview dan Apply owner-managed. Reviewer terpisah hanya diperlukan jika owner workflow dimatikan. Panduan membedakan binding tab dengan binding kolom referensi serta menyediakan contoh BISNIS/is_active, troubleshooting dan checklist record kanonis. Di aplikasi: Panduan penggunaan > Binding master (/guide#binding-master) atau Bantuan > Panduan khusus binding master.
 
 
 ## Koreksi sebelum storage pertama

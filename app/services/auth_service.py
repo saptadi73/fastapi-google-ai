@@ -14,7 +14,9 @@ from app.services.audit_service import audit
 
 
 def public_user(user):
-    return record(user, exclude=("password_hash", "token_version"))
+    from app.services.workflow_policy_service import workflow_policy
+
+    return {**record(user, exclude=("password_hash", "token_version")), "workflow_policy": workflow_policy()}
 
 
 async def token_pair(session, user):

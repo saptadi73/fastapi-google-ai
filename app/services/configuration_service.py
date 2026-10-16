@@ -31,6 +31,7 @@ from app.services.release_approval_service import owner_workflow_compatible, req
 from app.services.schema_compiler_service import deploy_schema, preview_schema_migration, schema_plan
 from app.services.source_approver_service import require_source_approver
 from app.services.taxonomy_validation_service import canonicalize_outputs, taxonomy_context
+from app.services.workflow_policy_service import require_source_manager
 
 
 class ConfigurationService:
@@ -41,6 +42,8 @@ class ConfigurationService:
 
     async def submit_review(self, config_id, data):
         config = await self.repo.get(Configuration, config_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, config.source_id)
         if config.status not in ("AI_DRAFT", "NEEDS_REVIEW"):
             raise AppError("CONFIGURATION_CONFLICT", "Konfigurasi tidak dapat diajukan review.", 409)
         if config.revision_no != data.revision_no:
@@ -110,7 +113,7 @@ class ConfigurationService:
         source = await self.repo.get(DataSource, config.source_id)
         owner_managed = owner_workflow_compatible(config)
         if owner_managed:
-            self.require_owner_managed_actor(source)
+            await self.require_owner_managed_actor(source)
         else:
             self.require_legacy_reviewer()
             require_release_ready(config, source)
@@ -124,17 +127,8 @@ class ConfigurationService:
             configuration_id=config.id,
         )
 
-    def require_owner_managed_actor(self, source):
-        if self.user.role == "PLATFORM_ADMIN":
-            return
-        metadata = source.access_metadata or {}
-        allowed = {str(metadata.get("data_owner_user_id")), str(metadata.get("data_steward_user_id"))}
-        if str(self.user.id) not in allowed:
-            raise AppError(
-                "OWNER_WORKFLOW_ACTOR_REQUIRED",
-                "Hanya data owner, steward yang ditetapkan, atau PLATFORM_ADMIN yang dapat deploy/rollback konfigurasi ini.",
-                403,
-            )
+    async def require_owner_managed_actor(self, source):
+        await require_source_manager(self.session, self.user, source.id)
 
     def require_legacy_reviewer(self):
         if self.user.role not in REVIEW_ROLES:
@@ -173,6 +167,8 @@ class ConfigurationService:
 
     async def create(self, sheet_id, configuration, status="NEEDS_REVIEW", **ai_metadata):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         profile = await SourceRepository(self.session, self.user.tenant_id).latest_profile(sheet.id)
         if not profile or not sheet.last_fingerprint:
             raise AppError("PROFILE_REQUIRED", "Jalankan profiling sebelum membuat konfigurasi.", 409)
@@ -275,7 +271,10 @@ class ConfigurationService:
 
         return await reference_context(self.session, self.user, sheet_id, parsed)
 
-    def require_reference_manager(self, source):
+    async def require_reference_manager(self, source):
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, source.id)
+            return
         metadata = source.access_metadata or {}
         managers = {str(source.owner_user_id), str(metadata.get("data_owner_user_id")),
                     str(metadata.get("data_steward_user_id"))}
@@ -284,6 +283,8 @@ class ConfigurationService:
 
     async def patch(self, config_id, data):
         config = await self.repo.get(Configuration, config_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, config.source_id)
         if config.status not in ("AI_DRAFT", "NEEDS_REVIEW"):
             raise AppError(
                 "CONFIGURATION_IMMUTABLE", "Clone konfigurasi menjadi draft baru sebelum mengedit.", 409
@@ -301,7 +302,7 @@ class ConfigurationService:
             for name, c in old_columns.items()
         )
         if removes_reference:
-            self.require_reference_manager(await self.repo.get(DataSource, config.source_id))
+            await self.require_reference_manager(await self.repo.get(DataSource, config.source_id))
         removed = set(before.get("unresolved_questions", [])) - set(data.configuration.unresolved_questions)
         if not removed.issubset(data.question_answers):
             raise AppError(
@@ -341,7 +342,7 @@ class ConfigurationService:
                 409,
             )
         if decision == "APPROVED":
-            if (get_settings().require_separate_approver or data.source_access is not None) and config.created_by == self.user.id:
+            if not get_settings().etl_owner_workflow_enabled and (get_settings().require_separate_approver or data.source_access is not None) and config.created_by == self.user.id:
                 raise AppError(
                     "SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun approver lain.", 403
                 )
@@ -386,6 +387,7 @@ class ConfigurationService:
                 await access.activate_source_access(
                     source.id,
                     SourceAccessActivation(revision_no=source.access_revision, policy_id=data.source_access.policy_id),
+                    workflow="configuration",
                 )
                 config.review_state = {
                     **evidence,
@@ -424,7 +426,7 @@ class ConfigurationService:
         source = await self.repo.get(DataSource, config.source_id, lock=True)
         owner_managed = owner_workflow_compatible(config)
         if owner_managed:
-            self.require_owner_managed_actor(source)
+            await self.require_owner_managed_actor(source)
         else:
             self.require_legacy_reviewer()
             require_release_ready(config, source)

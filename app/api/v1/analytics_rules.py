@@ -9,6 +9,7 @@ from app.domain.enums import EDIT_ROLES, REVIEW_ROLES
 from app.repositories.base import record
 from app.schemas.analytics_rules import AnalyticsRuleDefinition, AnalyticsRulesDecision, AnalyticsRulesImport
 from app.services.analytics_rules_service import AnalyticsRulesService
+from app.services.workflow_policy_service import workflow_reviewer
 
 router = APIRouter(prefix="/analytics-rules", tags=["Analytics rules"])
 
@@ -29,7 +30,7 @@ async def get(bundle_id: UUID, session: Session, user: CurrentUser):
     return success(record(bundle))
 
 
-@router.post("/{bundle_id}/decision", dependencies=[Depends(require_roles(*REVIEW_ROLES))])
+@router.post("/{bundle_id}/decision", dependencies=[Depends(workflow_reviewer)])
 async def decide(bundle_id: UUID, data: AnalyticsRulesDecision, session: Session, user: CurrentUser):
     return success(await AnalyticsRulesService(session, user).decide(bundle_id, data))
 

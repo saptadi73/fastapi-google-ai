@@ -1,7 +1,7 @@
 ---
 id: error-response-akses
 title: Error response - Akses pengguna dan katalog data
-summary: Tabel penyebab dan tindakan untuk DEFAULT_DENY, EXPLICIT_DENY, ACTION_NOT_GRANTED, DATA_PRODUCT_NOT_FOUND, SELF_ACCESS_CHANGE, FORBIDDEN, STALE_REVISION.
+summary: Tabel penyebab dan tindakan untuk DEFAULT_DENY, EXPLICIT_DENY, ACTION_NOT_GRANTED, DATA_PRODUCT_NOT_FOUND, SELF_ACCESS_CHANGE, FORBIDDEN, STALE_REVISION, SOURCE_UNIT_FORBIDDEN, SOURCE_METADATA_REJECTED, OWNER_WORKFLOW_DISABLED.
 routes: ["/admin", "/admin/users", "/access-requests", "/data-catalog", "/dashboard", "/guide"]
 audiences: ["*"]
 source: docs/ERROR_RESPONSES.md
@@ -17,3 +17,6 @@ Cari kode pada pesan error atau monitor job; catat ID job, sumber/tab dan versi 
 | `SELF_ACCESS_CHANGE` | Pengguna mencoba mengubah atau menyetujui aksesnya sendiri. | Minta admin berwenang lain memproses assignment/paket izin/approval. Reviewer harus berbeda dari subjek akses sesuai aturan aplikasi. |
 | `FORBIDDEN` | Peran atau kepemilikan tidak mengizinkan tindakan. | Gunakan akun berwenang atau ajukan akses. Temukan tab/Profiling ulang tersedia untuk SOURCE_OWNER, DATA_STEWARD, PLATFORM_ADMIN; TECHNICAL_APPROVER mereview sesuai tugas. |
 | `STALE_REVISION` | Objek akses berubah sejak halaman dimuat. | Muat ulang detail, tinjau perubahan dan kirim dengan revisi terbaru. Jangan overwrite perubahan pengguna lain. |
+| `SOURCE_UNIT_FORBIDDEN` | Role pengelola atau keanggotaan unit sumber tidak aktif/cocok, atau ada DENY operasional. | Gunakan SOURCE_OWNER/DATA_STEWARD pada unit sumber. Admin memperbaiki assignment bila salah; jangan membuat sumber duplikat. |
+| `SOURCE_METADATA_REJECTED` | Metadata sumber sebelumnya ditolak. | Perbaiki metadata di Workspace, simpan, lalu Validasi akses unit. Tidak perlu approver terpisah pada owner workflow. |
+| `OWNER_WORKFLOW_DISABLED` | Server masih menggunakan mode legacy. | Admin memeriksa ETL_OWNER_WORKFLOW_ENABLED. Pada mode legacy ikuti alur reviewer yang dikonfigurasi. |

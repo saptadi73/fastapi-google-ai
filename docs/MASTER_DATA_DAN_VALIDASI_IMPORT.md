@@ -1,5 +1,8 @@
 # Master data, referensi, dan validasi import
 
+> Kebijakan aktif owner workflow (16 Oktober 2026): SOURCE_OWNER/DATA_STEWARD satu unit dapat mengelola sumber rekan, validasi, deploy, sync, dan menyelesaikan item lama tanpa approver terpisah. Akses default berdasarkan unit aktif; metadata domain/yurisdiksi/purpose opsional. Petunjuk reviewer atau approval rilis di bawah hanya berlaku jika owner workflow dimatikan. Lihat [alur pengelola unit](OWNER_WORKFLOW_POLICY.md).
+
+
 Status: kebijakan, klasifikasi, registry/binding, storage kanonis, batch review,
 pertanyaan/keputusan staging, preview/approval/apply master, referensi/FK, dan review AI
 terkontrol tersedia. Dokumen ini menyimpan kebutuhan bisnis dan rancangan awal dari diskusi

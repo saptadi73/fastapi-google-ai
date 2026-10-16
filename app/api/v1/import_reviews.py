@@ -19,6 +19,7 @@ from app.schemas.import_review import (
     ImportReviewPreviewRequest,
 )
 from app.services.import_review_service import ImportReviewService
+from app.services.workflow_policy_service import workflow_reviewer
 
 router = APIRouter(tags=["Import reviews"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
@@ -105,7 +106,7 @@ async def dismiss_import_ai_suggestions(
 
 @router.post(
     "/import-reviews/{review_id}/questions/{question_id}/resolve-master-proposal",
-    dependencies=[Depends(require_roles(*REVIEW_ROLES))],
+    dependencies=[Depends(workflow_reviewer)],
 )
 async def resolve_master_proposal(
     review_id: UUID,
@@ -144,7 +145,7 @@ async def read_import_preview(review_id: UUID, session: Session, user: CurrentUs
     return success(await ImportReviewService(session, user).read_preview(review_id))
 
 
-@router.post("/import-reviews/{review_id}/approve", dependencies=[Depends(require_roles(*REVIEW_ROLES))])
+@router.post("/import-reviews/{review_id}/approve", dependencies=[Depends(workflow_reviewer)])
 async def approve_import(review_id: UUID, data: ImportReviewApproveRequest, session: Session, user: CurrentUser):
     return success(await ImportReviewService(session, user).approve(review_id, data))
 

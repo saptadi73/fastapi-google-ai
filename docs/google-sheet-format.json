@@ -300,7 +300,7 @@
             "Tetapkan Data Owner, Data Steward, unit pemilik, domain bisnis, yurisdiksi, purpose dan sensitivitas yang sesuai isi sumber. Bagikan Sheet ke Service Account backend sebagai Viewer; aplikasi tidak menulis ulang sel sumber.",
             "Klasifikasikan PII per kolom berdasarkan isi, bukan nama header saja. Hindari NIK, kontak, alamat atau nama pribadi jika analisis cukup memakai kode anonim/agregat. Kontrol akses berlaku juga pada narasi action plan dan evidence_ref.",
             "Konfigurasi ACTIVE dan sync SUCCEEDED tidak otomatis membuat produk terlihat bagi semua pengguna. Allowed_roles produk serta policy SOURCE/DATA_PRODUCT dan assignment aktif pembaca harus cocok; semua required attributes pada policy berlaku AND.",
-            "Approval IT/TECHNICAL_APPROVER adalah persetujuan proses, bukan hak baca otomatis. Discovery/profiling dijalankan SOURCE_OWNER, DATA_STEWARD atau PLATFORM_ADMIN. Perubahan assignment/policy mengikuti approval terpisah yang diwajibkan.",
+            "Pada owner workflow, SOURCE_OWNER/DATA_STEWARD satu unit menjalankan discovery, profiling, validasi, deploy dan sync tanpa approver terpisah, termasuk item lama. Unit aktif menentukan akses default; policy khusus dan sensitivitas tetap berlaku. Role reviewer lama tidak otomatis mendapat hak pengelola.",
             "Validasi konsumsi memakai akun pembaca yang sebenarnya: katalog terlihat, field yang diizinkan tersedia dan hasil query masuk akal. Jangan menghapus sensitivitas atau memperluas policy hanya agar katalog terisi."
           ]
         }

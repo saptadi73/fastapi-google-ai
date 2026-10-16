@@ -31,10 +31,15 @@ from app.services.cache_service import get_cached_json, set_cached_json, similar
 from app.services.profiling_service import digest
 from app.services.taxonomy_validation_service import exact_terms, normalized
 from app.services.taxonomy_version_service import TaxonomyVersionService, archive_current
+from app.services.workflow_policy_service import (
+    require_registry_manager,
+    require_source_manager,
+    workflow_reviewer,
+)
 
 router = APIRouter(prefix="/taxonomies", tags=["Taxonomy"], dependencies=[Depends(require_roles(*EDIT_ROLES, *REVIEW_ROLES))])
 edit = [Depends(require_roles(*EDIT_ROLES))]
-review = [Depends(require_roles(*REVIEW_ROLES))]
+review = [Depends(workflow_reviewer)]
 
 
 @router.post("/{taxonomy_id}/recommend-terms-ai", dependencies=edit)
@@ -70,6 +75,8 @@ async def list_terms(taxonomy_id: UUID, session: Session, user: CurrentUser):
 async def create_term(taxonomy_id: UUID, data: TaxonomyTermCreate, session: Session, user: CurrentUser):
     repo = TenantRepository(session, user.tenant_id)
     taxonomy = await repo.get(Taxonomy, taxonomy_id, lock=True)
+    if get_settings().etl_owner_workflow_enabled:
+        await require_registry_manager(session, user, taxonomy.created_by)
     if taxonomy.status != "DRAFT" or not taxonomy.is_active:
         raise AppError("TAXONOMY_IMMUTABLE", "Term dan alias hanya boleh ditambah pada taxonomy draft aktif.", 409)
     if data.parent_id:
@@ -85,13 +92,15 @@ async def create_term(taxonomy_id: UUID, data: TaxonomyTermCreate, session: Sess
 async def approve_taxonomy(taxonomy_id: UUID, session: Session, user: CurrentUser):
     repo = TenantRepository(session, user.tenant_id)
     taxonomy = await repo.get(Taxonomy, taxonomy_id, lock=True)
+    if get_settings().etl_owner_workflow_enabled:
+        await require_registry_manager(session, user, taxonomy.created_by)
     if not taxonomy.is_active:
         raise AppError("TAXONOMY_NOT_APPROVED", "Taxonomy nonaktif tidak dapat disetujui.", 409)
     if taxonomy.status == "APPROVED":
         return success(record(taxonomy))
     if taxonomy.status != "DRAFT":
         raise AppError("TAXONOMY_STATE_CONFLICT", "Taxonomy harus draft sebelum approval.", 409)
-    if get_settings().require_separate_approver and taxonomy.created_by == user.id:
+    if not get_settings().etl_owner_workflow_enabled and get_settings().require_separate_approver and taxonomy.created_by == user.id:
         raise AppError("SEPARATE_APPROVER_REQUIRED", "Reviewer taxonomy harus berbeda dari pembuat.", 403)
     taxonomy.status, taxonomy.version = "APPROVED", taxonomy.version + 1
     taxonomy.approved_by, taxonomy.approved_at = user.id, datetime.now(timezone.utc)
@@ -141,7 +150,9 @@ async def list_column_bindings(sheet_id: UUID, session: Session, user: CurrentUs
 @router.put("/source-sheets/{sheet_id}/column-bindings", dependencies=edit)
 async def save_column_binding(sheet_id: UUID, data: TaxonomyColumnBindingCreate, session: Session, user: CurrentUser):
     repo = TenantRepository(session, user.tenant_id)
-    await repo.get(SourceSheet, sheet_id, lock=True)
+    sheet = await repo.get(SourceSheet, sheet_id, lock=True)
+    if get_settings().etl_owner_workflow_enabled:
+        await require_source_manager(session, user, sheet.source_id)
     taxonomy = await repo.get(Taxonomy, data.taxonomy_id, lock=True)
     if taxonomy.status != "APPROVED" or not taxonomy.is_active:
         raise AppError("TAXONOMY_NOT_APPROVED", "Taxonomy harus approved dan aktif sebelum dipetakan.", 422)
@@ -157,16 +168,22 @@ async def save_column_binding(sheet_id: UUID, data: TaxonomyColumnBindingCreate,
         for key, value in values.items():
             setattr(existing, key, value)
         existing.revision_no += 1
-        existing.status = "DRAFT"
-        existing.approved_by = None
-        existing.approved_at = None
+        owner_flow = get_settings().etl_owner_workflow_enabled
+        existing.status = "APPROVED" if owner_flow else "DRAFT"
+        existing.approved_by = user.id if owner_flow else None
+        existing.approved_at = datetime.now(timezone.utc) if owner_flow else None
         existing.snapshot_hash = digest(values)
+        audit(session, user, "taxonomy.binding_updated", existing.id, revision_no=existing.revision_no, owner_validated=owner_flow)
         return success(record(existing))
     if data.revision_no != 0:
         raise AppError("REVISION_CONFLICT", "Binding baru memerlukan revision_no=0.", 409)
     fp = hashlib.sha256(f"{sheet_id}:{data.source_column}".encode()).hexdigest()
     snap = hashlib.sha256(f"{data.taxonomy_id}:{data.taxonomy_version}:{data.source_column}".encode()).hexdigest()
-    return success(record(await repo.add(TaxonomyColumnBinding, source_sheet_id=str(sheet_id), created_by=user.id, fingerprint=fp, snapshot_hash=snap, **values)))
+    binding = await repo.add(TaxonomyColumnBinding, source_sheet_id=str(sheet_id), created_by=user.id, fingerprint=fp, snapshot_hash=snap, **values)
+    if get_settings().etl_owner_workflow_enabled:
+        binding.status, binding.approved_by, binding.approved_at = "APPROVED", user.id, datetime.now(timezone.utc)
+        audit(session, user, "taxonomy.binding_owner_validated", binding.id, revision_no=binding.revision_no)
+    return success(record(binding))
 
 
 @router.post("/column-bindings/{binding_id}/approve", dependencies=review)
@@ -176,12 +193,15 @@ async def approve_column_binding(binding_id: UUID, data: MasterRevisionRequest, 
     taxonomy = await repo.get(Taxonomy, binding.taxonomy_id, lock=True)
     binding = await repo.get(TaxonomyColumnBinding, binding_id, lock=True)
     await session.refresh(binding)
+    if get_settings().etl_owner_workflow_enabled:
+        sheet = await repo.get(SourceSheet, binding.source_sheet_id)
+        await require_source_manager(session, user, sheet.source_id)
     if data.revision_no != binding.revision_no:
         raise AppError("REVISION_CONFLICT", "Binding telah berubah; ambil data terbaru.", 409)
     if (binding.status != "DRAFT" or taxonomy.id != binding.taxonomy_id or not taxonomy.is_active
             or taxonomy.status != "APPROVED" or taxonomy.version != binding.taxonomy_version):
         raise AppError("TAXONOMY_BINDING_STALE", "Binding harus draft dan merujuk versi taxonomy approved terkini.", 409)
-    if get_settings().require_separate_approver and binding.created_by == user.id:
+    if not get_settings().etl_owner_workflow_enabled and get_settings().require_separate_approver and binding.created_by == user.id:
         raise AppError("SEPARATE_APPROVER_REQUIRED", "Reviewer binding harus berbeda dari pembuat.", 403)
     binding.status, binding.approved_by, binding.approved_at = "APPROVED", user.id, datetime.now(timezone.utc)
     binding.revision_no += 1
@@ -193,6 +213,9 @@ async def approve_column_binding(binding_id: UUID, data: MasterRevisionRequest, 
 async def reject_column_binding(binding_id: UUID, data: MasterRevisionRequest, session: Session, user: CurrentUser):
     repo = TenantRepository(session, user.tenant_id)
     binding = await repo.get(TaxonomyColumnBinding, binding_id, lock=True)
+    if get_settings().etl_owner_workflow_enabled:
+        sheet = await repo.get(SourceSheet, binding.source_sheet_id)
+        await require_source_manager(session, user, sheet.source_id)
     if data.revision_no != binding.revision_no:
         raise AppError("REVISION_CONFLICT", "Binding telah berubah; ambil data terbaru.", 409)
     binding.status, binding.approved_by, binding.approved_at = "REJECTED", None, None
@@ -225,6 +248,8 @@ async def resolve_term(taxonomy_id: UUID, data: TaxonomyTermResolveRequest, sess
 async def create_ambiguity_question(taxonomy_id: UUID, data: TaxonomyAmbiguityQuestionRequest, session: Session, user: CurrentUser):
     repo = TenantRepository(session, user.tenant_id)
     review = await repo.get(ImportReview, data.import_review_id, lock=True)
+    if get_settings().etl_owner_workflow_enabled:
+        await require_source_manager(session, user, review.source_id)
     if review.status not in ("NEEDS_INPUT", "FAILED"):
         raise AppError("IMPORT_STATE_CONFLICT", "Pertanyaan taxonomy hanya untuk batch yang menunggu input/gagal.", 409)
     from app.services.import_review_service import ImportReviewService

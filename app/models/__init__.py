@@ -1,4 +1,3 @@
-from app.models.analytics_rules import AnalyticsRuleBundle
 from app.models.access import (
     AccessAttribute,
     AccessPolicy,
@@ -9,6 +8,7 @@ from app.models.access import (
     UserPermissionGrant,
 )
 from app.models.ai_policy import AITaskPolicy, AITaskPolicyVersion
+from app.models.analytics_rules import AnalyticsRuleBundle
 from app.models.audit import AIUsage, AuditEvent
 from app.models.auth import RefreshToken, Tenant, User
 from app.models.base import Base

@@ -13,6 +13,7 @@ from app.schemas.master import MasterSchema
 from app.services.audit_service import audit
 from app.services.master_service import MasterService
 from app.services.schema_compiler_service import compile_master_table
+from app.services.workflow_policy_service import require_registry_manager
 
 
 def check_storage(sync, table, *, deploy=False):
@@ -88,8 +89,10 @@ class MasterStorageService(MasterService):
         }
 
     async def deploy(self, master_id, request):
-        self.require_role((*EDIT_ROLES, *REVIEW_ROLES) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES)
+        self.require_role(EDIT_ROLES if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES)
         master, _, table = await self.target(master_id)
+        if get_settings().etl_owner_workflow_enabled and self.user.role in EDIT_ROLES:
+            await require_registry_manager(self.session, self.user, master.created_by)
         self.check_revision(master, request.revision_no)
         settings = get_settings()
         engine = make_engine(

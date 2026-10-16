@@ -2,7 +2,7 @@
 
 Lima template Excel memuat `Formula_Analitik` dan `Aturan_Action_Plan`. Dua tab ini merupakan kontrol analitik: pilih **Dikecualikan dari ETL** pada discovery. Data/rekap tetap dimuat lewat ETL seperti biasa. `Action_Plan` adalah contoh catatan tindak lanjut manusia, berbeda dari tab aturan pemicu.
 
-Backend menerima tab kontrol melalui API, menyimpan draft immutable, menyediakan preview, meminta persetujuan reviewer berbeda, kemudian menghitung formula dan usulan tindakan dari metrik produk yang sudah aktif. Saat ini impor, persetujuan dan evaluasi aturan menggunakan API; wizard ETL dan chat AI belum menjalankan alur ini secara otomatis. Helper menyediakan petunjuk dan template.
+Backend menerima tab kontrol melalui API, menyimpan draft immutable, menyediakan preview, menjalankan validasi pengelola pada owner workflow (reviewer berbeda hanya jika mode legacy aktif), kemudian menghitung formula dan usulan tindakan dari metrik produk yang sudah aktif. Saat ini impor, persetujuan dan evaluasi aturan menggunakan API; wizard ETL dan chat AI belum menjalankan alur ini secara otomatis. Helper menyediakan petunjuk dan template.
 
 ## Header tab kontrol
 

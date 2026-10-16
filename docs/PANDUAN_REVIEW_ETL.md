@@ -1,5 +1,8 @@
 # Implementasi review konfigurasi ETL
 
+> Kebijakan aktif owner workflow (16 Oktober 2026): SOURCE_OWNER/DATA_STEWARD satu unit dapat mengelola sumber rekan, validasi, deploy, sync, dan menyelesaikan item lama tanpa approver terpisah. Akses default berdasarkan unit aktif; metadata domain/yurisdiksi/purpose opsional. Petunjuk reviewer atau approval rilis di bawah hanya berlaku jika owner workflow dimatikan. Lihat [alur pengelola unit](OWNER_WORKFLOW_POLICY.md).
+
+
 Wizard Vue dan round-trip XLSX tersedia untuk parameter yang sudah didukung runtime ETL. Jalur yang disarankan adalah draft manual dari profil/template, penyesuaian mapping, jawaban pertanyaan dan validasi oleh pemilik data. Approval manusia dilakukan sekali saat registrasi awal sumber dan klasifikasi seluruh tab. Setelah itu owner/steward dapat deploy dan sync tanpa approval konfigurasi atau rilis rutin kedua. Item legacy yang masih menampilkan gate review harus mengikuti statusnya. Master memakai [registry/binding](REGISTRY_MASTER_BE03.md), [storage](STORAGE_MASTER_BE04.md), dan [review/apply batch](MASTER_IMPORT_POLICY_BE07.md). [Referensi/FK master](MASTER_REFERENCES_BE08.md) serta [taxonomy](FRONTEND_BE13.md) tersedia melalui alur tersendiri. Rekomendasi AI bukan koreksi otomatis seluruh sel; keputusan ambigu tetap memerlukan review.
 
 ## Menjalankan
@@ -44,7 +47,7 @@ Urutan untuk kolom baru:
    header lama sudah hilang/berubah, buat draft manual atau AI dari profile terbaru.
 4. Tambah/perbaiki mapping melalui form. `source_column` harus cocok persis dengan header
    profile. Draft lama dengan fingerprint berbeda tidak dapat dipakai tanpa versi baru.
-5. Validasi/dry-run dan selesaikan pertanyaan. Pada owner workflow, gunakan Validasi & siapkan deploy lalu Deploy; tidak perlu mengajukan review rutin. Jika item legacy menampilkan submit/reviewer, ikuti alur tersebut. Hindari mengubah Sheet di antara validasi dan deploy karena deploy memeriksa snapshot terbaru.
+5. Validasi/dry-run dan selesaikan pertanyaan. Pada owner workflow, gunakan Validasi & siapkan deploy lalu Deploy; tidak perlu mengajukan review rutin. Item lama juga dapat diselesaikan pengelola satu unit saat owner workflow aktif; reviewer hanya diperlukan jika mode ini dimatikan. Hindari mengubah Sheet di antara validasi dan deploy karena deploy memeriksa snapshot terbaru.
 6. Pada langkah **Validasi & persetujuan**, periksa **Preview perubahan schema**:
    operasi, jumlah record lama, contoh tanggal, dan blocker. Centang konfirmasi schema
    sebelum validasi deploy bila target/view berubah. Validasi mengikat fingerprint schema dan data;
@@ -124,7 +127,7 @@ Cocokkan konfigurasi APPROVED dengan payload job DEPLOY, bukan URL draft lama.
 Master tidak memakai konfigurasi ETL biasa. Perbarui definisi dan validasi sebagai pemilik.
 Field baru nullable didukung melalui deploy-storage ulang; record lama bernilai null.
 Periksa binding terhadap versi definisi dan profil sumber terbaru, lalu gunakan batch import
-dengan Preview dan Apply. Workflow legacy dapat tetap meminta reviewer. Field wajib baru, perubahan key/type/nullability, rename, atau penghapusan
+dengan Preview dan Apply. Reviewer terpisah hanya diperlukan jika owner workflow dimatikan. Field wajib baru, perubahan key/type/nullability, rename, atau penghapusan
 memerlukan migrasi khusus. Lihat [storage master](STORAGE_MASTER_BE04.md#perubahan-schema-dan-record).
 
 ## Kontrak API review
@@ -277,7 +280,7 @@ Parameter runtime terbaru (DQ, precision, unit, timezone, currency) dan mapping 
 
 ### Review perubahan schema NON_MASTER
 
-Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Pemilik meninjau schema dan mapping pada revisi serta fingerprint schema/data yang sama; workflow legacy mengikuti reviewer yang ditampilkan. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
+Langkah 7 menampilkan `deployment_plan.migration.comparison`: kolom lama/baru beserta tipe dan nullability, key sebelum/sesudah, target/proyeksi view dan dependency. Operasi, jumlah record lama, contoh konversi dan blocker tersedia sebelum submit/approval/deploy. Pemilik meninjau schema dan mapping pada revisi serta fingerprint schema/data yang sama; item lama mengikuti validasi pengelola bila owner workflow aktif. Perubahan setelah review meminta review ulang (`SCHEMA_MIGRATION_STALE`).
 
 Untuk `bigint menjadi date` pada tabel berisi data, pilih **Format nilai tanggal = Serial Google Sheets** (`date_input_format: "GOOGLE_SHEETS_SERIAL"`) bersama `parse_date_id`. Tipe bigint atau angka dalam rentang valid saja tidak membuktikan bahwa nilainya tanggal. Konfirmasi makna sumber melalui mapping; backend memeriksa seluruh nilai non-null dan menampilkan `validation.checked`, `convertible`, `invalid`, serta contoh. Nilai di luar rentang 1..2958465 menghentikan migrasi. Mode serial eksplisit menolak text, pecahan dan nilai non-finite; mode `TEXT` memakai pola strptime dan menolak angka. Default null mempertahankan parser konfigurasi lama, tetapi tidak mengizinkan migrasi berisiko tanpa deklarasi format. Workbook menyimpan pilihan ini di `02 Struktur Kolom`, kolom AD.
 
@@ -319,7 +322,7 @@ Lihat [Contoh data analitik](CONTOH_DATA_ANALITIK.md): keluhan pelanggan, sebara
 
 ## Formula analitik dan aturan action plan
 
-Lima contoh Excel memuat Formula_Analitik dan Aturan_Action_Plan. Kedua tab kontrol Dikecualikan dari ETL; produk data utamanya harus ACTIVE. Backend menerima impor melalui API analytics-rules/import-sheet, menyediakan preview, approval reviewer berbeda, evaluate berbasis metrik yang diizinkan dan REVOKE untuk menghentikan aturan. Hasil berupa usulan PROPOSED dengan bukti angka, periode dan versi; unit, sampel serta hipotesis diperiksa manusia. Workflow aturan saat ini melalui API, belum terhubung otomatis ke wizard ETL atau chat AI.
+Lima contoh Excel memuat Formula_Analitik dan Aturan_Action_Plan. Kedua tab kontrol Dikecualikan dari ETL; produk data utamanya harus ACTIVE. Backend menerima impor melalui API analytics-rules/import-sheet, menyediakan preview, validasi pengelola pada owner workflow (reviewer berbeda hanya pada mode legacy), evaluate berbasis metrik yang diizinkan dan REVOKE untuk menghentikan aturan. Hasil berupa usulan PROPOSED dengan bukti angka, periode dan versi; unit, sampel serta hipotesis diperiksa manusia. Workflow aturan saat ini melalui API, belum terhubung otomatis ke wizard ETL atau chat AI.
 
 Lihat [panduan aturan dan formula](PANDUAN_ATURAN_ANALITIK.md) serta [lima template Excel](CONTOH_DATA_ANALITIK.md).
 

@@ -15,7 +15,7 @@ Master menyimpan identitas rujukan yang digunakan berulang. Gunakan Registry mas
 - Tab rujukan dikonfirmasi MASTER. Tab transaksi yang memakai rujukan tetap NON_MASTER.
 - SOURCE_OWNER, DATA_STEWARD atau PLATFORM_ADMIN menyiapkan definisi dan binding. Jika ETL_OWNER_WORKFLOW_ENABLED aktif, owner/steward menyelesaikan validasi tanpa approval rutin kedua. Workflow legacy tetap dapat meminta reviewer.
 - Gunakan master yang sudah ada jika identitas dan arti bisnisnya sesuai. Jangan membuat master duplikat hanya karena sumbernya berbeda.
-- Akses sumber, assignment, policy dan gate lain yang diwajibkan tetap dipenuhi; klasifikasi MASTER atau approval binding tidak memberikan izin baca otomatis.
+- Pengelola dapat menangani sumber milik rekan satu unit aktif tanpa approver terpisah; akses sumber, assignment dan policy khusus tetap dipenuhi; klasifikasi MASTER atau approval binding tidak memberikan izin baca otomatis.
 
 ### 1. Periksa sumber dan klasifikasi
 

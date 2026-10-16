@@ -114,7 +114,7 @@
   {
     "group": "review",
     "code": "OWNER_WORKFLOW_ACTOR_REQUIRED",
-    "kind": "error",
+    "kind": "legacy",
     "cause": "Akun bukan data owner/steward yang tercatat pada sumber owner-managed.",
     "action": "Minta data owner atau steward yang tercatat menjalankan deploy/rollback; PLATFORM_ADMIN dapat membantu. Pemeriksaan snapshot dan klasifikasi tetap berlaku."
   },
@@ -404,5 +404,26 @@
     "kind": "error",
     "cause": "Hasil mencapai batas query/server sehingga dapat terpotong.",
     "action": "Persempit periode atau kelompok dimension; review draft baru sebelum evaluasi."
+  },
+  {
+    "group": "akses",
+    "code": "SOURCE_UNIT_FORBIDDEN",
+    "kind": "error",
+    "cause": "Role pengelola atau keanggotaan unit sumber tidak aktif/cocok, atau ada DENY operasional.",
+    "action": "Gunakan SOURCE_OWNER/DATA_STEWARD pada unit sumber. Admin memperbaiki assignment bila salah; jangan membuat sumber duplikat."
+  },
+  {
+    "group": "akses",
+    "code": "SOURCE_METADATA_REJECTED",
+    "kind": "error",
+    "cause": "Metadata sumber sebelumnya ditolak.",
+    "action": "Perbaiki metadata di Workspace, simpan, lalu Validasi akses unit. Tidak perlu approver terpisah pada owner workflow."
+  },
+  {
+    "group": "akses",
+    "code": "OWNER_WORKFLOW_DISABLED",
+    "kind": "error",
+    "cause": "Server masih menggunakan mode legacy.",
+    "action": "Admin memeriksa ETL_OWNER_WORKFLOW_ENABLED. Pada mode legacy ikuti alur reviewer yang dikonfigurasi."
   }
 ]

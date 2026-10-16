@@ -60,6 +60,11 @@ from app.services.taxonomy_validation_service import (
 )
 from app.services.watermark_service import incremental_values
 from app.services.workbook_service import decode, token
+from app.services.workflow_policy_service import (
+    require_source_manager,
+    require_source_reader,
+    source_visibility_condition,
+)
 
 
 class ImportReviewService:
@@ -71,7 +76,7 @@ class ImportReviewService:
         if self.user.role not in (EDIT_ROLES if edit else (*EDIT_ROLES, *REVIEW_ROLES)):
             raise AppError("FORBIDDEN", "Peran tidak diizinkan mengakses batch import.", 403)
 
-    async def locked(self, review_id):
+    async def locked(self, review_id, *, edit=False):
         self.role()
         review = await self.session.scalar(
             self.repo.query(ImportReview)
@@ -81,6 +86,9 @@ class ImportReviewService:
         )
         if review is None:
             raise AppError("RESOURCE_NOT_FOUND", "Batch tidak ditemukan.", 404)
+        await require_source_reader(self.session, self.user, review.source_id)
+        if edit and get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, review.source_id)
         return review
 
     @staticmethod
@@ -367,6 +375,9 @@ class ImportReviewService:
 
     async def create(self, data):
         self.role(edit=True)
+        if get_settings().etl_owner_workflow_enabled:
+            sheet = await self.repo.get(SourceSheet, data.source_sheet_id)
+            await require_source_manager(self.session, self.user, sheet.source_id)
         await self.session.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
             {"key": "import:" + self.user.tenant_id + ":" + str(data.source_sheet_id)},
@@ -502,6 +513,7 @@ class ImportReviewService:
     async def detail(self, review_id):
         self.role()
         review = await self.repo.get(ImportReview, review_id)
+        await require_source_reader(self.session, self.user, review.source_id)
         return await self.present(review)
 
     async def present(self, review):
@@ -519,7 +531,8 @@ class ImportReviewService:
 
     async def list(self, status=None, sheet_id=None, offset=0, limit=50):
         self.role()
-        query = self.repo.query(ImportReview)
+        source_ids = select(DataSource.id).where(DataSource.tenant_id == self.user.tenant_id, source_visibility_condition(self.user))
+        query = self.repo.query(ImportReview).where(ImportReview.source_id.in_(source_ids))
         if status:
             query = query.where(ImportReview.status.in_(("STALE_REVIEW", "READY_FOR_APPROVAL", "APPROVED"))
                                 if status == "STALE_REVIEW" else ImportReview.status == status)
@@ -630,7 +643,7 @@ class ImportReviewService:
 
     async def answer_question(self, review_id, question_id, data: ImportQuestionDecision):
         self.role(edit=True)
-        review = await self.locked(review_id)
+        review = await self.locked(review_id, edit=True)
         if review.status not in ("NEEDS_INPUT", "FAILED"):
             raise AppError("IMPORT_STATE_CONFLICT", "Batch belum menunggu keputusan pengguna.", 409)
         if not await self.is_current(review):
@@ -853,7 +866,7 @@ class ImportReviewService:
     async def dismiss_ai_suggestions(self, review_id, data: ImportAISuggestionsDismissRequest):
         """Acknowledge advisory VALUE_ISSUE findings in bulk; integrity blockers remain open."""
         self.role(edit=True)
-        review = await self.locked(review_id)
+        review = await self.locked(review_id, edit=True)
         if review.revision_no != data.revision_no:
             raise AppError("IMPORT_REVISION_CONFLICT", "Batch berubah; muat ulang sebelum melanjutkan.", 409)
         if review.status != "NEEDS_INPUT":
@@ -927,9 +940,10 @@ class ImportReviewService:
 
     async def resolve_master_proposal(self, review_id, question_id, data: ImportProposalResolution):
         self.role(edit=False)
-        if self.user.role not in REVIEW_ROLES:
+        owner_decision = get_settings().etl_owner_workflow_enabled and self.user.role in EDIT_ROLES
+        if self.user.role not in REVIEW_ROLES and not owner_decision:
             raise AppError("FORBIDDEN", "Reviewer diperlukan untuk menyelesaikan proposal master.", 403)
-        review = await self.locked(review_id)
+        review = await self.locked(review_id, edit=owner_decision)
         if review.status not in ("NEEDS_INPUT", "FAILED"):
             raise AppError("IMPORT_STATE_CONFLICT", "Batch belum menunggu keputusan pengguna.", 409)
         if not await self.is_current(review):
@@ -997,7 +1011,7 @@ class ImportReviewService:
 
     async def action(self, review_id, data, action):
         self.role(edit=True)
-        review = await self.locked(review_id)
+        review = await self.locked(review_id, edit=True)
         if review.revision_no != data.revision_no:
             raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
         if action == ImportAction.CANCEL:
@@ -1071,9 +1085,9 @@ class ImportReviewService:
         )
         return self.response(review)
 
-    async def _preview_context(self, review_id, revision_no):
+    async def _preview_context(self, review_id, revision_no, *, edit=False):
         self.role()
-        review = await self.locked(review_id)
+        review = await self.locked(review_id, edit=edit)
         if review.revision_no != revision_no:
             raise AppError("IMPORT_REVISION_CONFLICT", "Revisi batch berubah; muat ulang.", 409)
         if review.status not in ("READY_FOR_APPROVAL", "APPROVED"):
@@ -1127,7 +1141,7 @@ class ImportReviewService:
         return None
 
     async def preview(self, review_id, data, *, _read_only=False):
-        review, config, rows = await self._preview_context(review_id, data.revision_no)
+        review, config, rows = await self._preview_context(review_id, data.revision_no, edit=not _read_only)
         references = await reference_context(self.session, self.user, review.source_sheet_id, config)
         for evidence in review.checkpoint.get("reference_resolutions", {}).values():
             current = references.get(evidence["source_column"])
@@ -1316,7 +1330,8 @@ class ImportReviewService:
 
     async def approve(self, review_id, data):
         self.role()
-        if self.user.role not in REVIEW_ROLES:
+        owner_approval = get_settings().etl_owner_workflow_enabled and self.user.role in EDIT_ROLES
+        if self.user.role not in REVIEW_ROLES and not owner_approval:
             raise AppError("FORBIDDEN", "Reviewer diperlukan untuk menyetujui batch import.", 403)
         review = await self.locked(review_id)
         await require_source_approver(self.session, self.user, review.source_id, "import_review")
@@ -1351,10 +1366,12 @@ class ImportReviewService:
         if review.checkpoint.get("periods_to_close"):
             _, definition, _ = await MasterStorageService(self.session, self.user).target(review.dependencies["master_id"])
             self.check_closure_visibility(definition, [True])
-        if get_settings().require_separate_approver and review.created_by == self.user.id:
+        if not get_settings().etl_owner_workflow_enabled and get_settings().require_separate_approver and review.created_by == self.user.id:
             raise AppError("SEPARATE_APPROVER_REQUIRED", "Approval harus dilakukan oleh akun reviewer lain.", 403)
-        self.move(review, ImportAction.APPROVE)
+        self.move(review, ImportAction.OWNER_APPROVE if owner_approval else ImportAction.APPROVE)
         review.checkpoint = {**review.checkpoint, "approved_by": str(self.user.id), "approval_comment": data.comment}
+        if owner_approval:
+            review.checkpoint = {**review.checkpoint, "approval_mode": "OWNER_VALIDATED", "approved_preview_hash": review.checkpoint["preview_hash"]}
         if current_preview and current_preview["requires_source_confirmation"]:
             review.checkpoint = {**review.checkpoint, "source_conflicts_approved_hash": current_preview["preview_hash"]}
             audit(self.session, self.user, "import.source_conflicts_approved", review.id,
@@ -1364,7 +1381,7 @@ class ImportReviewService:
 
     async def apply(self, review_id, data):
         self.role(edit=True)
-        review, config, rows = await self._preview_context(review_id, data.revision_no)
+        review, config, rows = await self._preview_context(review_id, data.revision_no, edit=True)
         owner_apply = review.status == "READY_FOR_APPROVAL" and get_settings().etl_owner_workflow_enabled
         if review.status != "APPROVED" and not owner_apply:
             raise AppError("IMPORT_APPROVAL_REQUIRED", "Batch harus disetujui atau memenuhi validasi pemilik sebelum apply.", 409)

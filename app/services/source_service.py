@@ -29,6 +29,7 @@ from app.services.job_service import enqueue
 from app.services.profiling_service import digest, profile_values
 from app.services.release_approval_service import require_release_ready
 from app.services.source_approver_service import require_source_approver
+from app.services.workflow_policy_service import may_manage_source, require_source_manager
 
 
 async def source_records(session, sources):
@@ -79,6 +80,8 @@ def source_code_base(name: str) -> str:
 
 
 def invalidate_registration_review(session, user, source, reason, *, automated=False):
+    if get_settings().etl_owner_workflow_enabled:
+        return False
     if not get_settings().unit_domain_default_access_enabled or source.access_review_status != "APPROVED":
         return False
     source.access_review_status = "PENDING"
@@ -105,6 +108,12 @@ class SourceService:
 
     async def _validated_access_metadata(self, data, *, subject_id=None):
         metadata = data.model_dump(mode="json")
+        owner_flow = get_settings().etl_owner_workflow_enabled
+        if owner_flow:
+            metadata["data_owner_user_id"] = metadata.get("data_owner_user_id") or str(subject_id or self.user.id)
+            metadata["data_steward_user_id"] = metadata.get("data_steward_user_id") or metadata["data_owner_user_id"]
+        elif any(metadata.get(key) is None for key in ("business_domain_id", "jurisdiction_id", "purpose_id", "data_owner_user_id", "data_steward_user_id")):
+            raise AppError("SOURCE_METADATA_INCOMPLETE", "Alur legacy memerlukan metadata akses lengkap.", 422)
         scope_ids = {}
         for field, kind in (
             ("owner_unit_id", "DEPARTMENT"),
@@ -112,6 +121,8 @@ class SourceService:
             ("jurisdiction_id", "JURISDICTION"),
             ("purpose_id", "PURPOSE"),
         ):
+            if metadata.get(field) is None:
+                continue
             attribute = await self.repo.get(AccessAttribute, metadata[field])
             if not attribute.is_active or attribute.kind != kind:
                 raise AppError("SOURCE_ACCESS_SCOPE_INVALID", "Atribut metadata sumber tidak sesuai atau nonaktif.")
@@ -128,7 +139,8 @@ class SourceService:
                 UserAssignment.attribute_id.in_(scope_ids.values()),
             )
         )).all())
-        if assigned_ids != set(scope_ids.values()):
+        required = {scope_ids["owner_unit_id"]} if get_settings().etl_owner_workflow_enabled else set(scope_ids.values())
+        if not required.issubset(assigned_ids):
             raise AppError("SOURCE_SCOPE_NOT_ASSIGNED", "Scope sumber harus menjadi assignment aktif pendaftar.", 403)
         for field in ("data_owner_user_id", "data_steward_user_id"):
             target = await self.repo.get(User, metadata[field])
@@ -161,6 +173,8 @@ class SourceService:
             .order_by(DataSource.created_at, DataSource.id)
         )).all())
         previous = [source for source in registered if source.owner_user_id == self.user.id]
+        if get_settings().etl_owner_workflow_enabled:
+            previous = [source for source in registered if await may_manage_source(self.session, self.user, source)]
         if registered and not previous:
             raise AppError(
                 "SOURCE_ALREADY_REGISTERED",
@@ -226,6 +240,8 @@ class SourceService:
             access_metadata_editor_id=self.user.id,
         )
         audit(self.session, self.user, "source.registered", source.id)
+        if get_settings().etl_owner_workflow_enabled:
+            await self.validate_owner_access(source.id)
         job = await enqueue(self.session, self.user, "DISCOVER", source.id)
         return {"source": record(source), **job, "already_registered": False, "duplicate_source_ids": []}
 
@@ -276,11 +292,19 @@ class SourceService:
             ).order_by(DataSource.created_at, DataSource.id)
         )).all()
         own = next((item for item in existing if item.owner_user_id == self.user.id), None)
+        manageable = own
+        if get_settings().etl_owner_workflow_enabled:
+            manageable = None
+            for item in existing:
+                if await may_manage_source(self.session, self.user, item):
+                    manageable = item
+                    break
         return {
             "registered": bool(existing),
             "owned_by_me": own is not None,
-            "source_id": own.id if own else None,
-            "source_name": own.name if own else None,
+            **({"can_manage": manageable is not None} if get_settings().etl_owner_workflow_enabled else {}),
+            "source_id": manageable.id if manageable else None,
+            "source_name": manageable.name if manageable else None,
         }
 
     async def delete_preview(self, source_id):
@@ -471,17 +495,24 @@ class SourceService:
         )
         if source is None:
             raise AppError("RESOURCE_NOT_FOUND", "Data tidak ditemukan.", 404)
-        if get_settings().unit_domain_default_access_enabled and not self._may_manage_access_metadata(source):
+        if get_settings().unit_domain_default_access_enabled and not await self._may_manage_access_metadata(source):
             raise AppError("FORBIDDEN", "Metadata akses hanya dapat diubah pemilik, data owner/steward, atau PLATFORM_ADMIN.", 403)
         if source.access_revision != data.revision_no:
             raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
+        if get_settings().etl_owner_workflow_enabled and source.access_metadata:
+            data.access_metadata = data.access_metadata.model_copy(update={
+                key: getattr(data.access_metadata, key) or source.access_metadata.get(key)
+                for key in ("data_owner_user_id", "data_steward_user_id")
+            })
         validation_subject = (
             data.access_metadata.data_owner_user_id
             if self.user.role == "PLATFORM_ADMIN" and get_settings().unit_domain_default_access_enabled
             else None
         )
         metadata = await self._validated_access_metadata(data.access_metadata, subject_id=validation_subject)
-        if source.access_metadata == metadata:
+        if source.access_metadata == metadata and source.access_review_status != "REJECTED":
+            if get_settings().etl_owner_workflow_enabled:
+                return await self.validate_owner_access(source.id)
             return record(source)
         previous_status = source.access_status
         changed_fields = [
@@ -512,9 +543,37 @@ class SourceService:
             changed_fields=changed_fields,
             previous_status=previous_status,
         )
+        if get_settings().etl_owner_workflow_enabled:
+            return await self.validate_owner_access(source.id)
         return record(source)
 
-    def _may_manage_access_metadata(self, source):
+    async def validate_owner_access(self, source_id):
+        if not get_settings().etl_owner_workflow_enabled:
+            raise AppError("OWNER_WORKFLOW_DISABLED", "Alur pemilik belum aktif.", 409)
+        source = await self.repo.get(DataSource, source_id, lock=True)
+        await require_source_manager(self.session, self.user, source.id)
+        if source.unlinked_at:
+            raise AppError("SOURCE_UNLINKED", "Pulihkan sumber sebelum mengaktifkan akses.", 409)
+        if source.access_review_status == "REJECTED":
+            raise AppError("SOURCE_METADATA_REJECTED", "Perbaiki metadata yang ditolak dan simpan kembali sebelum validasi.", 409)
+        if not source.access_metadata:
+            raise AppError("SOURCE_METADATA_INCOMPLETE", "Isi unit pemilik sumber terlebih dahulu.", 409)
+        await self._validated_access_metadata(SourceAccessMetadata.model_validate(source.access_metadata),
+                                              subject_id=source.access_metadata.get("data_owner_user_id") or source.owner_user_id)
+        if source.access_status != "POLICY_APPROVED" or source.access_review_status != "APPROVED":
+            source.access_status, source.access_review_status = "POLICY_APPROVED", "APPROVED"
+            source.access_reviewed_by, source.access_reviewed_at = self.user.id, now()
+            source.access_review_reason = "METADATA_VERIFIED"
+            source.access_revision += 1
+            audit(self.session, self.user, "source.owner_access_validated", source.id,
+                  access_revision=source.access_revision, mode="UNIT_SHARED_OWNER_WORKFLOW")
+        return record(source)
+
+    async def _may_manage_access_metadata(self, source):
+        if get_settings().etl_owner_workflow_enabled:
+            if source.access_metadata is None and self.user.id == source.owner_user_id:
+                return True
+            return await may_manage_source(self.session, self.user, source)
         if self.user.role == "PLATFORM_ADMIN":
             return True
         metadata = source.access_metadata or {}
@@ -536,6 +595,8 @@ class SourceService:
         await require_source_approver(self.session, self.user, source.id, workflow)
         if source.access_revision != data.revision_no:
             raise AppError("SOURCE_ACCESS_REVISION_CONFLICT", "Metadata akses berubah; muat ulang sumber.", 409)
+        if get_settings().etl_owner_workflow_enabled and data.decision == "APPROVE":
+            return await self.validate_owner_access(source.id)
         if source.access_review_status != "PENDING":
             raise AppError("SOURCE_METADATA_ALREADY_REVIEWED", "Metadata sudah diputuskan; muat ulang sumber.", 409)
         if not source.access_metadata or not source.access_metadata_editor_id:
@@ -572,7 +633,7 @@ class SourceService:
                     "Tab atau hasil profiling berubah sejak review dibuka. Periksa bukti terbaru.",
                     409,
                 )
-        if source.access_metadata_editor_id == self.user.id:
+        if source.access_metadata_editor_id == self.user.id and not get_settings().etl_owner_workflow_enabled:
             raise AppError("SOURCE_METADATA_SELF_REVIEW", "Editor metadata tidak boleh menjadi reviewer.", 403)
         if data.decision == "APPROVE":
             editor = await self.repo.get(User, source.access_metadata_editor_id)
@@ -694,10 +755,12 @@ class SourceService:
             "tabs": review_evidence["tabs"],
         }
 
-    async def activate_source_access(self, source_id, data):
+    async def activate_source_access(self, source_id, data, *, workflow=None):
+        if get_settings().etl_owner_workflow_enabled:
+            return await self.validate_owner_access(source_id)
         source = await self.repo.get(DataSource, source_id, lock=True)
         if get_settings().unit_domain_default_access_enabled:
-            if not self._may_manage_access_metadata(source):
+            if not await self._may_manage_access_metadata(source):
                 raise AppError("FORBIDDEN", "Hanya pemilik sumber atau PLATFORM_ADMIN yang dapat mengaktifkan akses.", 403)
             if source.access_review_status != "APPROVED" or not source.access_metadata:
                 raise AppError("SOURCE_METADATA_REVIEW_REQUIRED", "Approver harus lebih dahulu memeriksa sumber dan tab yang didaftarkan.", 409)
@@ -713,7 +776,9 @@ class SourceService:
                   revision_no=source.access_revision, scope=["owner_unit_id", "business_domain_id"])
             return record(source)
         if self.user.role != "PLATFORM_ADMIN":
-            raise AppError("FORBIDDEN", "PLATFORM_ADMIN diperlukan untuk aktivasi policy legacy.", 403)
+            if workflow != "configuration":
+                raise AppError("FORBIDDEN", "PLATFORM_ADMIN diperlukan untuk aktivasi policy legacy.", 403)
+            await require_source_approver(self.session, self.user, source.id, "configuration")
         if source.release_policy is not None:
             active_configs = (await self.session.scalars(
                 self.repo.query(Configuration).where(
@@ -919,6 +984,8 @@ class SourceService:
         return {"profiles": results, "schema_drift": drift}
 
     async def sync_review(self, source_id, *, auto_load=False):
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, source_id)
         await self.profile(source_id)
         sheets = await self.repo.sheets(source_id)
         reviews = []
@@ -941,6 +1008,8 @@ class SourceService:
         return {"source_id": str(source_id), "reviews": reviews}
 
     async def queue_sync_review(self, source_id):
+        if get_settings().etl_owner_workflow_enabled:
+            await self.validate_owner_access(source_id)
         source = await self.repo.get(DataSource, source_id, lock=True)
         if source.unlinked_at is not None:
             raise AppError("SOURCE_UNLINKED", "Pulihkan sumber sebelum menjalankan sync.", 409)
@@ -956,6 +1025,8 @@ class SourceService:
 
     async def update_sheet(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         previous = {name: getattr(sheet, name) for name in data.model_dump(exclude_none=True)}
         if data.enabled is True and not sheet.is_present:
             raise AppError(
@@ -981,6 +1052,8 @@ class SourceService:
 
     async def update_watermark(self, sheet_id, data):
         sheet = await self.repo.get(SourceSheet, sheet_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         if sheet.watermark_revision != data.revision_no:
             raise AppError("WATERMARK_REVISION_CONFLICT", "Watermark tab telah berubah; muat ulang.", 409)
         if data.source_column:
@@ -1020,6 +1093,8 @@ class SourceService:
         return record(sheet)
 
     async def update_schedule(self, source_id, data):
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, source_id)
         source = await self.repo.get(DataSource, source_id, lock=True)
         if source.schedule_revision != data.revision_no:
             raise AppError("SOURCE_SCHEDULE_CONFLICT", "Jadwal sumber telah berubah; muat ulang.", 409)

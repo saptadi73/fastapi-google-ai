@@ -10,6 +10,7 @@ from app.repositories.base import TenantRepository
 from app.schemas.taxonomy import TaxonomyVersionUpdate
 from app.services.audit_service import audit
 from app.services.profiling_service import digest
+from app.services.workflow_policy_service import require_registry_manager
 
 
 def term_payload(term):
@@ -41,6 +42,8 @@ class TaxonomyVersionService:
 
     async def create(self, taxonomy_id, data):
         taxonomy = await self.repo.get(Taxonomy, taxonomy_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_registry_manager(self.session, self.user, taxonomy.created_by)
         if taxonomy.status != "APPROVED" or not taxonomy.is_active or taxonomy.version != data.base_version:
             raise AppError("TAXONOMY_VERSION_STALE", "Pilih versi taxonomy aktif/approved terbaru.", 409)
         current = await archive_current(self.session, taxonomy)
@@ -57,6 +60,8 @@ class TaxonomyVersionService:
     async def locked(self, version_id, revision_no):
         initial = await self.repo.get(TaxonomyVersion, version_id)
         taxonomy = await self.repo.get(Taxonomy, initial.taxonomy_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_registry_manager(self.session, self.user, taxonomy.created_by)
         version = await self.repo.get(TaxonomyVersion, version_id, lock=True)
         await self.session.refresh(version)
         if version.revision_no != revision_no:
@@ -95,7 +100,7 @@ class TaxonomyVersionService:
     async def approve(self, version_id, data):
         taxonomy, version = await self.locked(version_id, data.revision_no)
         editor_id = version.definition_json.get("edited_by", version.created_by)
-        if get_settings().require_separate_approver and editor_id == self.user.id:
+        if not get_settings().etl_owner_workflow_enabled and get_settings().require_separate_approver and editor_id == self.user.id:
             raise AppError("SEPARATE_APPROVER_REQUIRED", "Editor terakhir tidak boleh menyetujui draft sendiri.", 403)
         parsed = TaxonomyVersionUpdate(revision_no=version.revision_no, terms=version.definition_json["terms"])
         await self.validate_identity(taxonomy, parsed.terms)

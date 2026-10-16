@@ -18,7 +18,7 @@ Jika tab dihapus/diubah, jalankan Temukan tab, tunggu SUCCEEDED, lalu Profiling 
 
 `NEEDS_INPUT` atau **Menunggu tindakan** berarti batch berhenti untuk jawaban/keputusan, bukan worker masih berjalan. **Lihat detail** berikon mata menampilkan alasan, kode, nomor baris, kolom dan catatan tanpa nilai mentah. `KEEP_ORIGINAL` hanya untuk nilai sah yang sudah diverifikasi pemilik dengan alasan wajib; error teknis, PII, atau salah mapping perlu diperbaiki.
 
-Katalog kosong: periksa produk aktif, apakah data sudah dimuat, aksi READ/QUERY, domain dan unit pengguna, tenant, serta policy khusus. Akses default READ/QUERY berlaku dalam domain dan business unit pemilik; fallback tidak mensyaratkan yurisdiksi. Policy khusus dapat mempersempit akses. `DEFAULT_DENY` berarti tak ada izin yang cocok; `EXPLICIT_DENY` tidak dapat dikalahkan ALLOW.
+Katalog kosong: periksa produk aktif, apakah data sudah dimuat, aksi READ/QUERY, unit aktif pengguna, tenant, serta policy khusus. Akses default READ/QUERY berlaku dalam unit bisnis pemilik pada owner workflow; fallback tidak mensyaratkan yurisdiksi. Policy khusus dapat mempersempit akses. `DEFAULT_DENY` berarti tak ada izin yang cocok; `EXPLICIT_DENY` tidak dapat dikalahkan ALLOW.
 
 `RELEASE_APPROVAL_REQUIRED` berlaku pada gate legacy/rilis yang masih aktif; item owner-managed tervalidasi tidak memerlukan approval rilis kedua. Database `DATABASE_PERMISSION_DENIED` perlu admin memeriksa log job dan privilege role; jangan memberi runtime superuser. AI error: catat request ID, cek health, model, budget dan kuota; jangan mengirim key/password ke helper.
 

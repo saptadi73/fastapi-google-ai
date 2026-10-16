@@ -145,6 +145,8 @@ def test_templates_control_tabs_round_trip_and_approved_semantic_query(scenario)
 
 
 def service_fixture(monkeypatch, *, creator="owner", status="DRAFT"):
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
     data = definition()
     product = SimpleNamespace(
         id="product",
@@ -183,6 +185,25 @@ def service_fixture(monkeypatch, *, creator="owner", status="DRAFT"):
     monkeypatch.setattr("app.services.analytics_rules_service.require_source_approver", AsyncMock())
     monkeypatch.setattr("app.services.analytics_rules_service.record", lambda obj: vars(obj).copy())
     return service, bundle, product
+
+
+@pytest.mark.asyncio
+async def test_owner_can_validate_own_analytics_but_current_query_must_succeed(monkeypatch):
+    from app.core.config import get_settings
+    service, bundle, _ = service_fixture(monkeypatch, creator="reviewer")
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    service.user.role = "SOURCE_OWNER"
+    manager = AsyncMock()
+    monkeypatch.setattr("app.services.analytics_rules_service.require_source_manager", manager)
+    decision = AnalyticsRulesDecision(expected_hash="a" * 64, decision="APPROVE", reason="Validasi pemilik")
+    service.queries.execute.side_effect = AppError("QUERY_FAILED", "Data tidak tersedia", 409)
+    with pytest.raises(AppError):
+        await service.decide("bundle", decision)
+    assert bundle.status == "DRAFT"
+    service.queries.execute.side_effect = None
+    await service.decide("bundle", decision)
+    assert bundle.status == "APPROVED" and bundle.approved_by == bundle.created_by
+    manager.assert_awaited_with(service.session, service.user, "source")
 
 
 @pytest.mark.asyncio

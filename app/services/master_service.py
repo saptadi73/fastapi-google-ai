@@ -23,6 +23,7 @@ from app.services.audit_service import audit
 from app.services.classification_service import ClassificationService
 from app.services.configuration_service import ConfigurationService
 from app.services.master_recommendation import field_match_reason, field_name_similarity, source_header_name
+from app.services.workflow_policy_service import require_registry_manager, require_source_manager
 
 
 def validate_deactivation_reason(comment):
@@ -225,6 +226,8 @@ class MasterService:
         self.require_role(EDIT_ROLES)
         await self.registry_lock()
         master = await self.lock_master(master_id)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_registry_manager(self.session, self.user, master.created_by)
         self.check_revision(master, data.revision_no)
         await self.check_candidates(data, exclude_id=master.id)
         await self.check_authority(data.definition)
@@ -248,8 +251,10 @@ class MasterService:
 
     async def action(self, master_id, data, action):
         owner_workflow = get_settings().etl_owner_workflow_enabled
-        self.require_role(EDIT_ROLES if action == "submit-review" or (owner_workflow and action == "approve") else REVIEW_ROLES)
+        self.require_role(EDIT_ROLES if action == "submit-review" or owner_workflow else REVIEW_ROLES)
         master = await self.lock_master(master_id)
+        if owner_workflow:
+            await require_registry_manager(self.session, self.user, master.created_by)
         self.check_revision(master, data.revision_no)
         owner_approval = action == "submit-review" and owner_workflow
         if action == "submit-review":
@@ -265,7 +270,7 @@ class MasterService:
             if master.status != "NEEDS_REVIEW" and not owner_approval:
                 raise AppError("MASTER_STATE_CONFLICT", "Ajukan master untuk review terlebih dahulu.", 409)
             if action == "approve":
-                if not owner_approval and get_settings().require_separate_approver and self.user.id in (
+                if not owner_workflow and get_settings().require_separate_approver and self.user.id in (
                     master.created_by,
                     master.submitted_by,
                 ):
@@ -402,6 +407,8 @@ class MasterService:
         # Consistent lock order: master -> sheet -> binding. Classification only locks the sheet.
         master = await self.lock_master(data.master_definition_id)
         sheet = await ClassificationService(self.session, self.user).locked_sheet(sheet_id)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         binding = await self.binding(sheet_id, lock=True)
         if data.revision_no != (binding.revision_no if binding else 0):
             raise AppError("MASTER_BINDING_CONFLICT", "Revisi binding berubah; muat ulang.", 409)
@@ -458,12 +465,14 @@ class MasterService:
         }
 
     async def binding_decision(self, sheet_id, data, approve):
-        self.require_role(REVIEW_ROLES)
+        self.require_role(EDIT_ROLES if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES)
         initial = await self.binding(sheet_id)
         if initial is None:
             raise AppError("RESOURCE_NOT_FOUND", "Binding belum tersedia.", 404)
         master = await self.lock_master(initial.master_definition_id)
         sheet = await ClassificationService(self.session, self.user).locked_sheet(sheet_id)
+        if get_settings().etl_owner_workflow_enabled and self.user.role in EDIT_ROLES:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         binding = await self.binding(sheet_id, lock=True)
         if (
             binding.master_definition_id != master.id
@@ -472,7 +481,7 @@ class MasterService:
         ):
             raise AppError("MASTER_BINDING_CONFLICT", "Binding berubah atau tidak dalam draft.", 409)
         if approve:
-            if get_settings().require_separate_approver and binding.created_by == self.user.id:
+            if not get_settings().etl_owner_workflow_enabled and get_settings().require_separate_approver and binding.created_by == self.user.id:
                 raise AppError(
                     "SEPARATE_APPROVER_REQUIRED", "Approver harus berbeda dari editor binding.", 403
                 )
@@ -631,7 +640,7 @@ class MasterService:
         binding = await self.repo.get(MasterColumnBinding, binding_id)
         sheet = await ClassificationService(self.session, self.user).locked_sheet(binding.source_sheet_id)
         source = await self.repo.get(DataSource, sheet.source_id)
-        ConfigurationService(self.session, self.user).require_reference_manager(source)
+        await ConfigurationService(self.session, self.user).require_reference_manager(source)
         await self.session.refresh(binding, with_for_update=True)
         if binding.revision_no != data.revision_no:
             raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Revisi binding berubah; muat ulang.", 409)
@@ -689,7 +698,9 @@ class MasterService:
     async def save_column_binding(self, sheet_id, data):
         self.require_role(EDIT_ROLES)
         # Serialize first creation as well as edits of a column binding.
-        await ClassificationService(self.session, self.user).locked_sheet(sheet_id)
+        sheet = await ClassificationService(self.session, self.user).locked_sheet(sheet_id)
+        if get_settings().etl_owner_workflow_enabled:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         master = await self.lock_master(data.master_definition_id)
         if not master.is_active or master.status != "APPROVED" or master.approved_version != data.master_version:
             raise AppError("MASTER_VERSION_UNAVAILABLE", "Master harus aktif dan versi approved sesuai.", 409)
@@ -735,15 +746,17 @@ class MasterService:
         return record(binding)
 
     async def column_binding_decision(self, binding_id, data, approve=True):
-        self.require_role(REVIEW_ROLES)
+        self.require_role(EDIT_ROLES if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES)
         binding = await self.repo.get(MasterColumnBinding, binding_id)
-        await ClassificationService(self.session, self.user).locked_sheet(binding.source_sheet_id)
+        sheet = await ClassificationService(self.session, self.user).locked_sheet(binding.source_sheet_id)
+        if get_settings().etl_owner_workflow_enabled and self.user.role in EDIT_ROLES:
+            await require_source_manager(self.session, self.user, sheet.source_id)
         await self.session.refresh(binding, with_for_update=True)
         master = await self.lock_master(binding.master_definition_id)
         if binding.revision_no != data.revision_no or binding.status != "DRAFT":
             raise AppError("MASTER_COLUMN_BINDING_CONFLICT", "Binding berubah atau bukan draft.", 409)
         if approve:
-            if get_settings().require_separate_approver and binding.created_by == self.user.id:
+            if not get_settings().etl_owner_workflow_enabled and get_settings().require_separate_approver and binding.created_by == self.user.id:
                 raise AppError("SEPARATE_APPROVER_REQUIRED", "Approver harus berbeda dari editor binding.", 403)
             if not master.is_active or master.status != "APPROVED" or master.approved_version != binding.master_version:
                 raise AppError("MASTER_VERSION_UNAVAILABLE", "Versi master binding sudah tidak aktif.", 409)
@@ -920,7 +933,7 @@ class MasterService:
         return {"items": results, "execution_ready": bool(results) and all(item["status"] == "VALID" for item in results)}
 
     async def deploy_foreign_keys(self):
-        self.require_role(REVIEW_ROLES)
+        self.require_role(("PLATFORM_ADMIN",) if get_settings().etl_owner_workflow_enabled else REVIEW_ROLES)
         plan = await self.dependency_plan()
         if plan["has_cycle"]:
             raise AppError("REFERENCE_DEPENDENCY_CYCLE", "Siklus dependency harus diperbaiki sebelum deployment FK.", 409)

@@ -1,5 +1,8 @@
 # API Reference untuk frontend
 
+> Kebijakan aktif owner workflow (16 Oktober 2026): SOURCE_OWNER/DATA_STEWARD satu unit dapat mengelola sumber rekan, validasi, deploy, sync, dan menyelesaikan item lama tanpa approver terpisah. Akses default berdasarkan unit aktif; metadata domain/yurisdiksi/purpose opsional. Petunjuk reviewer atau approval rilis di bawah hanya berlaku jika owner workflow dimatikan. Lihat [alur pengelola unit](OWNER_WORKFLOW_POLICY.md).
+
+
 Versi backend **0.1.0** · diperbarui untuk workflow sederhana pada **11 Oktober 2026**.
 
 Tracking sumber dan detail import menyediakan `attention` untuk batch yang berhenti, gagal, kedaluwarsa, atau menunggu langkah berikutnya: `review_id`, `source_sheet_id`, `status`, `revision_no`, `blocking_codes`, `message`, dan `ai_coverage`. Ringkasan lokasi temuan menyediakan `affected_row_count`, `locations` (maksimal 20 pasangan `source_row`/`target_column`), dan `has_more_locations`; nomor baris merujuk baris asli Sheet pada snapshot termasuk header, bukan urutan daftar temuan. `NEEDS_INPUT` berarti menunggu tindakan, bukan worker aktif. Status validasi/AI/apply tetap dibedakan; ringkasan sumber memakai `RUNNING` jika ada proses aktif dan `NEEDS_INPUT` jika ada tab berhenti. Audit `import.request_input` dan `import.failed` menyimpan ringkasan ini tanpa nilai mentah. Riwayat sumber menampilkan keterangan serta referensi batch; event lama hanya diperkaya dari batch ketika revisinya masih sama. Frontend membuka modal melalui tombol Lihat detail berikon mata dan mengambil pertanyaan terbuka dari endpoint batch dengan pagination; membuka detail tidak melakukan approval atau sync.
@@ -320,6 +323,7 @@ control pada policy SOURCE masih ditolak di runtime, bukan diterapkan atau dimas
 | GET | `/sources/{source_id}` | S | UUID source | 200 | DataSource |
 | PATCH | `/sources/{source_id}/access-metadata` | E | SourceAccessMetadataUpdate | 200 | DataSource dengan access_revision terbaru dan access_status pending |
 | GET | `/sources/{source_id}/access-review-context` | R | UUID source | 200 | Ringkasan tenant-scoped atribut dan akun untuk reviewer sumber yang ditunjuk |
+| POST | `/sources/{source_id}/validate-access` | Validasi metadata dan akses unit oleh pengelola, tanpa approver terpisah pada owner workflow. |
 | POST | `/sources/{source_id}/access-review` | R | SourceMetadataReview | 200 | Keputusan reviewer yang ditunjuk; status akses tetap pending |
 | GET | `/sources/approver-options` | A | — | 200 | Akun reviewer aktif tenant, id/username/role |
 | GET | `/sources/{source_id}/approvers` | A | — | 200 | Revision, configured, dan daftar reviewer per jenis keputusan |

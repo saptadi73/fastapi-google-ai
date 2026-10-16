@@ -1,8 +1,8 @@
 from app.api.v1 import (
     access,
-    analytics_rules,
     admin_ai_usage,
     ai_policies,
+    analytics_rules,
     auth,
     configurations,
     data_quality,

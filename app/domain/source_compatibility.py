@@ -10,15 +10,18 @@ SOURCE_ACCESS_METADATA_FIELDS = (
 
 
 def classify_source_compatibility(
-    *, access_metadata, access_status, review_status, reviewed_by, reviewed_at
+    *, access_metadata, access_status, review_status, reviewed_by, reviewed_at, owner_managed=False
 ):
     """Describe the next safe step for an existing source without granting access."""
     metadata = access_metadata or {}
-    missing_fields = [field for field in SOURCE_ACCESS_METADATA_FIELDS if not metadata.get(field)]
+    required_fields = ("owner_unit_id",) if owner_managed else SOURCE_ACCESS_METADATA_FIELDS
+    missing_fields = [field for field in required_fields if not metadata.get(field)]
     if missing_fields:
         action = "OWNER_METADATA_REQUIRED"
     elif review_status == "REJECTED":
         action = "SOURCE_REVIEW_REJECTED"
+    elif owner_managed and (review_status != "APPROVED" or access_status != "POLICY_APPROVED" or not reviewed_by or not reviewed_at):
+        action = "OWNER_ACCESS_VALIDATION_REQUIRED"
     elif review_status != "APPROVED" or not reviewed_by or not reviewed_at:
         action = "SOURCE_REVIEW_REQUIRED"
     elif access_status != "POLICY_APPROVED":

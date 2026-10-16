@@ -25,11 +25,7 @@ def owner_workflow_compatible(config):
         return False
     if (config.review_state or {}).get("owner_managed") is True:
         return True
-    return (
-        config.status in ("APPROVED", "SUPERSEDED", "ACTIVE")
-        and bool(config.approved_by)
-        and bool(config.approved_at)
-    )
+    return config.status in ("APPROVED", "SUPERSEDED", "ACTIVE")
 
 
 def _group_key(group_type, unit_id=None):
@@ -53,6 +49,9 @@ async def _active_unit_memberships(session, tenant_id, user_ids):
 
 
 def release_status(config, source):
+    if get_settings().etl_owner_workflow_enabled:
+        return {"configured": False, "ready": True, "owner_managed": True,
+                "policy_revision": source.release_policy_revision, "configuration_revision": config.revision_no, "groups": []}
     policy = source.release_policy
     if policy is None:
         return {"configured": False, "ready": True, "policy_revision": source.release_policy_revision,
@@ -144,6 +143,8 @@ class ReleaseApprovalService:
         return status
 
     async def inbox(self, offset=0, limit=50):
+        if get_settings().etl_owner_workflow_enabled:
+            return []
         actor_id = self.actor.id
         memberships = await _active_unit_memberships(self.session, self.actor.tenant_id, [actor_id])
         eligible_sources = [DataSource.release_policy.contains(
@@ -226,6 +227,9 @@ class ReleaseApprovalService:
 
     async def status(self, config_id):
         config = await self.repo.get(Configuration, config_id)
+        if get_settings().etl_owner_workflow_enabled:
+            from app.services.workflow_policy_service import require_source_reader
+            await require_source_reader(self.session, self.actor, config.source_id)
         source = await self.repo.get(DataSource, config.source_id)
         status = await self._actor_status(config, source)
         if (self.actor.role not in {"PLATFORM_ADMIN", "TECHNICAL_APPROVER", "SOURCE_OWNER", "DATA_STEWARD"}
@@ -237,6 +241,10 @@ class ReleaseApprovalService:
     async def decide(self, config_id, data):
         config = await self.repo.get(Configuration, config_id, lock=True)
         source = await self.repo.get(DataSource, config.source_id, lock=True)
+        if get_settings().etl_owner_workflow_enabled:
+            from app.services.workflow_policy_service import require_source_manager
+            await require_source_manager(self.session, self.actor, source.id)
+            return {**await self.status(config_id), "not_required": True}
         if source.release_policy is None:
             raise AppError("RELEASE_POLICY_REQUIRED", "Aturan persetujuan siap tayang belum diatur.", 409)
         if config.status not in {"APPROVED", "SUPERSEDED"} or config.revision_no != data.revision_no:

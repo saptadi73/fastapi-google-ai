@@ -16,6 +16,7 @@ from app.services.job_event_service import job_event_stream
 from app.services.job_service import enqueue
 from app.services.monitoring_service import MonitoringService
 from app.services.source_service import source_records
+from app.services.workflow_policy_service import require_source_reader
 
 router = APIRouter(
     tags=["Jobs and ETL"], dependencies=[Depends(require_roles(*EDIT_ROLES, "TECHNICAL_APPROVER"))]
@@ -54,12 +55,17 @@ async def jobs(
 
 @router.get("/jobs/{job_id}")
 async def job(job_id: UUID, session: Session, user: CurrentUser):
-    return success(record(await TenantRepository(session, user.tenant_id).get(Job, job_id)))
+    item = await TenantRepository(session, user.tenant_id).get(Job, job_id)
+    if item.source_id:
+        await require_source_reader(session, user, item.source_id)
+    return success(record(item))
 
 
 @router.get("/jobs/{job_id}/events")
 async def job_events(job_id: UUID, request: Request, session: Session, user: CurrentUser):
-    await TenantRepository(session, user.tenant_id).get(Job, job_id)
+    item = await TenantRepository(session, user.tenant_id).get(Job, job_id)
+    if item.source_id:
+        await require_source_reader(session, user, item.source_id)
     return StreamingResponse(
         job_event_stream(request, tenant_id=user.tenant_id, job_id=job_id),
         media_type="text/event-stream",
@@ -81,6 +87,10 @@ async def schedules(session: Session, user: CurrentUser):
 
 @router.post("/etl-jobs/{job_id}/run", status_code=202, dependencies=[Depends(require_roles(*EDIT_ROLES))])
 async def run(job_id: UUID, session: Session, user: CurrentUser):
+    from app.core.config import get_settings
+    if get_settings().etl_owner_workflow_enabled:
+        from app.services.source_service import SourceService
+        return success(await SourceService(session, user).queue_sync_review(job_id))
     return success(await enqueue(session, user, "ETL", str(job_id)))
 
 

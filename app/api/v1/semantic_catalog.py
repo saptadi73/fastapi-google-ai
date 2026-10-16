@@ -2,10 +2,9 @@ from uuid import UUID
 
 from fastapi import Depends
 
-from app.api.dependencies import CurrentUser, Session, require_roles
+from app.api.dependencies import CurrentUser, Session
 from app.core.exceptions import success
 from app.core.routing import APIRouter
-from app.domain.enums import DATA_ROLES
 from app.models.semantic import SavedQuery
 from app.repositories.base import record
 from app.schemas.semantic import (
@@ -16,9 +15,10 @@ from app.schemas.semantic import (
     SavedQueryCreate,
 )
 from app.services.semantic_catalog_service import SemanticCatalogService
+from app.services.workflow_policy_service import workflow_catalog_editor
 
 router = APIRouter(prefix="/semantic", tags=["Semantic catalog"])
-admin = [Depends(require_roles(*DATA_ROLES))]
+admin = [Depends(workflow_catalog_editor)]
 
 
 @router.get("/data-products")

@@ -20,6 +20,7 @@ def source_access_backfill_row(source):
         review_status=source.access_review_status,
         reviewed_by=getattr(source, "access_reviewed_by", None),
         reviewed_at=getattr(source, "access_reviewed_at", None),
+        owner_managed=get_settings().etl_owner_workflow_enabled,
     )
     return {
         "tenant_id": str(source.tenant_id),

@@ -44,6 +44,12 @@ class SemanticRepository(TenantRepository):
             return True
         if source.access_status != "POLICY_APPROVED":
             return False
+        if action == "READ":
+            discovery = await AccessService(self.session, user).evaluate(
+                AccessEvaluationRequest(action="DISCOVER", resource_type="SOURCE", resource_id=source.source_code)
+            )
+            if not discovery["allowed"] or discovery["row_scope"] or discovery["columns"]:
+                return False
         decision = await AccessService(self.session, user).evaluate(
             AccessEvaluationRequest(
                 action=action, resource_type="SOURCE", resource_id=source.source_code

@@ -1,5 +1,8 @@
 # Verifikasi dan persetujuan konfigurasi ETL
 
+> Kebijakan aktif owner workflow (16 Oktober 2026): SOURCE_OWNER/DATA_STEWARD satu unit dapat mengelola sumber rekan, validasi, deploy, sync, dan menyelesaikan item lama tanpa approver terpisah. Akses default berdasarkan unit aktif; metadata domain/yurisdiksi/purpose opsional. Petunjuk reviewer atau approval rilis di bawah hanya berlaku jika owner workflow dimatikan. Lihat [alur pengelola unit](OWNER_WORKFLOW_POLICY.md).
+
+
 Status: **wizard Vue, bukti review, preview before/after, dan round-trip XLSX untuk subset konfigurasi runtime sudah diimplementasikan**. Master, referensi, dan taxonomy tersedia melalui modul/API tersendiri; ini tidak berarti seluruh parameter workbook dapat diedit. Parameter yang ditandai belum tersedia tetap rancangan. Lihat [panduan implementasi](PANDUAN_REVIEW_ETL.md). Disusun setelah membaca seluruh 14 tab [Template_Parameter_Google_Sheet_AI_ETL.xlsx](Template_Parameter_Google_Sheet_AI_ETL.xlsx). Fitur yang belum tersedia tidak boleh dianggap sudah diimplementasikan oleh API Reference.
 
 ## 1. Rekomendasi

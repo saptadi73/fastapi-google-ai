@@ -8,7 +8,7 @@ source: docs/USER_GUIDE_END_TO_END.md
 ---
 Gunakan urutan berikut agar data dapat dipakai dengan aman:
 
-> Approval manusia dilakukan sekali saat registrasi sumber/tab oleh approver yang berbeda dari pendaftar. Sesudahnya, owner/steward menjalankan konfigurasi, validasi, deploy, dan sync tanpa approval rutin kedua. Gate legacy yang masih tampil harus diikuti sesuai status item.
+> Pada owner workflow tidak ada approver terpisah. SOURCE_OWNER dan DATA_STEWARD mengelola sumber satu unit melalui validasi aplikasi; lihat panduan Pengelolaan sumber satu unit tanpa approver terpisah.
 
 1. Administrator menyiapkan pengguna, role, atribut organisasi, permission, dan kebijakan akses.
 2. Pemilik sumber membagikan Google Sheet kepada service account sebagai Viewer, lalu mendaftarkan URL spreadsheet serta metadata pemilikannya.
@@ -16,7 +16,7 @@ Gunakan urutan berikut agar data dapat dipakai dengan aman:
 4. Jika data memakai rujukan baku, siapkan definisi, storage, record, dan binding master.
 5. Jika data memakai kategori baku, siapkan taxonomy, versi, term, alias, dan binding taxonomy.
 6. Buat konfigurasi ETL: mapping kolom, transformasi, kualitas, strategi load, business key, produk semantik, dimensi, dan metrik.
-7. Pemilik memvalidasi konfigurasi. Approval manusia cukup saat registrasi sumber; konfigurasi, release, dan batch bersih tidak menunggu approver rutin. Sistem tetap memeriksa snapshot, mapping, kualitas, akses, business key, serta rencana perubahan schema.
+7. Pengelola satu unit memvalidasi konfigurasi, deploy dan sync tanpa approval manusia berulang. Sistem memeriksa snapshot, mapping, kualitas, akses, key dan perubahan schema.
 8. Deploy lalu jalankan sync. FULL_REFRESH mengganti seluruh baris target hanya setelah semua baris lolos validasi; jika ada error, data lama tetap aktif. Konflik bisnis dan perubahan schema destruktif masih perlu ditangani secara eksplisit.
 9. Pantau job, kualitas, schedule, dependency, watermark, dan data karantina.
 10. Setelah produk data aktif dan dapat diakses, pengguna dapat bertanya dengan bahasa alami dan memilih tabel atau chart.

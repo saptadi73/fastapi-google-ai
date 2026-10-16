@@ -136,6 +136,10 @@ async def test_connection_uses_dedicated_database():
 async def context(monkeypatch, tmp_path, sheet_values):
     tenant_ids = []
     settings = get_settings()
+    # This fixture exercises the retained legacy contract. Owner/unit workflows
+    # explicitly enable the production-default feature in their dedicated tests.
+    monkeypatch.setattr(settings, "etl_owner_workflow_enabled", False)
+    monkeypatch.setattr(settings, "unit_domain_default_access_enabled", False)
     monkeypatch.setattr(settings, "artifact_storage_path", tmp_path / "artifacts")
     monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)(""))
     monkeypatch.setattr(settings, "require_separate_approver", True)
@@ -3198,7 +3202,7 @@ async def test_classification_required_and_master_gate(context, config_data):
     current = (await request(ctx, "PUT", path, data=body))["data"]
     assert current["status"] == "CONFIRMED" and current["revision_no"] == 2
     assert current["confirmed_by"] and current["confirmed_at"]
-    assert current["blocking_reason"]["code"] == "MASTER_RUNTIME_PENDING"
+    assert current["blocking_reason"]["code"] == "MASTER_BINDING_REQUIRED"
     error = await request(
         ctx, "POST", f"/configurations/{config['id']}/submit-review", data=submission, expected=409
     )
