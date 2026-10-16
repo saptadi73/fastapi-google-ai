@@ -51,7 +51,7 @@ Semua path memakai prefix `/api/v1`. E = PLATFORM_ADMIN/SOURCE_OWNER/DATA_STEWAR
 | GET `/import-reviews/{review_id}` | S | 200; detail batch |
 | GET `/import-reviews/{review_id}/findings` | S | 200; `items`, `has_more` |
 | POST `/import-reviews/{review_id}/cancel` | E | 200; batch CANCELLED |
-| POST `/import-reviews/{review_id}/revalidate` | E | 200; batch VALIDATING atau tetap STALE_REVIEW |
+| POST `/import-reviews/{review_id}/revalidate` | E | 200; batch VALIDATING atau STALE_REVIEW dengan replacement_review_id |
 | POST `/import-reviews/{review_id}/resume` | E | 200 jika blocker selesai; saat ini umumnya 409 IMPORT_INPUT_PENDING |
 
 List mendukung `status`, `source_sheet_id`, `offset>=0`, `limit=1..100` (default 50). Urutan dibuat terbaru lalu UUID. `findings` mendukung offset/limit sama; memuat lokasi baris, kode error/kolom atau warning, tanpa nilai sel mentah. Temuan saat ini belum mempunyai question ID atau endpoint jawaban BE-06.
@@ -135,11 +135,11 @@ State machine mencakup READY_FOR_APPROVAL, APPROVED, APPLYING dan SUCCEEDED. End
 
 `cancel` berlaku sebelum APPLYING/SUCCEEDED dan tidak menghapus snapshot/temuan. Job queued lama dapat diproses sekali menjadi skipped. Jika cancel bersaing dengan worker, row lock menserialisasi perubahan dan request dengan revisi lama mendapat 409.
 
-`revalidate` dipakai untuk FAILED/STALE_REVIEW. Dependency harus masih identik; jika berbeda batch tetap/menjadi STALE_REVIEW dan respons 200 menginstruksikan frontend membuat batch baru. Jika identik, batch kembali VALIDATING dengan generation/job baru. Checkpoint deterministik yang sudah lengkap dan tanpa blocker dipakai ulang; tidak membaca ulang Sheet atau memproses ulang nilai yang sudah divalidasi. Error terakhir tetap tercatat untuk diagnosis.
+`revalidate` dipakai untuk FAILED/STALE_REVIEW dan batch siap yang perlu diperiksa ulang. Jika dependency berbeda, aplikasi membuat atau memakai kembali batch pengganti berdasarkan snapshot profiling terakhir dan konfigurasi aktif (MASTER memakai binding terbaru). Respons 200 mempertahankan batch lama sebagai STALE_REVIEW dan menyertakan `replacement_review_id`, `replacement_review`, serta `replacement_reused`. Frontend membuka batch pengganti. Snapshot, keputusan dan preview lama tidak disalin ke batch baru. Jika header/fingerprint konfigurasi aktif tidak sesuai, request tetap ditolak sampai mapping diperbaiki. Jika identik, batch kembali VALIDATING dengan generation/job baru. Checkpoint deterministik yang sudah lengkap dan tanpa blocker dipakai ulang; tidak membaca ulang Sheet atau memproses ulang nilai yang sudah divalidasi. Error terakhir tetap tercatat untuk diagnosis.
 
 `resume` hanya berlaku untuk NEEDS_INPUT setelah blocker benar-benar diselesaikan. BE-05 tidak menyediakan endpoint untuk menghapus blocker; mekanisme keputusan BE-06 dan capability BE-10 akan menghubungkannya. Revalidate pada NEEDS_INPUT dengan dependency sama juga ditolak, sehingga snapshot buruk tidak berulang diproses tanpa perubahan. Perbaiki sumber, profile, sesuaikan konfigurasi/binding bila perlu, lalu buat batch baru.
 
-GET detail menghitung `dependencies_current` tanpa mengganti snapshot atau status. Perubahan baru disimpan sebagai STALE_REVIEW ketika worker/revalidate/resume memeriksanya. Refresh list saja bukan invalidasi proaktif. Hash dependency ini belum mencakup revision record target/alias/FK yang belum terintegrasi; gate preview/apply BE-07 dan seterusnya harus menambah bukti tersebut.
+GET detail dan daftar menghitung kesiapan untuk batch READY_FOR_APPROVAL/APPROVED. Jika dependency berubah, respons menampilkan status efektif STALE_REVIEW, `stored_status` menyimpan status database dan `execution_ready=false`; GET tidak menulis perubahan. Ini tetap akurat walaupun transaksi preview gagal di-rollback. Worker/revalidate dapat menyimpan status stale. `checkpoint.replacement_review_id` menautkan batch lama ke penggantinya. Pemeriksaan hash menerima field referensi lama yang belum ada hanya jika penambahan tersebut bernilai `master_reference=null` atau `master_reference_disabled=false` dan seluruh konfigurasi/dependency lain identik. Relasi nyata, detachment true, revisi, snapshot, policy dan perubahan record master tetap membatalkan review. Integritas snapshot, konfigurasi tersimpan dan dependency asli juga diverifikasi.
 
 ## Error frontend
 

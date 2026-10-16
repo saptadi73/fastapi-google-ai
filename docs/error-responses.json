@@ -198,9 +198,9 @@
   {
     "group": "import",
     "code": "AI_REVIEW_NOT_IMPLEMENTED",
-    "kind": "checkpoint",
-    "cause": "Pemeriksaan AI wajib belum dapat dijalankan karena konfigurasi/capability tidak tersedia.",
-    "action": "Admin memeriksa key/model, health dan dukungan AI; lanjutkan batch melalui alur aplikasi setelah capability tersedia. Menunggu saja tidak menyelesaikan blocker."
+    "kind": "legacy",
+    "cause": "Kode lama untuk capability review AI yang belum tersedia.",
+    "action": "Periksa status batch terkini. Konfigurasi tanpa AI kini dapat melewati pemeriksaan AI dengan status SKIPPED setelah validasi deterministik; kode lama ini bukan alasan untuk mengabaikan blocker data."
   },
   {
     "group": "import",
@@ -214,7 +214,7 @@
     "code": "IMPORT_STALE_REVIEW",
     "kind": "error",
     "cause": "Snapshot, konfigurasi, atau dependency batch berubah.",
-    "action": "Perbarui profil/dependency dan buat batch dari sumber terbaru; jangan menerapkan preview lama. Owner workflow melanjutkan dengan Preview dan Apply setelah validasi; legacy mengikuti gate yang tampil."
+    "action": "Klik Validasi ulang untuk membuat atau membuka batch pengganti dengan snapshot profiling terakhir dan konfigurasi aktif. Jika header berubah, perbarui profil dan mapping dahulu. Periksa preview baru lalu Apply oleh pemilik; jangan gunakan preview lama."
   },
   {
     "group": "import",

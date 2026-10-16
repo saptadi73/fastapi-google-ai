@@ -20,7 +20,10 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.parametrize("change", ["alias", "record"])
-async def test_real_capture_detects_reference_dependency_changes(context, config_data, change):
+async def test_real_capture_detects_reference_dependency_changes(context, config_data, change, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
     master, _, table = await setup_storage(context, config_data)
     consumer = deepcopy(config_data)
     consumer["columns"][2]["target_type"] = "uuid"

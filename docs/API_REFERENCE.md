@@ -562,7 +562,7 @@ Kontrak lengkap, respons, state machine, idempotency, polling, checkpoint, dan e
 | GET | `/import-reviews/{review_id}` | S | UUID batch | 200 | batch, dependencies_current, execution_ready=false |
 | GET | `/import-reviews/{review_id}/findings` | S | offset, limit | 200 | items[], has_more |
 | POST | `/import-reviews/{review_id}/cancel` | E | ImportReviewAction | 200 | batch CANCELLED |
-| POST | `/import-reviews/{review_id}/revalidate` | E | ImportReviewAction | 200 | batch VALIDATING atau STALE_REVIEW |
+| POST | `/import-reviews/{review_id}/revalidate` | E | ImportReviewAction | 200 | batch VALIDATING atau STALE_REVIEW dengan replacement_review_id; pengganti memakai snapshot terakhir dan konfigurasi aktif |
 | POST | `/import-reviews/{review_id}/resume` | E | ImportReviewAction | 200 | batch VALIDATING jika blocker sudah diselesaikan |
 | GET | `/import-reviews/{review_id}/questions` | S | status, category, offset, limit | 200 | items[], has_more |
 | POST | `/import-reviews/{review_id}/questions/{question_id}/answer` | E | ImportQuestionDecision | 200 | question, review; stale=true jika dependency berubah |

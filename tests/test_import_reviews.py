@@ -118,21 +118,18 @@ async def test_import_idempotency_checkpoint_and_blocked_resume(context, config_
                 )
             )
         ).all()
-    assert len(audits) == 1
+    assert len(audits) == 0  # A clean batch creates no notification to acknowledge.
     assert (await run_pending(ctx.tenant_id))["processed"] == 0
-    for action in ("resume", "revalidate"):
-        result = await request(
-            ctx,
-            "POST",
-            f"/import-reviews/{review['id']}/{action}",
-            data={"revision_no": waiting["revision_no"]},
-            expected=409,
-        )
-        assert result["errors"][0]["code"] == "IMPORT_INPUT_PENDING"
+    result = await request(ctx, "POST", f"/import-reviews/{review['id']}/resume",
+                           data={"revision_no": waiting["revision_no"]}, expected=409)
+    assert result["errors"][0]["code"] == "IMPORT_STATE_CONFLICT"
+    revalidated = (await request(ctx, "POST", f"/import-reviews/{review['id']}/revalidate",
+                                data={"revision_no": waiting["revision_no"]}))["data"]
+    assert revalidated["status"] == "VALIDATING" and revalidated["generation"] == 2
     for who, expected in (("viewer", 403), ("outsider", 404)):
         await request(ctx, "GET", f"/import-reviews/{review['id']}", who=who, expected=expected)
     await request(ctx, "POST", "/import-reviews", data=body, who="approver", expected=403)
-    listed = (await request(ctx, "GET", "/import-reviews?status=NEEDS_INPUT&limit=1"))["data"]
+    listed = (await request(ctx, "GET", "/import-reviews?status=VALIDATING&limit=1"))["data"]
     assert listed["items"][0]["id"] == review["id"] and not listed["has_more"]
     assert "configuration_json" not in waiting and "dependencies" not in waiting
 
@@ -199,7 +196,10 @@ async def test_import_cancel_stale_generation_and_snapshot_replacement(context, 
         )
     )["data"]
     assert refreshed["status"] == "STALE_REVIEW" and refreshed["snapshot_id"] == fresh["snapshot_id"]
-    assert (await create(ctx, body))["id"] != fresh["id"]
+    successor = await create(ctx, body)
+    assert successor["id"] != fresh["id"]
+    assert refreshed["replacement_review_id"] == successor["id"]
+    assert refreshed["replacement_review"]["configuration_revision"] == 2
 
 
 async def test_import_worker_crash_recovery_reuses_checkpoint(context, config_data, monkeypatch):
@@ -238,7 +238,7 @@ async def test_import_worker_crash_recovery_reuses_checkpoint(context, config_da
     await run_pending(ctx.tenant_id)
     assert (await detail(ctx, review))["status"] == "AI_REVIEWING"
     await run_pending(ctx.tenant_id)
-    assert (await detail(ctx, review))["status"] == "NEEDS_INPUT"
+    assert (await detail(ctx, review))["status"] == "READY_FOR_APPROVAL"
 
 
 async def test_import_worker_failure_rolls_back_then_records_failed(context, config_data, monkeypatch):
@@ -263,7 +263,10 @@ async def test_import_worker_failure_rolls_back_then_records_failed(context, con
         await session.rollback()
 
 
-async def test_import_master_pins_binding_and_approved_version(context, config_data):
+async def test_import_master_pins_binding_and_approved_version(context, config_data, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", False)
     ctx = context
     master = await approved_master(ctx, config_data)
     _, sheet, _ = await master_sheet(ctx, config_data)
@@ -328,7 +331,7 @@ async def test_import_duplicate_job_and_identical_snapshot_are_idempotent(contex
     assert (await request(ctx, "GET", f"/jobs/{duplicate.id}"))["data"]["result"]["skipped"]
     assert (await detail(ctx, review))["status"] == "AI_REVIEWING"
     await run_pending(ctx.tenant_id)
-    assert (await detail(ctx, review))["status"] == "NEEDS_INPUT"
+    assert (await detail(ctx, review))["status"] == "READY_FOR_APPROVAL"
 
 
 async def test_import_migration_roundtrip_in_rolled_back_transaction():

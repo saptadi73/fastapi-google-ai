@@ -1,4 +1,5 @@
 """Two-account preview reads on real PostgreSQL, with AI completion seeded."""
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -126,6 +127,75 @@ async def test_owner_applies_clean_preview_without_second_approver(context, conf
     async with SessionFactory() as session:
         values = (await session.execute(select(table).order_by(table.c.transaction_id))).mappings().all()
         assert len(values) == 3
+
+
+async def test_legacy_defaults_allow_preview_and_owner_apply(context, config_data, monkeypatch):
+    monkeypatch.setattr(get_settings(), "etl_owner_workflow_enabled", True)
+    review, _ = await staged(context, config_data)
+    async with SessionFactory() as session, session.begin():
+        stored = await session.get(ImportReview, review["id"])
+        legacy = deepcopy(stored.configuration_json)
+        for column in legacy["columns"]:
+            column.pop("master_reference", None)
+            column.pop("master_reference_disabled", None)
+        deps = {**stored.dependencies, "configuration_hash": digest(legacy)}
+        stored.configuration_json, stored.dependencies, stored.idempotency_key = legacy, deps, digest(deps)
+    path = f"/import-reviews/{review['id']}"
+    detail = (await request(context, "GET", path))["data"]
+    assert detail["dependencies_current"] and detail["status"] == "READY_FOR_APPROVAL"
+    preview = (await request(context, "POST", path + "/preview", data={"revision_no": 1}))["data"]
+    result = (await request(context, "POST", path + "/apply", data={
+        "revision_no": 1, "preview_token": preview["preview_token"], "preview_hash": preview["preview_hash"],
+    }))["data"]
+    assert result["status"] == "SUCCEEDED"
+    assert result["review"]["checkpoint"]["approval_mode"] == "OWNER_VALIDATED"
+
+
+async def test_stale_readiness_and_replacement_use_active_config_and_latest_snapshot(context, config_data):
+    from app.models.etl import Snapshot
+    from app.models.source import SourceSheet
+
+    review, _ = await staged(context, config_data)
+    path = f"/import-reviews/{review['id']}"
+    async with SessionFactory() as session, session.begin():
+        old = await session.get(ImportReview, review["id"])
+        previous = await session.get(Configuration, old.dependencies["configuration_id"])
+        previous.status = "SUPERSEDED"
+        successor = Configuration(
+            tenant_id=previous.tenant_id, source_id=previous.source_id, source_sheet_id=previous.source_sheet_id,
+            version_no=previous.version_no + 1, revision_no=1, status="ACTIVE",
+            based_on_fingerprint=previous.based_on_fingerprint, configuration_json=previous.configuration_json,
+            created_by=previous.created_by,
+        )
+        session.add(successor)
+        await session.flush()
+        sheet = await session.get(SourceSheet, old.source_sheet_id)
+        sheet.active_configuration_id = successor.id
+        snapshot = await session.get(Snapshot, old.snapshot_id)
+        values = deepcopy(snapshot.values)
+        values[1][3] = 999
+        latest = Snapshot(tenant_id=snapshot.tenant_id, source_id=snapshot.source_id,
+                          source_sheet_id=snapshot.source_sheet_id, values=values,
+                          content_hash=digest(values), row_count=snapshot.row_count)
+        session.add(latest)
+        await session.flush()
+        config_id, snapshot_id = successor.id, latest.id
+    detail = (await request(context, "GET", path))["data"]
+    assert detail["status"] == "STALE_REVIEW" and detail["stored_status"] == "READY_FOR_APPROVAL"
+    listing = (await request(context, "GET", "/import-reviews"))["data"]["items"]
+    assert next(r for r in listing if r["id"] == review["id"])["status"] == "STALE_REVIEW"
+    ready = (await request(context, "GET", "/import-reviews?status=READY_FOR_APPROVAL"))["data"]["items"]
+    stale = (await request(context, "GET", "/import-reviews?status=STALE_REVIEW"))["data"]["items"]
+    assert not ready and any(r["id"] == review["id"] for r in stale)
+    await request(context, "POST", path + "/preview", data={"revision_no": 1}, expected=409)
+    result = (await request(context, "POST", path + "/revalidate", data={"revision_no": 1}))["data"]
+    new = result["replacement_review"]
+    assert new["id"] != review["id"] and new["configuration_id"] == config_id
+    assert new["snapshot_id"] == snapshot_id and new["status"] == "VALIDATING"
+    assert "approved_by" not in new["checkpoint"] and "preview_hash" not in new["checkpoint"]
+    repeated = (await request(context, "POST", path + "/revalidate", data={"revision_no": result["revision_no"]}))["data"]
+    assert repeated["replacement_review_id"] == new["id"] and repeated["replacement_reused"]
+    await request(context, "POST", path + "/revalidate", who="outsider", data={"revision_no": result["revision_no"]}, expected=404)
 
 
 @pytest.mark.parametrize("change", ["target", "staging", "dependency", "revision"])

@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -298,17 +299,33 @@ class ImportReviewService:
         ).model_dump(mode="json")
         return sheet, snapshot, dependencies, config
 
+    @staticmethod
+    def compatible_configuration_hash(pinned, current):
+        """Preserve legacy hashes only for newly introduced, inert reference defaults."""
+        compatible = deepcopy(current)
+        old_columns = pinned.get("columns", [])
+        columns = compatible.get("columns", [])
+        if len(old_columns) == len(columns):
+            for old, column in zip(old_columns, columns):
+                for name, default in (("master_reference", None), ("master_reference_disabled", False)):
+                    if name not in old and name in column and column[name] == default:
+                        column.pop(name)
+        return digest(compatible) == digest(pinned)
+
     async def is_current(self, review):
         try:
-            _, _, deps, _ = await self.capture(
+            _, _, deps, current_config = await self.capture(
                 ImportReviewCreate(
                     source_sheet_id=review.source_sheet_id,
                     configuration_id=review.dependencies.get("configuration_id"),
                 )
             )
             pinned = await self.repo.get(Snapshot, review.snapshot_id)
+            if self.compatible_configuration_hash(review.configuration_json, current_config):
+                deps["configuration_hash"] = review.dependencies["configuration_hash"]
             return (
                 digest(deps) == review.idempotency_key
+                and digest(review.dependencies) == review.idempotency_key
                 and digest(review.configuration_json) == review.dependencies["configuration_hash"]
                 and pinned.source_sheet_id == review.source_sheet_id
                 and pinned.content_hash == review.dependencies["snapshot_hash"]
@@ -485,16 +502,50 @@ class ImportReviewService:
     async def detail(self, review_id):
         self.role()
         review = await self.repo.get(ImportReview, review_id)
-        return {**self.response(review), "dependencies_current": await self.is_current(review)}
+        return await self.present(review)
+
+    async def present(self, review):
+        current = await self.is_current(review)
+        result = {**self.response(review), "dependencies_current": current}
+        # A failing preview transaction rolls back. Derive readiness on reads instead
+        # of committing part of an otherwise failed request.
+        if not current and review.status in ("READY_FOR_APPROVAL", "APPROVED"):
+            result.update(status="STALE_REVIEW", stored_status=review.status, execution_ready=False)
+            result["attention"] = {
+                "message": "Dependency batch berubah. Validasi ulang membuat atau membuka batch pengganti memakai snapshot dan konfigurasi aktif terbaru.",
+                "blocking_codes": ["IMPORT_STALE_REVIEW"],
+            }
+        return result
 
     async def list(self, status=None, sheet_id=None, offset=0, limit=50):
         self.role()
         query = self.repo.query(ImportReview)
         if status:
-            query = query.where(ImportReview.status == status)
+            query = query.where(ImportReview.status.in_(("STALE_REVIEW", "READY_FOR_APPROVAL", "APPROVED"))
+                                if status == "STALE_REVIEW" else ImportReview.status == status)
         if sheet_id:
             await self.repo.get(SourceSheet, sheet_id)
             query = query.where(ImportReview.source_sheet_id == str(sheet_id))
+        if status in ("READY_FOR_APPROVAL", "APPROVED", "STALE_REVIEW"):
+            # Filter and paginate the effective status, including stale batches whose
+            # failed preview was rolled back, rather than returning misleading ready rows.
+            matched, scanned = [], 0
+            while len(matched) <= offset + limit:
+                candidates = (await self.session.scalars(
+                    query.order_by(ImportReview.created_at.desc(), ImportReview.id).offset(scanned).limit(100)
+                )).all()
+                if not candidates:
+                    break
+                for candidate in candidates:
+                    result = await self.present(candidate)
+                    if result["status"] == status:
+                        matched.append(result)
+                    if len(matched) > offset + limit:
+                        break
+                scanned += len(candidates)
+                if len(candidates) < 100:
+                    break
+            return {"items": matched[offset:offset + limit], "has_more": len(matched) > offset + limit}
         rows = (
             await self.session.scalars(
                 query.order_by(ImportReview.created_at.desc(), ImportReview.id)
@@ -502,7 +553,11 @@ class ImportReviewService:
                 .limit(limit + 1)
             )
         ).all()
-        return {"items": [self.response(r) for r in rows[:limit]], "has_more": len(rows) > limit}
+        return {
+            "items": [await self.present(r) if r.status in ("READY_FOR_APPROVAL", "APPROVED")
+                      else self.response(r) for r in rows[:limit]],
+            "has_more": len(rows) > limit,
+        }
 
     async def findings(self, review_id, offset, limit):
         self.role()
@@ -959,6 +1014,24 @@ class ImportReviewService:
             if review.status not in ("NEEDS_INPUT", "FAILED", "STALE_REVIEW"):
                 raise AppError("IMPORT_STATE_CONFLICT", "Batch belum dapat dilanjutkan.", 409)
             if not await self.is_current(review):
+                if action == ImportAction.REVALIDATE:
+                    sheet = await self.repo.get(SourceSheet, review.source_sheet_id)
+                    configuration_id = None
+                    if sheet.dataset_kind != "MASTER":
+                        configuration_id = sheet.active_configuration_id or review.dependencies.get("configuration_id")
+                    replacement = await self.create(ImportReviewCreate(
+                        source_sheet_id=sheet.id, configuration_id=configuration_id,
+                    ))
+                    successor = replacement["review"]
+                    if successor["id"] == str(review.id):
+                        raise AppError("IMPORT_SNAPSHOT_INVALID", "Integritas batch berubah; periksa sumber sebelum membuat batch baru.", 409)
+                    if review.status != "STALE_REVIEW":
+                        self.move(review, ImportAction.INVALIDATE, worker=True)
+                    review.checkpoint = {**review.checkpoint, "replacement_review_id": successor["id"]}
+                    audit(self.session, self.user, "import.replaced", review.id,
+                          replacement_review_id=successor["id"], reused=replacement["reused"], comment=data.comment)
+                    return {**self.response(review), "replacement_review_id": successor["id"],
+                            "replacement_review": successor, "replacement_reused": replacement["reused"]}
                 if review.status != "STALE_REVIEW":
                     self.move(review, ImportAction.INVALIDATE, worker=True)
                 audit(
