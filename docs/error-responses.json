@@ -323,6 +323,13 @@
   },
   {
     "group": "layanan",
+    "code": "AI_PROVIDER_CREDIT_INSUFFICIENT",
+    "kind": "error",
+    "cause": "Provider AI menolak request karena credit balance atau billing project tidak mencukupi.",
+    "action": "Admin memeriksa billing dan saldo pada project penyedia AI yang dipakai backend. Ini bukan kuota harian aplikasi; retry atau menaikkan limit aplikasi tidak mengisi saldo provider. Ulangi aksi setelah billing pulih."
+  },
+  {
+    "group": "layanan",
     "code": "AI_BUDGET_EXCEEDED",
     "kind": "error",
     "cause": "Budget AI tenant tercapai.",

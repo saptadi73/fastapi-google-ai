@@ -95,6 +95,7 @@ class NL2SQLService:
                         {
                             "code": p["code"],
                             "name": p["name"],
+                            "description": p.get("description", ""),
                             "metrics": p["metrics"],
                             "dimensions": p["dimensions"],
                             "columns": p["columns"],

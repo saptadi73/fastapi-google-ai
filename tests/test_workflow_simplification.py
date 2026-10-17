@@ -769,6 +769,26 @@ def test_process_attention_exposes_blockers_without_source_values(status):
             assert "Menunggu saja" in result["message"]
 
 
+def test_process_attention_exposes_safe_provider_credit_warning():
+    from app.services.import_review_service import ImportReviewService
+
+    message = "Kredit/billing project penyedia AI tidak mencukupi. Hubungi administrator."
+    review = SimpleNamespace(
+        id="batch", source_sheet_id="sheet", status="READY_FOR_APPROVAL", revision_no=2,
+        checkpoint={
+            "blocking_codes": [], "ai_coverage": "PARTIAL",
+            "ai_warning_code": "AI_PROVIDER_CREDIT_INSUFFICIENT",
+            "ai_warning_message": message,
+        },
+        findings=[],
+    )
+
+    attention = ImportReviewService.attention(review)
+
+    assert attention["ai_warning_code"] == "AI_PROVIDER_CREDIT_INSUFFICIENT"
+    assert attention["ai_warning_message"] == message
+
+
 def test_request_input_audit_includes_safe_diagnosis(monkeypatch):
     from app.domain.import_workflow import ImportAction
     from app.services import import_review_service

@@ -41,6 +41,16 @@ def test_job_failure_details_keeps_domain_errors_actionable():
     assert (code, message) == ("SOURCE_ACCESS_DENIED", "Akses ditolak.")
 
 
+def test_job_failure_details_preserves_provider_credit_guidance_for_async_jobs():
+    message = "Kredit atau billing pada akun penyedia AI tidak mencukupi. Periksa billing project AI."
+    code, returned_message = _job_failure_details(
+        AppError("AI_PROVIDER_CREDIT_INSUFFICIENT", message, 503), "AI_CONFIG"
+    )
+
+    assert code == "AI_PROVIDER_CREDIT_INSUFFICIENT"
+    assert returned_message == message
+
+
 @pytest.mark.parametrize("sqlstate", ["55P03", "57014", "40001", "40P01"])
 def test_deploy_database_conflicts_have_actionable_retry_message(sqlstate):
     code, message = _job_failure_details(WrappedDatabaseFailure(sqlstate), "DEPLOY")

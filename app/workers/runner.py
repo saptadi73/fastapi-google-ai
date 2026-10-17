@@ -257,7 +257,11 @@ async def run_pending(tenant_id=None):
                 resource_type="JOB",
                 resource_id=job.id,
                 title="Job gagal",
-                message="Job berhenti karena kegagalan teknis. Periksa kode kegagalan.",
+                message=(
+                    job.error_message
+                    if job.error_code == "AI_PROVIDER_CREDIT_INSUFFICIENT"
+                    else "Job berhenti karena kegagalan teknis. Periksa kode kegagalan."
+                ),
                 details={"error_code": job.error_code, "job_kind": job.kind},
             )
             await fail_import_job(session, job, job.error_code)

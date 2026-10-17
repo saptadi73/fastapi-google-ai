@@ -20,6 +20,36 @@ PROMPT_PATHS = {
     "USER_HELP": "user_help_v1.md",
 }
 
+def _provider_credit_error():
+    return AppError(
+        "AI_PROVIDER_CREDIT_INSUFFICIENT",
+        "Kredit atau billing pada akun penyedia AI tidak mencukupi. Minta administrator memeriksa saldo dan billing project AI, lalu ulangi proses setelah diperbaiki.",
+        503,
+    )
+
+
+def _is_insufficient_provider_credit(exc):
+    """Recognize provider billing exhaustion without exposing raw provider details."""
+    status = getattr(exc, "status_code", None)
+    response = getattr(exc, "response", None)
+    status = status or getattr(response, "status_code", None)
+    values = [str(exc), str(getattr(exc, "code", "") or ""), str(getattr(exc, "type", "") or "")]
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error", body)
+        if isinstance(error, dict):
+            values.extend(str(error.get(key, "") or "") for key in ("code", "type", "message"))
+    text_value = " ".join(values).casefold()
+    markers = (
+        "insufficient_quota",
+        "insufficient_credit",
+        "insufficient credits",
+        "credit balance is too low",
+        "billing_hard_limit_reached",
+        "exceeded your current quota",
+    )
+    return status == 402 or (status == 429 and any(marker in text_value for marker in markers))
+
 
 def _normalize_target(value: str, fallback: str = "data") -> str:
     value = re.sub(r"[^a-zA-Z0-9]+", "_", str(value)).strip("_").lower()
@@ -338,6 +368,9 @@ class OpenAIService:
                             parse_diagnostics.append(f"{candidate_model}:status={status};incomplete={incomplete}")
                             had_structured_failure = True
                         except Exception as exc:
+                            if _is_insufficient_provider_credit(exc):
+                                error = _provider_credit_error()
+                                break
                             detail = " ".join(str(exc).split())[-400:]
                             parse_diagnostics.append(f"{candidate_model}:request={type(exc).__name__}:{detail}")
                             # A parser exception (for example an empty structured
@@ -366,6 +399,9 @@ class OpenAIService:
                                     responses.append(json_response)
                                     break
                             except Exception as fallback_exc:
+                                if _is_insufficient_provider_credit(fallback_exc):
+                                    error = _provider_credit_error()
+                                    break
                                 parse_diagnostics.append(f"{candidate_model}:json_exception={type(fallback_exc).__name__}:{' '.join(str(fallback_exc).split())[-250:]}")
                             continue
                     else:
@@ -382,11 +418,15 @@ class OpenAIService:
                                 503,
                             )
                         )
-            except Exception:
-                error = AppError(
-                    "AI_UPSTREAM_FAILED",
-                    "Layanan AI gagal; periksa konfigurasi atau coba kembali.",
-                    503,
+            except Exception as exc:
+                error = (
+                    _provider_credit_error()
+                    if _is_insufficient_provider_credit(exc)
+                    else AppError(
+                        "AI_UPSTREAM_FAILED",
+                        "Layanan AI gagal; periksa konfigurasi atau coba kembali.",
+                        503,
+                    )
                 )
             usages = [item.usage for item in responses if getattr(item, "usage", None)]
             input_tokens = sum(item.input_tokens for item in usages)

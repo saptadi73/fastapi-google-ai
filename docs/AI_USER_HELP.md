@@ -105,10 +105,15 @@ Jangan menghapus sumber yang sudah menghasilkan data operasional hanya untuk men
 Halaman **Katalog data** menggunakan `GET /api/v1/semantic/data-product-inventory` untuk
 menampilkan Data Product aktif yang memang boleh dilihat pengguna, bersama tabel fisik, semantic
 view, sumber spreadsheet/tab, versi ETL, dan metadata semantic. Katalog membantu menemukan metadata
-yang belum lengkap; sarannya bukan perubahan otomatis. Untuk NL2SQL, lengkapi deskripsi dataset,
-nama bisnis kolom, dimensi, definisi metrik beserta unit dan sinonim. Perbaiki data/header di sumber,
-struktur/mapping lewat revisi ETL, dan semantic melalui Governance. Relasi lintas dataset dibuat
-hanya bila diperlukan dan kolom kunci serta kardinalitasnya telah diverifikasi.
+yang belum lengkap. Jika struktur tabel dan isi data sudah benar, perbaiki nama/deskripsi dataset,
+arti/deskripsi/sinonim kolom, dimensi, dan definisi metrik melalui **detail produk → Edit metadata
+semantik untuk NL2SQL**. Cara ini memperbarui semantic catalog, versi, dan audit tanpa profiling,
+konfigurasi ulang, ETL, atau pemuatan ulang data. Gunakan Workspace ETL dan profiling ulang hanya
+ketika struktur/header sumber berubah atau memang perlu memperbaiki mapping, tipe, transformasi,
+aturan kualitas, atau strategi pemuatan. Perubahan nilai di Google Sheet saja memerlukan koreksi
+sumber dan sync ulang bila data target harus diperbarui; tidak otomatis memerlukan profiling bila
+struktur dan mapping tetap sama. Relasi lintas dataset dibuat hanya bila diperlukan dan kolom kunci
+serta kardinalitasnya telah diverifikasi.
 
 
 ### Tabel error response

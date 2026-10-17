@@ -1048,7 +1048,7 @@ Resolve hanya menandai issue RESOLVED dan menyimpan catatan, **tidak mengubah ni
 | POST | `/data-products/{code}/export` | Auth | QueryPlan | 200 | CSV tanpa envelope |
 | POST | `/saved-queries/{code}/run` | Auth | — | 200 | QueryRow[]; meta query |
 | GET | `/semantic/data-products` | Auth | — | 200 | Alias daftar DataProduct aktif yang diizinkan |
-| PATCH | `/semantic/data-products/{product_id}` | D | ProductUpdate | 200 | DataProduct; name/description/metric_metadata memerlukan expected_version; PRODUCT_VERSION_CONFLICT 409, METRIC_NOT_FOUND/METRIC_SYNONYM_CONFLICT 422; lihat FRONTEND_BE14.md |
+| PATCH | `/semantic/data-products/{product_id}` | D | ProductUpdate | 200 | Metadata katalog aktif; semua perubahan metadata memerlukan `expected_version`; konflik versi 409 dan metadata/metric/column/dimension tidak valid 422 |
 | GET | `/semantic/data-product-inventory` | Auth | — | 200 | Data Product aktif yang diizinkan beserta tabel fisik, semantic view, spreadsheet, dan tab sumber |
 | GET | `/semantic/metrics` | Auth | — | 200 | `[{data_product: code, ...MetricDefinition}]` |
 | GET | `/semantic/join-relationships` | Auth | — | 200 | Registry relationship tenant-scoped |
@@ -1101,7 +1101,34 @@ ProductUpdate:
 {"allowed_roles":["PLATFORM_ADMIN","DATA_STEWARD","ANALYST","VIEWER"],"status":"ACTIVE"}
 ```
 
-Field opsional, status ACTIVE/SUSPENDED. PATCH menaikkan `version`, sehingga template yang memakai versi sebelumnya dapat menjadi stale. Data sync menaikkan `freshness_version`. Endpoint dimensions mengembalikan **nama field**, bukan daftar distinct values untuk dropdown.
+Field opsional. PATCH katalog juga menerima `name`, `description`, `dimensions`, `column_metadata`, dan `metric_definitions`. Metadata semantik memerlukan `expected_version`; server memvalidasi field publik, tipe agregasi, dimensi, filter, dan periode default, lalu menaikkan `version` serta menulis audit `data_product.updated`. Perubahan katalog tidak mengubah tabel fisik, isi data, atau menjalankan ulang ETL. `metric_definitions` mengganti daftar definisi metrik penuh; kirim `[]` untuk mengosongkannya. `column_metadata` memperbarui metadata satu atau beberapa kolom aktif yang tidak sensitif. `metric_metadata` lama tetap didukung untuk memperbarui label/sinonim metrik yang ada. PATCH juga dapat mengatur `allowed_roles` serta `status` ACTIVE/SUSPENDED. Template yang memakai versi sebelumnya dapat menjadi stale. Data sync menaikkan `freshness_version`. Endpoint dimensions mengembalikan **nama field**, bukan daftar distinct values untuk dropdown.
+
+Contoh metadata katalog:
+
+```json
+{
+  "expected_version": 4,
+  "description": "Satu baris per unit dan periode; berisi target dan realisasi aktivitas.",
+  "dimensions": ["unit_bisnis", "periode"],
+  "column_metadata": [{
+    "target_column": "realisasi_activity",
+    "business_name": "Realisasi aktivitas",
+    "description": "Jumlah aktivitas yang benar-benar tercapai pada periode tersebut.",
+    "synonyms": ["pencapaian aktivitas", "hasil aktivitas"]
+  }],
+  "metric_definitions": [{
+    "code": "total_realisasi_activity",
+    "label": "Total realisasi aktivitas",
+    "column": "realisasi_activity",
+    "aggregation": "sum",
+    "description": "Jumlah realisasi aktivitas pada unit/periode yang dipilih.",
+    "unit": "aktivitas",
+    "synonyms": ["jumlah aktivitas tercapai"]
+  }]
+}
+```
+
+Katalog membatasi metadata kolom dan metrik ke kolom berklasifikasi PII NONE/LOW. `SUM`/`AVG` hanya untuk kolom numerik; persentase biasanya tidak boleh dijumlahkan tanpa definisi bisnis yang tepat.
 
 ### QueryPlan
 
@@ -1484,7 +1511,7 @@ Pada environment non-production, FastAPI menangani CORS sesuai `CORS_ORIGINS`, m
 | 422 | QUERY_INVALID, QUERY_TOO_EXPENSIVE, NL2SQL_UNSAFE_QUERY | Perbaiki plan, dimensi, atau persempit periode |
 | 422 | DQ_STOP_BATCH, DQ_REQUIRE_REVIEW | Tampilkan batch tertahan; minta perbaikan sumber/aturan |
 | 429 | NL2SQL_QUOTA_EXCEEDED, AI_BUDGET_EXCEEDED, AI_TASK_BUDGET_EXCEEDED | Jangan retry terus; kuota/budget harian tercapai |
-| 503 | OPENAI_NOT_CONFIGURED, AI_UPSTREAM_FAILED, AI_PRICING_REQUIRED | Konfigurasi/layanan AI perlu diperiksa |
+| 503 | OPENAI_NOT_CONFIGURED, AI_UPSTREAM_FAILED, AI_PROVIDER_CREDIT_INSUFFICIENT, AI_PRICING_REQUIRED | Kredit provider tidak mencukupi: admin memeriksa billing/credit balance project AI; kode ini berbeda dari kuota atau budget aplikasi |
 | 503 | NL2SQL_NOT_CONFIGURED, NL2SQL_READER_UNSAFE | Role database query AI perlu diperiksa |
 | 503 | DATABASE_UNAVAILABLE, REDIS_UNAVAILABLE | Tampilkan layanan belum siap |
 | 500 | INTERNAL_ERROR | Simpan request ID dan tampilkan pesan umum |

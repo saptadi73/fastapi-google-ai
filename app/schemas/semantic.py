@@ -4,6 +4,7 @@ from pydantic import Field, model_validator
 
 from app.domain.enums import Role
 from app.schemas.common import StrictModel
+from app.schemas.configuration import MetricDefinition
 
 
 class QueryFilter(StrictModel):
@@ -115,6 +116,27 @@ class MetricMetadataUpdate(StrictModel):
         return self
 
 
+class ProductColumnMetadataUpdate(StrictModel):
+    target_column: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    business_name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    synonyms: list[Annotated[str, Field(min_length=1, max_length=100)]] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def valid_column_metadata(self):
+        if not ({"business_name", "description", "synonyms"} & self.model_fields_set):
+            raise ValueError("Specify at least one column metadata field")
+        for key in ("business_name", "description"):
+            value = getattr(self, key)
+            if value is not None:
+                setattr(self, key, " ".join(value.split()))
+        if self.synonyms is not None:
+            self.synonyms = [" ".join(value.split()) for value in self.synonyms]
+            if any(not value for value in self.synonyms) or len({value.casefold() for value in self.synonyms}) != len(self.synonyms):
+                raise ValueError("Column synonyms must be nonblank and unique ignoring case")
+        return self
+
+
 class ProductUpdate(StrictModel):
     allowed_roles: list[Role] | None = None
     status: Literal["ACTIVE", "SUSPENDED"] | None = None
@@ -122,10 +144,15 @@ class ProductUpdate(StrictModel):
     description: str | None = Field(default=None, max_length=4000)
     expected_version: int | None = Field(default=None, ge=1)
     metric_metadata: list[MetricMetadataUpdate] | None = Field(default=None, min_length=1, max_length=100)
+    # Full semantic metadata replacement; None means leave unchanged, [] clears the list.
+    dimensions: list[str] | None = Field(default=None, max_length=100)
+    metric_definitions: list[MetricDefinition] | None = Field(default=None, max_length=100)
+    column_metadata: list[ProductColumnMetadataUpdate] | None = Field(default=None, min_length=1, max_length=100)
 
     @model_validator(mode="after")
     def metadata_version(self):
-        if {"name", "description", "metric_metadata"} & self.model_fields_set:
+        metadata_fields = {"name", "description", "metric_metadata", "dimensions", "metric_definitions", "column_metadata"}
+        if metadata_fields & self.model_fields_set:
             if self.expected_version is None:
                 raise ValueError("Metadata edits require expected_version")
             if "name" in self.model_fields_set:
@@ -140,6 +167,25 @@ class ProductUpdate(StrictModel):
                 codes = [item.code for item in self.metric_metadata]
                 if len(set(codes)) != len(codes):
                     raise ValueError("Metric codes must be unique")
+            if "dimensions" in self.model_fields_set:
+                if self.dimensions is None:
+                    raise ValueError("dimensions must be a list; use [] to clear")
+                if len(set(self.dimensions)) != len(self.dimensions):
+                    raise ValueError("Dimension names must be unique")
+            if "metric_definitions" in self.model_fields_set:
+                if self.metric_definitions is None:
+                    raise ValueError("metric_definitions must be a list; use [] to clear")
+                codes = [item.code for item in self.metric_definitions]
+                if len(set(codes)) != len(codes):
+                    raise ValueError("Metric codes must be unique")
+            if "column_metadata" in self.model_fields_set:
+                if self.column_metadata is None:
+                    raise ValueError("column_metadata must be a non-empty list")
+                codes = [item.target_column for item in self.column_metadata]
+                if len(set(codes)) != len(codes):
+                    raise ValueError("Column metadata targets must be unique")
+            if {"metric_metadata", "metric_definitions"}.issubset(self.model_fields_set):
+                raise ValueError("Use metric_definitions or metric_metadata, not both")
         return self
 
 

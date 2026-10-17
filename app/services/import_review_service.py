@@ -128,6 +128,8 @@ class ImportReviewService:
             "blocking_codes": codes,
             "message": checkpoint.get("auto_load_error") or messages[review.status],
             "ai_coverage": checkpoint.get("ai_coverage"),
+            "ai_warning_code": checkpoint.get("ai_warning_code"),
+            "ai_warning_message": checkpoint.get("ai_warning_message"),
             "affected_row_count": len({row for row, _ in locations}),
             "locations": [
                 {"source_row": row, "target_column": column or None}
@@ -1805,6 +1807,8 @@ class ImportReviewService:
                 rows = (await self.session.scalars(self.repo.query(ImportReviewRow).where(ImportReviewRow.import_review_id == review.id).order_by(ImportReviewRow.source_row))).all()
                 sensitive = {c.target_column for c in ETLConfiguration.model_validate(review.configuration_json).columns if c.pii_classification in ("MEDIUM", "HIGH")}
                 issues, reviewed_rows, metadata = [], [], []
+                ai_warning_code = None
+                ai_warning_message = None
                 cached_chunks = review.checkpoint.get("ai_chunks", {})
                 new_chunks = {}
                 complete_chunks = True
@@ -1862,7 +1866,12 @@ class ImportReviewService:
                             if not exc.code.startswith(("AI_", "OPENAI_", "NL2SQL_")):
                                 raise
                             complete_chunks = False
-                            metadata.append({"status": "SKIPPED", "error_code": exc.code})
+                            skipped = {"status": "SKIPPED", "error_code": exc.code}
+                            if exc.code == "AI_PROVIDER_CREDIT_INSUFFICIENT":
+                                ai_warning_code = exc.code
+                                ai_warning_message = exc.message
+                                skipped["message"] = exc.message
+                            metadata.append(skipped)
                             break
                     complete_chunks = complete_chunks and result.is_complete_for_rows(
                         [row.source_row for row in chunk]
@@ -1914,6 +1923,7 @@ class ImportReviewService:
                     **({"ai_warning_code": "AI_REVIEW_PARTIAL"} if coverage != "COMPLETE" else {}),
                     "open_question_count": review.checkpoint.get("open_question_count", 0) + len(blocking_issues),
                     "blocking_codes": ["AI_REVIEW_ISSUES"] if blocking_issues else [],
+                    **({"ai_warning_code": ai_warning_code, "ai_warning_message": ai_warning_message} if ai_warning_code else {}),
                 }
                 audit(self.session, self.user, "import.ai_evidence_verified", review.id,
                       policy_version=AI_REVIEW_POLICY_VERSION, accepted_count=len(issues),

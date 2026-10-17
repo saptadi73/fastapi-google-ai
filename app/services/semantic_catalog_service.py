@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from sqlalchemy import String, case, cast, func, select
 
 from app.core.config import get_settings
@@ -10,6 +11,7 @@ from app.models.semantic import DataProduct, JoinRelationship, SavedQuery
 from app.models.source import DataSource, SourceSheet
 from app.repositories.base import record
 from app.repositories.semantic_repository import SemanticRepository
+from app.schemas.configuration import MetricDefinition
 from app.schemas.semantic import QueryPlan
 from app.services.audit_service import audit
 from app.services.query_execution_service import QueryExecutionService
@@ -51,9 +53,84 @@ class SemanticCatalogService:
         await self.require_product_manager(product)
         if data.expected_version is not None and product.version != data.expected_version:
             raise AppError("PRODUCT_VERSION_CONFLICT", "Versi produk berubah; muat ulang katalog dan tinjau edit lokal.", 409)
-        changes = data.model_dump(mode="json", exclude_none=True, exclude={"expected_version", "metric_metadata"})
+        changes = data.model_dump(
+            mode="json", exclude_none=True,
+            exclude={"expected_version", "metric_metadata", "metric_definitions", "column_metadata"},
+        )
+        current_columns = getattr(product, "columns", None) or []
+        public_columns = {
+            column["target_column"]: column
+            for column in current_columns
+            if column.get("pii_classification") in ("NONE", "LOW")
+        }
+        candidate_dimensions = changes.get("dimensions", list(getattr(product, "dimensions", None) or []))
+        if "dimensions" in changes:
+            if not set(candidate_dimensions).issubset(public_columns):
+                raise AppError("PRODUCT_DIMENSION_INVALID", "Dimensi harus memilih kolom tersedia yang tidak sensitif.", 422)
+
+        if data.column_metadata is not None:
+            columns = [dict(column) for column in current_columns]
+            by_column = {column["target_column"]: column for column in columns}
+            for update in data.column_metadata:
+                column = by_column.get(update.target_column)
+                if column is None:
+                    raise AppError("PRODUCT_COLUMN_NOT_FOUND", "Kolom target tidak tersedia pada product ini.", 422)
+                if column.get("pii_classification") not in ("NONE", "LOW"):
+                    raise AppError("PRODUCT_COLUMN_FORBIDDEN", "Metadata katalog tidak dapat mengubah kolom sensitif.", 403)
+                values = update.model_dump(mode="json", exclude_unset=True, exclude={"target_column"})
+                column.update(values)
+            changes["columns"] = columns
+
+        if data.metric_definitions is not None:
+            existing = {metric["code"]: dict(metric) for metric in (getattr(product, "metrics", None) or [])}
+            metrics = []
+            column_names = {column["target_column"] for column in current_columns}
+            terms = {}
+            for definition in data.metric_definitions:
+                metric = existing.get(definition.code, {})
+                metric.update(definition.model_dump(mode="json", exclude_unset=True))
+                # Validate every edited/replaced metric against the active schema, including
+                # definitions preserved from a previous catalog edit.
+                try:
+                    normalized = MetricDefinition.model_validate(metric).model_dump(mode="json")
+                except ValidationError as exc:
+                    raise AppError("PRODUCT_METRIC_INVALID", f"Definisi metrik '{definition.code}' tidak valid: {exc}", 422) from None
+                column = public_columns.get(normalized["column"])
+                if column is None:
+                    raise AppError("PRODUCT_METRIC_COLUMN_INVALID", f"Kolom metrik '{definition.code}' tidak tersedia atau sensitif.", 422)
+                if normalized["code"] in column_names:
+                    raise AppError("PRODUCT_METRIC_CODE_CONFLICT", "Kode metrik tidak boleh sama dengan nama kolom.", 422)
+                if normalized["aggregation"] in ("sum", "avg") and column.get("target_type") not in ("smallint", "integer", "bigint", "numeric", "decimal", "real", "double precision"):
+                    raise AppError("PRODUCT_METRIC_TYPE_INVALID", "SUM/AVG hanya dapat memakai kolom numerik.", 422)
+                if normalized.get("null_handling", "PRESERVE") == "ZERO_RESULT" and normalized["aggregation"] not in ("count", "count_distinct") and column.get("target_type") not in ("smallint", "integer", "bigint", "numeric", "decimal", "real", "double precision"):
+                    raise AppError("PRODUCT_METRIC_TYPE_INVALID", "ZERO_RESULT hanya valid untuk agregasi numerik.", 422)
+                for filter_item in normalized.get("filters", []):
+                    if filter_item["field"] not in public_columns:
+                        raise AppError("PRODUCT_METRIC_FILTER_INVALID", "Filter metrik harus memakai kolom yang tersedia dan tidak sensitif.", 422)
+                period = normalized.get("default_period")
+                if period and (
+                    period["dimension"] not in candidate_dimensions
+                    or public_columns.get(period["dimension"], {}).get("target_type") not in ("date", "timestamp", "timestamptz")
+                ):
+                    raise AppError("PRODUCT_METRIC_PERIOD_INVALID", "Periode default harus memakai dimensi tanggal yang tersedia.", 422)
+                for term in (normalized["code"], normalized.get("label", ""), *normalized.get("synonyms", [])):
+                    normalized_term = " ".join(term.casefold().split())
+                    if not normalized_term:
+                        continue
+                    owner = terms.setdefault(normalized_term, normalized["code"])
+                    if owner != normalized["code"]:
+                        raise AppError("METRIC_SYNONYM_CONFLICT", "Kode, label, dan sinonim metrik harus membedakan setiap metrik.", 422)
+                metrics.append(normalized)
+            changes["metrics"] = metrics
+        elif "dimensions" in changes:
+            # A removed field cannot remain referenced by a metric's default time window.
+            for metric in (getattr(product, "metrics", None) or []):
+                period = metric.get("default_period")
+                if period and period.get("dimension") not in candidate_dimensions:
+                    raise AppError("PRODUCT_DIMENSION_IN_USE", f"Dimensi '{period['dimension']}' dipakai periode default metrik '{metric['code']}'.", 422)
+
         if data.metric_metadata is not None:
-            metrics = [dict(metric) for metric in product.metrics]
+            metrics = [dict(metric) for metric in (getattr(product, "metrics", None) or [])]
             by_code = {metric["code"]: metric for metric in metrics}
             for update in data.metric_metadata:
                 if update.code not in by_code:

@@ -426,3 +426,63 @@ async def test_runtime_rejects_invalid_stored_model_allowlist(monkeypatch):
 
     assert error.value.code == "AI_TASK_POLICY_INVALID"
     provider.assert_not_called()
+
+
+async def test_insufficient_provider_credit_is_returned_as_clear_user_error(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openai_api_key", type(settings.openai_api_key)("test-placeholder"))
+    monkeypatch.setattr(settings, "openai_model_etl_config", "credit-test-model")
+    monkeypatch.setattr(settings, "openai_model_etl_fallback", "")
+    monkeypatch.setattr(settings, "ai_daily_tenant_budget_usd", 0)
+
+    class ProviderError(Exception):
+        status_code = 429
+        body = {"error": {"code": "insufficient_quota", "message": "billing details omitted"}}
+
+    parse = AsyncMock(side_effect=ProviderError("provider request rejected"))
+    create = AsyncMock()
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.responses = SimpleNamespace(parse=parse, create=create)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    ledger = []
+
+    class UsageSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def begin(self):
+            return self
+
+        async def execute(self, *args, **kwargs):
+            pass
+
+        async def scalar(self, *args, **kwargs):
+            return 0
+
+        def add(self, item):
+            ledger.append(item)
+
+    monkeypatch.setattr(openai_service, "AsyncOpenAI", Client)
+    monkeypatch.setattr(openai_service, "SessionFactory", UsageSession)
+
+    with pytest.raises(AppError) as failure:
+        await openai_service.OpenAIService().generate(
+            SimpleNamespace(id=str(uuid4()), tenant_id=str(uuid4())),
+            "ETL_CONFIG", "masked profile", ETLConfiguration,
+        )
+
+    assert failure.value.code == "AI_PROVIDER_CREDIT_INSUFFICIENT"
+    assert "billing" in failure.value.message.casefold()
+    assert create.await_count == 0
+    assert ledger[0].status == "FAILED"
