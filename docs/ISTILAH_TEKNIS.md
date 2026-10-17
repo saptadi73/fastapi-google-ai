@@ -37,7 +37,7 @@ Bayangkan Google Sheet sebagai buku pencatatan bisnis. Istilah berikut menjelask
 | Istilah | Arti sederhana | Contoh bisnis |
 | --- | --- | --- |
 | **Dimensi** | Cara mengelompokkan atau membandingkan data. | Menurut unit, bulan atau jenis keluhan. |
-| **Metrik** | Ukuran yang dihitung atau dibandingkan berdasarkan definisi bisnis. | Jumlah keluhan, target dan realisasi penyelesaian; kolom angka tidak otomatis menjadi metrik. |
+| **Metrik** | Ukuran yang dihitung atau dibandingkan berdasarkan definisi bisnis. | Kolom numerik publik pada NON_MASTER otomatis masuk katalog metrik; key memakai count_distinct, persen/rasio/rate memakai avg, dan angka lain memakai sum sebagai nilai awal yang harus ditinjau. |
 | **Agregasi** | Menggabungkan banyak catatan menjadi ringkasan. | Menjumlahkan keluhan per bulan; rata-rata hanya jika ukuran dan basisnya sesuai. |
 | **Data product** | Data yang disiapkan untuk katalog dan analisis sesuai izin pengguna. | Keluhan Pelanggan / Rekap Bulanan; memerlukan produk aktif dan hak baca yang cocok. |
 | **Baseline** | Nilai awal yang dipakai sebagai pembanding. | Waktu respons 48 jam sebelum perbaikan; bandingkan dengan metode/periode yang sebanding. |
@@ -57,10 +57,10 @@ Bayangkan Google Sheet sebagai buku pencatatan bisnis. Istilah berikut menjelask
 | **Preview** | Melihat rencana dan dampak perubahan sebelum dijalankan. | Meninjau kolom baru, contoh konversi tanggal dan blocker sebelum persetujuan. |
 | **Approval** | Persetujuan reviewer terhadap versi yang diperiksa. | Reviewer berwenang berbeda dari pembuat menyetujui konfigurasi; bukan izin baca otomatis. |
 | **Deploy** | Mengaktifkan konfigurasi yang disetujui dan menyiapkan struktur database yang diperlukan. | Versi menjadi ACTIVE setelah deploy sukses; cek pemuatan data sebagai tahap terpisah. |
-| **Sync** | Membaca dan memproses pembaruan sumber sesuai konfigurasi aktif. | Owner-managed memvalidasi sumber, mapping, akses, kualitas, dan konflik sebelum memuat; tidak meminta approval rutin kedua. |
+| **Sync** | Membaca dan memproses pembaruan sumber sesuai konfigurasi/alur yang berlaku. | Sync manual NON_MASTER aktif dapat langsung memuat setelah semua gate lolos; master/FULL_REFRESH memakai review batch. |
 | **APPEND** | Menambahkan catatan baru. | Cocok untuk kejadian baru; snapshot/koreksi tanpa key yang tepat bisa terhitung ganda. |
 | **UPSERT** | Memperbarui catatan jika key sudah ada, atau menambahkan jika belum ada. | Koreksi rekap unit/indikator/periode yang sama memperbarui record tersebut. |
-| **FULL_REFRESH** | Mengganti seluruh isi baris target dengan snapshot lengkap sumber yang valid. | Seluruh baris divalidasi sebelum transaksi penggantian; jika ada error data lama tetap utuh. Perubahan skema tetap terpisah. |
+| **FULL_REFRESH** | Mengganti seluruh isi target dengan snapshot sumber yang lengkap. | Tidak boleh menggunakan snapshot parsial seolah mencakup semua record; perlu alur review yang sesuai. |
 | **Freshness** | Seberapa mutakhir data yang tersedia. | Dimuat hari ini belum tentu menggambarkan kondisi hari ini; lihat periode dan data_as_of_at. |
 | **Watermark** | Penanda sampai mana data sudah diproses untuk pengambilan bertahap sesuai konfigurasi. | Nomor/tanggal checkpoint pemuatan; bukan penentu arti periode bisnis. |
 

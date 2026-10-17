@@ -21,9 +21,9 @@ def test_generated_sheet_guide_is_complete_and_bounded():
 @pytest.mark.parametrize("question,expected,required", [
     ("format google sheet header kosong grain business key", "struktur", ["Header wajib terisi", "Business key tidak boleh NULL"]),
     ("data periodik waktu pengambilan measured_at collected_at period_start", "nilai-waktu", ["wajib", "collected_at", "period_start", "UTC"]),
-    ("master istilah taxonomy metrik presisi denominator", "master-metrik", ["metrics=[]", "penyebut berbeda", "Expression rasio bebas belum didukung"]),
+        ("master istilah taxonomy metrik presisi denominator", "master-metrik", ["otomatis masuk katalog metrik", "penyebut berbeda", "Expression rasio bebas belum didukung"]),
     ("action plan akurat bukti penyebab owner tenggat kualitas", "tindak-lanjut", ["cause_status", "due_date", "verifikasi hasil oleh manusia"]),
-    ("asupan analitik strategi load UPSERT APPEND akses", "operasi", ["UPSERT", "hitungan ganda", "hak baca otomatis"]),
+    ("asupan analitik strategi load UPSERT APPEND akses", "operasi", ["UPSERT", "hitungan ganda", "Unit aktif menentukan akses default"]),
     ("contoh format KPI bulanan Action_Plan checklist", "contoh", ["KPI-202601-U01-RSP", "collected_at", "ACT-001", "Checklist"]),
 ])
 def test_helper_finds_sheet_preparation_guidance_for_actual_reader(question, expected, required):

@@ -11,7 +11,7 @@ Bayangkan Google Sheet sebagai buku pencatatan bisnis. Istilah berikut menjelask
 | Istilah | Arti sederhana | Contoh bisnis |
 | --- | --- | --- |
 | **Dimensi** | Cara mengelompokkan atau membandingkan data. | Menurut unit, bulan atau jenis keluhan. |
-| **Metrik** | Ukuran yang dihitung atau dibandingkan berdasarkan definisi bisnis. | Jumlah keluhan, target dan realisasi penyelesaian; kolom angka tidak otomatis menjadi metrik. |
+| **Metrik** | Ukuran yang dihitung atau dibandingkan berdasarkan definisi bisnis. | Kolom numerik publik pada NON_MASTER otomatis masuk katalog metrik; key memakai count_distinct, persen/rasio/rate memakai avg, dan angka lain memakai sum sebagai nilai awal yang harus ditinjau. |
 | **Agregasi** | Menggabungkan banyak catatan menjadi ringkasan. | Menjumlahkan keluhan per bulan; rata-rata hanya jika ukuran dan basisnya sesuai. |
 | **Data product** | Data yang disiapkan untuk katalog dan analisis sesuai izin pengguna. | Keluhan Pelanggan / Rekap Bulanan; memerlukan produk aktif dan hak baca yang cocok. |
 | **Baseline** | Nilai awal yang dipakai sebagai pembanding. | Waktu respons 48 jam sebelum perbaikan; bandingkan dengan metode/periode yang sebanding. |

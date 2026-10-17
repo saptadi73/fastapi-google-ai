@@ -787,6 +787,10 @@ Aturan penting:
 | Agregasi | `sum`, `count`, `avg`, `min`, `max`, `count_distinct` |
 | `unresolved_questions` | Semua pertanyaan harus diselesaikan sebelum approval/deploy |
 
+Saat membuat konfigurasi `NON_MASTER`, backend otomatis mengisi definisi awal untuk kolom numerik publik bertipe `smallint`, `int`/`integer`, `bigint`, `numeric`/`decimal`, `real`, atau `double precision`. Key numerik memakai `count_distinct`; nama yang mengandung percent/percentage/persen/ratio/rasio/rate/margin memakai `avg`; lainnya memakai `sum`. Kolom PII `MEDIUM/HIGH`, `MASKED/HIDDEN`, dan kolom yang sudah memiliki definisi metrik tidak ditambahkan. `MASTER` dikecualikan. Ini nilai awal semantic; pemilik tetap perlu meninjau unit dan kesesuaian agregasi.
+
+Untuk produk aktif yang sudah ada, operator dapat menjalankan `python -m app.cli semantic-numeric-metric-backfill` (dry-run) lalu `python -m app.cli semantic-numeric-metric-backfill --apply`. Operasi hanya menambah metadata semantic yang hilang pada produk `NON_MASTER` aktif, mempertahankan definisi manual, menaikkan versi semantic dan mencatat audit. Tidak ada profiling, perubahan tabel fisik, atau reload ETL.
+
 `min/max` memerlukan angka pada `value`; allowed_values memakai list string. Simpan kode berawalan nol sebagai text. Jangan mengubah semua angka bertitik/koma dengan satu fungsi frontend; gunakan transform yang sesuai format sumber.
 
 Strategi load: APPEND menambah baris dan mengabaikan konflik constraint; UPSERT memperbarui berdasarkan business key; FULL_REFRESH mengganti data tenant pada tabel target dan ditolak bila ada baris invalid. UPSERT saat ini tidak menyatukan master antar-Sheet.

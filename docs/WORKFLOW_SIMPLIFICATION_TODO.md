@@ -30,6 +30,11 @@ Audit endpoint, service, UI, role, dan workflow sudah didokumentasikan juga pada
 
 ## TODO implementasi bertahap
 
+### Penyederhanaan semantic katalog
+
+- [x] Otomatis tambahkan kolom numerik publik sebagai metric untuk NON_MASTER baru dan sediakan backfill aman bagi semua produk NON_MASTER aktif yang sudah ada. Dry-run dahulu dengan `python -m app.cli semantic-numeric-metric-backfill`, lalu terapkan dengan `--apply`; master, data nonaktif, metric manual, dan kolom sensitif dipertahankan/dikecualikan. Backfill hanya mengubah semantic catalog dan audit, bukan menjalankan ulang ETL.
+- [ ] Jalankan dry-run dan apply backfill pada setiap environment setelah kode tersedia; tinjau agregasi dan unit hasil metric bersama steward.
+
 ### P0 — inventarisasi dan acceptance criteria (selesai untuk audit kode)
 
 - [x] Inventaris state transition/API yang menghalangi profiling, konfigurasi, deploy, sync, dan query.

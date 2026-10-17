@@ -114,7 +114,7 @@ Pemeliharaan tabel: edit `docs/error-responses.json` di backend, lalu jalankan `
 
 ### Format Google Sheet ideal untuk analitik dan action plan
 
-Baca [Panduan lengkap format Google Sheet](PANDUAN_FORMAT_GOOGLE_SHEET.md): penamaan file/tab dan produk, header tabular, grain/key, master/taxonomy, tipe/satuan/presisi, waktu/periode wajib untuk data periodik, metrik, kualitas, provenance, action plan berbasis bukti dan contoh tabel. Di aplikasi buka **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Waktu kejadian/pengukuran, periode data dan waktu pengambilan dibedakan; tanggal sync bukan pengganti waktu bisnis. Definisi metrik dan tindakan tetap perlu review, bukan asumsi otomatis dari nama kolom.
+Baca [Panduan lengkap format Google Sheet](PANDUAN_FORMAT_GOOGLE_SHEET.md): penamaan file/tab dan produk, header tabular, grain/key, master/taxonomy, tipe/satuan/presisi, waktu/periode wajib untuk data periodik, metrik, kualitas, provenance, action plan berbasis bukti dan contoh tabel. Di aplikasi buka **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Waktu kejadian/pengukuran, periode data dan waktu pengambilan dibedakan; tanggal sync bukan pengganti waktu bisnis. Kolom numerik publik pada konfigurasi NON_MASTER otomatis mendapat metrik awal; pemilik tetap memeriksa makna bisnis, unit, dan agregasinya.
 
 Pemeliharaan panduan Sheet: edit `docs/google-sheet-format.json`, lalu jalankan `python scripts/export_sheet_format_guide.py --frontend-root D:/projek/vue-googlesheet-ai`; `--check` memverifikasi dokumentasi, knowledge base dan konten helper tetap sinkron.
 

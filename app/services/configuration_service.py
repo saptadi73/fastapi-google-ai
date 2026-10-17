@@ -26,6 +26,7 @@ from app.services.classification_service import (
 from app.services.etl_compiler_service import transform_rows
 from app.services.google_sheets_service import GoogleSheetsService
 from app.services.job_service import enqueue
+from app.services.numeric_metric_service import add_default_numeric_metrics
 from app.services.profiling_service import digest, profile_values
 from app.services.release_approval_service import owner_workflow_compatible, require_release_ready
 from app.services.schema_compiler_service import deploy_schema, preview_schema_migration, schema_plan
@@ -172,6 +173,7 @@ class ConfigurationService:
         profile = await SourceRepository(self.session, self.user.tenant_id).latest_profile(sheet.id)
         if not profile or not sheet.last_fingerprint:
             raise AppError("PROFILE_REQUIRED", "Jalankan profiling sebelum membuat konfigurasi.", 409)
+        auto_metrics = add_default_numeric_metrics(configuration, sheet.dataset_kind)
         version = await self.repo.next_version(sheet.id)
         self.validate_columns(configuration, profile.profile_json)
         config = await self.repo.add(
@@ -185,7 +187,14 @@ class ConfigurationService:
             created_by=self.user.id,
             **ai_metadata,
         )
-        audit(self.session, self.user, "configuration.created", config.id, version=version)
+        audit(
+            self.session,
+            self.user,
+            "configuration.created",
+            config.id,
+            version=version,
+            auto_numeric_metrics=auto_metrics,
+        )
         return config
 
     @staticmethod

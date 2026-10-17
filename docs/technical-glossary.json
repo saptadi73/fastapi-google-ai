@@ -173,7 +173,7 @@
     "id": "metrik",
     "term": "Metrik",
     "meaning": "Ukuran yang dihitung atau dibandingkan berdasarkan definisi bisnis.",
-    "example": "Jumlah keluhan, target dan realisasi penyelesaian; kolom angka tidak otomatis menjadi metrik.",
+    "example": "Kolom numerik publik pada NON_MASTER otomatis masuk katalog metrik; key memakai count_distinct, persen/rasio/rate memakai avg, dan angka lain memakai sum sebagai nilai awal yang harus ditinjau.",
     "aliases": []
   },
   {

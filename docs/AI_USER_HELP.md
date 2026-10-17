@@ -123,12 +123,16 @@ Lihat [Error response: kemungkinan penyebab dan tindakan](ERROR_RESPONSES.md). T
 
 ### Format Google Sheet ideal untuk analitik dan action plan
 
-Baca [Panduan lengkap format Google Sheet](PANDUAN_FORMAT_GOOGLE_SHEET.md): penamaan file/tab dan produk, header tabular, grain/key, master/taxonomy, tipe/satuan/presisi, waktu/periode wajib untuk data periodik, metrik, kualitas, provenance, action plan berbasis bukti dan contoh tabel. Di aplikasi buka **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Waktu kejadian/pengukuran, periode data dan waktu pengambilan dibedakan; tanggal sync bukan pengganti waktu bisnis. Definisi metrik dan tindakan tetap perlu review, bukan asumsi otomatis dari nama kolom.
+Baca [Panduan lengkap format Google Sheet](PANDUAN_FORMAT_GOOGLE_SHEET.md): penamaan file/tab dan produk, header tabular, grain/key, master/taxonomy, tipe/satuan/presisi, waktu/periode wajib untuk data periodik, metrik, kualitas, provenance, action plan berbasis bukti dan contoh tabel. Di aplikasi buka **Bantuan > Format Google Sheet ideal** atau **Panduan lengkap > Format Google Sheet ideal**. Waktu kejadian/pengukuran, periode data dan waktu pengambilan dibedakan; tanggal sync bukan pengganti waktu bisnis. Kolom angka publik pada konfigurasi NON_MASTER kini otomatis menjadi metrik awal; pemilik tetap perlu memeriksa arti, satuan dan agregasinya.
 
 
 ### Istilah teknis untuk pengguna non teknis
 
 [Tabel istilah teknis dalam bahasa sederhana](ISTILAH_TEKNIS.md) menjelaskan grain, business/primary key, master, taxonomy, mapping, tipe, nullable, dimensi/metrik, snapshot, ETL, periode, waktu pengambilan serta proses pemuatan dengan contoh bisnis. Buka **Bantuan > Istilah teknis dalam bahasa sederhana** atau **Panduan lengkap > Istilah teknis dalam bahasa sederhana**; cari istilah, arti atau contoh.
+
+Pada draft konfigurasi `NON_MASTER` yang baru, kolom publik bertipe `int`/`integer`, `bigint`, `numeric`/`decimal`, serta tipe numerik lain otomatis didaftarkan sebagai metrik agar tidak perlu menambahkannya satu per satu. Key numerik memakai `count_distinct`, kolom bernama persen/rasio/rate memakai `avg`, dan kolom numerik lain memakai `sum` sebagai nilai awal. Tinjau agregasi dan satuan sesuai arti bisnis sebelum deploy; kolom `MEDIUM/HIGH` dikecualikan. Tab `MASTER` tidak mendapat metrik otomatis karena angka pada master sering merupakan kode atau atribut identitas.
+
+Produk NON_MASTER aktif yang sudah ada dapat diperbarui tanpa profiling, konfigurasi ulang, atau sinkronisasi ulang. Jalankan `python -m app.cli semantic-numeric-metric-backfill` untuk laporan dry-run; setelah memeriksa hasilnya, jalankan `python -m app.cli semantic-numeric-metric-backfill --apply`. Perintah hanya menambah definisi metrik katalog yang belum ada, mempertahankan definisi manual, mengecualikan MASTER dan kolom sensitif, menaikkan versi semantic produk yang berubah, serta mencatat audit sistem. Pengulangan perintah aman.
 
 
 ### Lima contoh Excel untuk analitik dan action plan
