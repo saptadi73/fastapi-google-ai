@@ -536,20 +536,41 @@ class QueryExecutionService:
             resolve_default_period(root, plan, today),
         )
 
-    async def execute(self, product_code, plan, *, ai=False, query_source="OPERATIONAL", action="QUERY", preserve_numeric=False):
+    def sql_preview(self, stmt, products, relationships):
+        guarded_sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        validate_readonly_sql(
+            guarded_sql,
+            {"semantic." + item.view_name for item in products},
+            {"_tenant_id", *(column["target_column"] for item in products for column in item.columns)},
+            allow_joins=bool(relationships),
+        )
+        # Keep SQL inspectable without revealing literal filters or tenant-scoped values.
+        return str(stmt.compile(dialect=postgresql.dialect()))
+
+    async def preview_sql(self, product_code, plan, *, action="QUERY"):
+        product, joined, relationships, stmt, _ = await self.compile(product_code, plan, action=action)
+        return self.sql_preview(stmt, [product, *joined], relationships)
+
+    async def execute(
+        self,
+        product_code,
+        plan,
+        *,
+        ai=False,
+        query_source="OPERATIONAL",
+        action="QUERY",
+        preserve_numeric=False,
+        use_nl2sql_reader=None,
+    ):
         today = datetime.now(timezone.utc).date()
         product, joined, relationships, stmt, default_period = await self.compile(
             product_code, plan, today=today, action=action
         )
         sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
-        validate_readonly_sql(
-            sql,
-            {"semantic." + item.view_name for item in [product, *joined]},
-            {"_tenant_id", *(c["target_column"] for item in [product, *joined] for c in item.columns)},
-            allow_joins=bool(relationships),
-        )
+        sql_preview = self.sql_preview(stmt, [product, *joined], relationships)
         s = get_settings()
-        if ai and not s.database_nl2sql_url.get_secret_value():
+        use_reader = ai if use_nl2sql_reader is None else use_nl2sql_reader
+        if use_reader and not s.database_nl2sql_url.get_secret_value():
             raise AppError("NL2SQL_NOT_CONFIGURED", "Isi DATABASE_NL2SQL_URL dengan role read-only.", 503)
         key = cache_key(
             self.user,
@@ -572,7 +593,7 @@ class QueryExecutionService:
         if cached:
             rows = json.loads(cached)
         else:
-            url = s.database_nl2sql_url.get_secret_value() if ai else s.database_url.get_secret_value()
+            url = s.database_nl2sql_url.get_secret_value() if use_reader else s.database_url.get_secret_value()
             engine = make_engine(url)
             try:
                 async with engine.connect() as conn, conn.begin():
@@ -581,7 +602,7 @@ class QueryExecutionService:
                         text("SELECT set_config('statement_timeout', :timeout, true)"),
                         {"timeout": str(s.nl2sql_statement_timeout_ms)},
                     )
-                    if ai:
+                    if use_reader:
                         await assert_reader(conn)
                     explain = (await conn.exec_driver_sql("EXPLAIN (FORMAT JSON) " + sql)).scalar()
                     if isinstance(explain, str):
@@ -630,5 +651,6 @@ class QueryExecutionService:
                 "freshness_version": product.freshness_version,
                 "default_period_applied": default_period,
                 "visualization": plan.visualization.model_dump(mode="json") if plan.visualization else None,
+                "sql_preview": sql_preview,
             },
         }

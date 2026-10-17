@@ -1,4 +1,6 @@
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,3 +66,24 @@ class QueryRequest(TenantEntity, Base):
     status: Mapped[str] = mapped_column(String(40), default="SUCCEEDED")
     clarification_question: Mapped[str | None] = mapped_column(Text)
     feedback: Mapped[str | None] = mapped_column(Text)
+
+
+class SavedNL2SQLQuery(TenantEntity, Base):
+    __tablename__ = "saved_nl2sql_query"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", "source_request_id", name="uq_saved_nl2sql_request_owner"),
+        Index("ix_saved_nl2sql_query_owner_created", "tenant_id", "user_id", "created_at"),
+        {"schema": "platform"},
+    )
+    user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("platform.app_user.id"))
+    source_request_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("platform.nl2sql_request_log.id")
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    question: Mapped[str] = mapped_column(Text)
+    data_product_code: Mapped[str] = mapped_column(String(63))
+    plan: Mapped[dict] = mapped_column(JSONB)
+    sql_preview: Mapped[str] = mapped_column(Text)
+    run_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

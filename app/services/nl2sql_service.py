@@ -148,7 +148,11 @@ class NL2SQLService:
             user_id=self.user.id,
             question_hash=digest(request.question),
             route=route,
-            plan={"data_product_code": code, "plan": plan.model_dump(mode="json")},
+            plan={
+                "data_product_code": code,
+                "plan": plan.model_dump(mode="json"),
+                "sql_preview": result["meta"].get("sql_preview", ""),
+            },
         )
         result["meta"].update(query_id=log.id, route=route, openai_called=route == "OPENAI")
         return result

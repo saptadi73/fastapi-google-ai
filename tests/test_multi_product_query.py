@@ -7,7 +7,12 @@ from sqlalchemy.dialects import postgresql
 
 from app.core.exceptions import AppError
 from app.schemas.semantic import QueryFilter, QueryPlan
-from app.services.query_execution_service import QueryExecutionService, build_join_query, cache_key
+from app.services.query_execution_service import (
+    QueryExecutionService,
+    build_join_query,
+    build_query,
+    cache_key,
+)
 from app.services.sql_guard_service import validate_readonly_sql
 
 
@@ -95,6 +100,22 @@ def test_join_query_scopes_every_table_and_allows_qualified_dimensions():
     first_key = cache_key(user, sales, plan, joined_products=[products], relationships=[relation])
     relation.revision_no += 1
     assert first_key != cache_key(user, sales, plan, joined_products=[products], relationships=[relation])
+
+
+def test_saved_sql_preview_is_readonly_and_does_not_expose_filter_values():
+    sales, _ = catalog()
+    user = current_user()
+    plan = QueryPlan(
+        dimensions=["branch"],
+        metrics=["net_sales"],
+        filters=[QueryFilter(field="branch", operator="eq", value="Private Branch Name")],
+    )
+    stmt = build_query(sales, user, plan)
+    preview = QueryExecutionService(AsyncMock(), user).sql_preview(stmt, [sales], [])
+    assert "SELECT" in preview.upper()
+    assert "semantic.sales" in preview
+    assert "Private Branch Name" not in preview
+    assert not any(token in preview.upper() for token in ("INSERT", "UPDATE", "DELETE", "DROP"))
 
 
 @pytest.mark.parametrize(

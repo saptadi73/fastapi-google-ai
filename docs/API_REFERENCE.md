@@ -1252,6 +1252,12 @@ POST `/data-products/{code}/export` memakai QueryPlan yang sama dan menghasilkan
 | POST | `/nl2sql/query` | Auth | QuestionRequest | 200 | QueryRow[] atau [] klarifikasi; meta khusus |
 | GET | `/nl2sql/requests/{request_id}` | Auth + pemilik/admin | — | 200 | QueryRequest |
 | POST | `/nl2sql/requests/{request_id}/feedback` | Auth + pemilik/admin | FeedbackRequest | 200 | `{recorded:true}` |
+| POST | `/nl2sql/requests/{request_id}/saved-command` | Auth + pemilik request | SavedNL2SQLQueryCreate | 201 | Perintah personal dari query SUCCEEDED |
+| GET | `/nl2sql/saved-commands?q=&offset=0&limit=20` | Auth | Pencarian/pagination | 200 | `{items,total,offset,limit}` milik pengguna |
+| GET | `/nl2sql/saved-commands/{id}` | Auth + pemilik | — | 200 | Perintah termasuk plan dan SQL parameterized preview |
+| PATCH | `/nl2sql/saved-commands/{id}` | Auth + pemilik | Nama/deskripsi | 200 | Perintah diperbarui |
+| DELETE | `/nl2sql/saved-commands/{id}` | Auth + pemilik | — | 200 | Perintah dihapus; data product tetap utuh |
+| POST | `/nl2sql/saved-commands/{id}/run` | Auth + hak QUERY terbaru | — | 200 | QueryRow[] tanpa panggilan AI |
 | POST | `/nl2sql/clarifications/{request_id}` | Auth + pemilik/admin | QuestionRequest | 200 | QueryRow[]/[]; meta parent_request_id |
 | POST | `/nl2sql/requests/{request_id}/promote` | D | SavedQueryCreate | 201 | SavedQuery DRAFT |
 | GET | `/help/articles` | Auth | route, query opsional | 200 | Metadata artikel knowledge base sesuai role |
@@ -1312,7 +1318,11 @@ Periksa `meta.clarification_required` **sebelum** menampilkan “tidak ada data�
 
 Klarifikasi membuat request baru dan menambahkan `meta.parent_request_id`. Backend tidak menyusun riwayat percakapan otomatis dan tidak mengubah status log induk menjadi selesai. Frontend perlu menyimpan pesan asli/lanjutan; log QueryRequest hanya menyimpan hash pertanyaan, bukan teks pertanyaan asli. Jika request induk tidak berstatus CLARIFICATION_REQUIRED → 409 QUERY_CONFLICT.
 
-QueryRequest berisi metadata record, user_id, question_hash, route, plan, status, clarification_question, feedback. Plan sukses berbentuk `{data_product_code, plan: QueryPlan}`; klarifikasi biasanya `{}`. GET log/feedback/klarifikasi hanya untuk pemilik request atau admin tenant.
+QueryRequest berisi metadata record, user_id, question_hash, route, plan, status, clarification_question, feedback. Plan sukses berbentuk `{data_product_code, plan: QueryPlan, sql_preview}`; klarifikasi biasanya `{}`. GET log/feedback/klarifikasi hanya untuk pemilik request atau admin tenant.
+
+Setelah query SUCCEEDED, pemilik dapat membuat perintah tersimpan dari request tersebut. `question` harus cocok dengan hash pertanyaan request. Perintah disimpan per pengguna dan tenant; pencarian mencakup nama, deskripsi, pertanyaan, dan kode produk. Hanya nama/deskripsi yang dapat diubah. Eksekusi ulang mengompilasi ulang QueryPlan tersimpan dan memakai pemeriksaan produk, QUERY, row scope, SQL read-only, estimasi biaya, timeout, dan batas baris terkini. SQL preview hanya parameterized untuk pemeriksaan; server tidak menjalankan teks SQL yang tersimpan. Perubahan akses atau semantic dapat membuat eksekusi ditolak.
+
+Untuk perbandingan, frontend menjalankan 2–4 perintah secara terpisah, lalu menggabungkan hasil agregat berdasarkan kategori yang dipilih. Ini bukan SQL join lintas tabel atau join record-level. Grain/periode, label kategori, definisi metrik, serta unit harus sama agar angka dapat dibandingkan dengan benar.
 
 Feedback body: `{"feedback":"Hasil sesuai laporan cabang."}`, 1–1000 karakter. Field feedback terakhir menggantikan nilai sebelumnya.
 
@@ -1530,7 +1540,7 @@ Deploy ETL memberi role `DATABASE_URL` privilege minimum pada objek target: `APP
 2. `dataset_kind` hanya diterima oleh SheetClassificationUpdate. Payload lain tetap menolak field tambahan yang tidak ada di schema; master_definition_id diterima pada MasterBindingUpdate, bukan pada payload klasifikasi.
 3. AI ETL konfigurasi membuat draft dari metadata/profile. Review AI per batch mendukung coverage, chunk cache, masking field sensitif, findings, blocker, dan pertanyaan; UI tidak boleh mengklaim semua baris diperiksa bila provider nonaktif, coverage hanya sampling, atau ada pengecualian.
 4. Structured query dapat memakai path relationship APPROVED yang eksplisit. NL2SQL AI menerima graph relationship APPROVED yang accessible dan hanya boleh memilih kode dari konteks tersebut; root eksplisit dikunci dan hasil tetap melalui compiler/guard yang sama. SQL bebas dan join arbitrer tidak tersedia; FK master sendiri bukan izin join semantic.
-5. Belum ada list seluruh NL2SQL request, edit/delete saved template, delete source/user, reset password user lain, atau endpoint daftar distinct dimensi.
+5. Tidak ada endpoint untuk menelusuri seluruh NL2SQL request lintas pengguna. Perintah NL2SQL personal memiliki CRUD owner-scoped tersendiri dan berbeda dari saved template yang dipromosikan untuk intent. Delete source/user, reset password user lain, atau endpoint daftar distinct dimensi tidak tersedia.
 6. Approval source data/configuration bukan jaminan semua integrasi eksternal sudah siap. Tetap tampilkan status job dan error nyata.
 7. `submit-review` wajib menerima bukti review revision/snapshot dan memvalidasi draft. Approval ditolak tanpa submission terbaru; PATCH membatalkan bukti review. Deployment/rollback ditolak bila isi Google Sheet berbeda dari snapshot yang disetujui.
 8. List tanpa pagination publik dapat terpotong pada batas internal. Jangan menampilkan total global berdasarkan panjang array saja.
